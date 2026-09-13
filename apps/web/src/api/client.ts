@@ -89,6 +89,11 @@ export const api = {
       json<{ ok: boolean }>(r)
     ),
 
+  deleteConversation: (id: string) =>
+    fetch(`/api/conversations/${id}`, { method: 'DELETE' }).then((r) =>
+      json<{ ok: boolean }>(r)
+    ),
+
   listMessages: (id: string) =>
     fetch(`/api/conversations/${id}/messages`).then((r) => json<{ messages: ChatMessage[] }>(r)),
 

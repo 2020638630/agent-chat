@@ -20,6 +20,13 @@ const mentionId = ref<string>('');
 const commentDrafts = reactive<Record<string, string>>({});
 const menuOpen = ref(false);
 const msgMenuId = ref<string | null>(null);
+const listCtxId = ref<string | null>(null);
+const listCtxPos = ref({ x: 0, y: 0 });
+const swipeId = ref<string | null>(null);
+const swipeX = ref(0);
+let swipeStartX = 0;
+let swipeActiveId: string | null = null;
+let swipeMoved = false;
 
 const activeConversation = computed(() =>
   conversations.value.find((c) => c.id === activeConversationId.value) ?? null
@@ -69,6 +76,7 @@ async function openConversation(id: string) {
 }
 
 async function startPrivate(characterId: string) {
+  await refreshConversations();
   const existing = conversations.value.find(
     (c) => c.type === 'private' && c.members?.length === 1 && c.members[0].id === characterId
   );
@@ -156,21 +164,120 @@ async function renameGroup() {
   }
 }
 
+async function deleteConversationById(id: string, title: string) {
+  const ok = window.confirm(`确定删除会话「${title}」？\n会话与其中消息将删除，角色与朋友圈不受影响。`);
+  if (!ok) return false;
+  try {
+    await api.deleteConversation(id);
+    if (activeConversationId.value === id) {
+      activeConversationId.value = null;
+      messages.value = [];
+    }
+    await refreshConversations();
+    if (!activeConversationId.value && conversations.value.length) {
+      await openConversation(conversations.value[0].id);
+    }
+    status.value = '会话已删除';
+    return true;
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+    return false;
+  }
+}
+
 async function dissolveGroup() {
   menuOpen.value = false;
   const conv = activeConversation.value;
-  if (!conv || conv.type !== 'group') return;
-  const ok = window.confirm(`确定解散群「${conv.title}」？\n群消息与成员关系将删除，私聊不受影响。`);
+  if (!conv) return;
+  const label = conv.type === 'group' ? '解散并删除群' : '删除会话';
+  const ok = window.confirm(
+    conv.type === 'group'
+      ? `确定${label}「${conv.title}」？\n群消息与成员关系将删除，角色与其它会话不受影响。`
+      : `确定删除会话「${conv.title}」？\n会话与其中消息将删除，角色与朋友圈不受影响。`
+  );
   if (!ok) return;
   try {
-    await api.dissolveConversation(conv.id);
+    await api.deleteConversation(conv.id);
     activeConversationId.value = null;
     messages.value = [];
     await refreshConversations();
-    status.value = '群已解散';
+    if (conversations.value.length) {
+      await openConversation(conversations.value[0].id);
+    }
+    status.value = conv.type === 'group' ? '群已解散' : '会话已删除';
   } catch (err) {
     status.value = err instanceof Error ? err.message : String(err);
   }
+}
+
+function onListContextMenu(e: MouseEvent, c: Conversation) {
+  e.preventDefault();
+  listCtxId.value = c.id;
+  listCtxPos.value = { x: e.clientX, y: e.clientY };
+  swipeId.value = null;
+  swipeX.value = 0;
+}
+
+async function onListCtxDelete() {
+  const c = conversations.value.find((x) => x.id === listCtxId.value);
+  if (!c) { listCtxId.value = null; return; }
+  await deleteFromList(c);
+}
+
+async function deleteFromList(c: Conversation) {
+  listCtxId.value = null;
+  swipeId.value = null;
+  swipeX.value = 0;
+  await deleteConversationById(c.id, c.title);
+}
+
+function onSwipeStart(e: PointerEvent, id: string) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  swipeActiveId = id;
+  swipeStartX = e.clientX;
+  swipeMoved = false;
+  (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+}
+
+function onSwipeMove(e: PointerEvent) {
+  if (!swipeActiveId) return;
+  const dx = e.clientX - swipeStartX;
+  if (Math.abs(dx) > 6) swipeMoved = true;
+  if (dx < 0) {
+    swipeId.value = swipeActiveId;
+    swipeX.value = Math.max(dx, -72);
+  } else if (swipeId.value === swipeActiveId) {
+    swipeX.value = Math.min(0, dx);
+  }
+}
+
+function onSwipeEnd() {
+  if (!swipeActiveId) return;
+  if (swipeId.value === swipeActiveId && swipeX.value < -36) {
+    swipeX.value = -72;
+  } else {
+    swipeId.value = null;
+    swipeX.value = 0;
+  }
+  swipeActiveId = null;
+}
+
+function swipeStyle(id: string) {
+  if (swipeId.value !== id) return undefined;
+  return { transform: `translateX(${swipeX.value}px)` };
+}
+
+function onListItemClick(c: Conversation) {
+  if (swipeMoved) {
+    swipeMoved = false;
+    return;
+  }
+  if (swipeId.value && swipeId.value !== c.id) {
+    swipeId.value = null;
+    swipeX.value = 0;
+  }
+  listCtxId.value = null;
+  void openConversation(c.id);
 }
 
 async function clearChat() {
@@ -260,7 +367,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="wx-shell" @click="menuOpen = false; msgMenuId = null">
+  <div class="wx-shell" @click="menuOpen = false; msgMenuId = null; listCtxId = null">
     <aside class="wx-nav">
       <div class="wx-nav-avatar" title="Agent Chat">馆</div>
       <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" @click="tab = 'chat'">
@@ -300,21 +407,41 @@ onMounted(async () => {
       />
 
       <div v-if="tab === 'chat'" class="wx-list">
+        <div v-for="c in conversations" :key="c.id" class="wx-swipe-row">
+          <button class="wx-swipe-delete" @click.stop="deleteFromList(c)">删除</button>
+          <div
+            class="wx-list-item wx-swipe-front"
+            :class="{ active: c.id === activeConversationId }"
+            :style="swipeStyle(c.id)"
+            @click="onListItemClick(c)"
+            @contextmenu="onListContextMenu($event, c)"
+            @pointerdown="onSwipeStart($event, c.id)"
+            @pointermove="onSwipeMove"
+            @pointerup="onSwipeEnd"
+            @pointercancel="onSwipeEnd"
+          >
+            <div v-if="collageMembers(c).length" class="wx-avatar collage" :data-n="Math.min(collageMembers(c).length, 4)">
+              <span v-for="mem in collageMembers(c)" :key="mem.id">{{ avatarText(mem.name) }}</span>
+            </div>
+            <div v-else class="wx-avatar">{{ avatarText(c.title) }}</div>
+            <div class="wx-list-meta">
+              <div class="wx-list-title">{{ c.title }}</div>
+              <div class="wx-list-sub">{{ c.last_message || (c.type === 'group' ? '群聊' : '私聊') }}</div>
+            </div>
+          </div>
+        </div>
         <div
-          v-for="c in conversations"
-          :key="c.id"
-          class="wx-list-item"
-          :class="{ active: c.id === activeConversationId }"
-          @click="openConversation(c.id)"
+          v-if="listCtxId"
+          class="wx-menu list-ctx"
+          :style="{ left: listCtxPos.x + 'px', top: listCtxPos.y + 'px' }"
+          @click.stop
         >
-          <div v-if="collageMembers(c).length" class="wx-avatar collage" :data-n="Math.min(collageMembers(c).length, 4)">
-            <span v-for="mem in collageMembers(c)" :key="mem.id">{{ avatarText(mem.name) }}</span>
-          </div>
-          <div v-else class="wx-avatar">{{ avatarText(c.title) }}</div>
-          <div class="wx-list-meta">
-            <div class="wx-list-title">{{ c.title }}</div>
-            <div class="wx-list-sub">{{ c.last_message || (c.type === 'group' ? '群聊' : '私聊') }}</div>
-          </div>
+          <button
+            class="danger"
+            @click="onListCtxDelete"
+          >
+            删除会话
+          </button>
         </div>
         <div v-if="!conversations.length" class="wx-empty" style="padding: 40px 16px">
           暂无会话<br />去通讯录导入角色并开聊
@@ -402,12 +529,8 @@ onMounted(async () => {
               <div v-if="menuOpen" class="wx-menu">
                 <button v-if="activeConversation.type === 'group'" @click="renameGroup">修改群名称</button>
                 <button @click="clearChat">清空聊天记录</button>
-                <button
-                  v-if="activeConversation.type === 'group'"
-                  class="danger"
-                  @click="dissolveGroup"
-                >
-                  解散群聊
+                <button class="danger" @click="dissolveGroup">
+                  {{ activeConversation.type === 'group' ? '解散群聊' : '删除会话' }}
                 </button>
               </div>
             </div>

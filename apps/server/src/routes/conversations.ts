@@ -67,9 +67,12 @@ export async function conversationRoutes(app: FastifyInstance) {
     const rows = db
       .prepare(
         `SELECT c.*,
-          (SELECT content FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC LIMIT 1) AS last_message
+          (SELECT content FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1) AS last_message
          FROM conversations c
-         ORDER BY c.updated_at DESC`
+         ORDER BY COALESCE(
+           (SELECT m.created_at FROM messages m WHERE m.conversation_id = c.id ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1),
+           c.updated_at
+         ) DESC`
       )
       .all();
 
@@ -105,6 +108,26 @@ export async function conversationRoutes(app: FastifyInstance) {
       body.title?.trim() ||
       (type === 'private' ? chars[0].name : chars.map((c) => c.name).join('、'));
 
+    if (type === 'private' && chars.length === 1) {
+      const existing = db
+        .prepare(
+          `SELECT c.id FROM conversations c
+           WHERE c.type = 'private'
+             AND (SELECT COUNT(*) FROM conversation_members cm WHERE cm.conversation_id = c.id) = 1
+             AND EXISTS (
+               SELECT 1 FROM conversation_members cm2
+               WHERE cm2.conversation_id = c.id AND cm2.character_id = ?
+             )
+           ORDER BY c.created_at ASC, c.id ASC
+           LIMIT 1`
+        )
+        .get(chars[0].id) as { id: string } | undefined;
+      if (existing) {
+        const conversation = db.prepare('SELECT * FROM conversations WHERE id = ?').get(existing.id) as Record<string, unknown>;
+        return { conversation: { ...conversation, members: loadMembers(existing.id) } };
+      }
+    }
+
     const id = uuid();
     const now = new Date().toISOString();
     db.prepare(
@@ -125,7 +148,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       ).run(uuid(), id, chars[0].id, chars[0].first_mes.trim(), now);
     }
 
-    const conversation = db.prepare('SELECT * FROM conversations WHERE id = ?').get(id);
+    const conversation = db.prepare('SELECT * FROM conversations WHERE id = ?').get(id) as Record<string, unknown>;
     return { conversation: { ...conversation, members: loadMembers(id) } };
   });
 
@@ -148,7 +171,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       now,
       conv.id
     );
-    const updated = db.prepare('SELECT * FROM conversations WHERE id = ?').get(conv.id);
+    const updated = db.prepare('SELECT * FROM conversations WHERE id = ?').get(conv.id) as Record<string, unknown>;
     return { conversation: { ...updated, members: loadMembers(conv.id) } };
   });
 
@@ -157,9 +180,6 @@ export async function conversationRoutes(app: FastifyInstance) {
       | { id: string; type: string }
       | undefined;
     if (!conv) return reply.code(404).send({ error: '会话不存在' });
-    if (conv.type !== 'group') {
-      return reply.code(400).send({ error: '仅可解散群聊' });
-    }
 
     const delMessages = db.prepare(`DELETE FROM messages WHERE conversation_id = ?`);
     const delMembers = db.prepare(`DELETE FROM conversation_members WHERE conversation_id = ?`);

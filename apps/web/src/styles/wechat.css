@@ -560,3 +560,44 @@ textarea {
   padding: 0 2px;
   font-size: 14px;
 }
+
+
+.wx-swipe-row {
+  position: relative;
+  overflow: hidden;
+  background: #fa5151;
+}
+
+.wx-swipe-front {
+  position: relative;
+  z-index: 1;
+  background: #fff;
+  transition: transform 0.12s ease-out;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.wx-swipe-front.active,
+.wx-list-item.wx-swipe-front:hover {
+  background: #dedede;
+}
+
+.wx-swipe-delete {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 72px;
+  border: none;
+  background: #fa5151;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  z-index: 0;
+}
+
+.wx-menu.list-ctx {
+  position: fixed;
+  z-index: 1000;
+  min-width: 120px;
+}

@@ -1,5 +1,49 @@
 import type Database from 'better-sqlite3';
 
+export function mergeDuplicatePrivateConversations(db: Database.Database) {
+  const privates = db
+    .prepare(`SELECT id, created_at FROM conversations WHERE type = 'private'`)
+    .all() as Array<{ id: string; created_at: string }>;
+
+  const byChar = new Map<string, Array<{ id: string; created_at: string }>>();
+  const memberStmt = db.prepare(
+    `SELECT character_id FROM conversation_members WHERE conversation_id = ?`
+  );
+
+  for (const c of privates) {
+    const members = memberStmt.all(c.id) as Array<{ character_id: string }>;
+    if (members.length !== 1) continue;
+    const cid = members[0].character_id;
+    const list = byChar.get(cid) ?? [];
+    list.push(c);
+    byChar.set(cid, list);
+  }
+
+  const moveMsg = db.prepare(`UPDATE messages SET conversation_id = ? WHERE conversation_id = ?`);
+  const delMembers = db.prepare(`DELETE FROM conversation_members WHERE conversation_id = ?`);
+  const delConv = db.prepare(`DELETE FROM conversations WHERE id = ?`);
+  const updateTs = db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`);
+  const lastMsg = db.prepare(
+    `SELECT created_at FROM messages WHERE conversation_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`
+  );
+
+  const tx = db.transaction(() => {
+    for (const [, list] of byChar) {
+      if (list.length < 2) continue;
+      list.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+      const keep = list[0];
+      for (const extra of list.slice(1)) {
+        moveMsg.run(keep.id, extra.id);
+        delMembers.run(extra.id);
+        delConv.run(extra.id);
+      }
+      const last = lastMsg.get(keep.id) as { created_at: string } | undefined;
+      if (last?.created_at) updateTs.run(last.created_at, keep.id);
+    }
+  });
+  tx();
+}
+
 export function migrate(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS characters (
@@ -68,4 +112,6 @@ export function migrate(db: Database.Database) {
       FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
     );
   `);
+
+  mergeDuplicatePrivateConversations(db);
 }
