@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WeTavern · 酒馆社交 UI 效果图</title>
+  <style>
+    :root {
+      --nav: #1e1e1e;
+      --nav-hover: #2a2a2a;
+      --green: #07c160;
+      --green-deep: #06ad56;
+      --self-bubble: #95ec69;
+      --bg: #ededed;
+      --panel: #f7f7f7;
+      --white: #ffffff;
+      --line: #e7e7e7;
+      --text: #1a1a1a;
+      --sub: #888;
+      --muted: #b2b2b2;
+      --danger: #fa5151;
+      --shadow: 0 18px 50px rgba(20, 20, 20, .22);
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #3d4a3a 0%, transparent 50%),
+        radial-gradient(900px 500px at 100% 100%, #1c2833 0%, transparent 45%),
+        #121417;
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 28px 20px;
+    }
+    .stage-caption {
+      width: min(1280px, 100%);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      color: #e8eee9;
+    }
+    .stage-caption h1 {
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: .02em;
+    }
+    .stage-caption p { color: #a8b3ab; font-size: 13px; margin-top: 4px; }
+    .pills { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+    .pill {
+      border: 0;
+      background: rgba(255,255,255,.08);
+      color: #d7ddd8;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .pill.active { background: var(--green); color: #fff; }
+    .app {
+      width: min(1280px, 100%);
+      height: min(820px, calc(100vh - 120px));
+      min-height: 640px;
+      background: var(--white);
+      border-radius: 14px;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 64px 280px minmax(0, 1fr);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .nav {
+      background: var(--nav);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px 0 18px;
+      color: #cfcfcf;
+    }
+    .me-mini {
+      width: 38px; height: 38px; border-radius: 6px;
+      background: linear-gradient(145deg, #7ee0a5, #2f8f5b);
+      display: grid; place-items: center;
+      color: #fff; font-weight: 700; font-size: 15px;
+      margin-bottom: 22px;
+    }
+    .nav button {
+      width: 44px; height: 44px; border: 0; background: transparent;
+      color: #9a9a9a; border-radius: 8px; cursor: pointer;
+      display: grid; place-items: center; margin-bottom: 6px;
+    }
+    .nav button:hover { background: var(--nav-hover); color: #fff; }
+    .nav button.active { color: var(--green); }
+    .nav .spacer { flex: 1; }
+    .nav svg { width: 22px; height: 22px; }
+    .badge {
+      position: absolute; top: 4px; right: 4px;
+      min-width: 16px; height: 16px; padding: 0 4px;
+      background: var(--danger); color: #fff; border-radius: 8px;
+      font-size: 10px; line-height: 16px;
+    }
+    .icon-wrap { position: relative; }
+
+    .list {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      display: flex; flex-direction: column; min-width: 0;
+    }
+    .list-head {
+      height: 60px; display: flex; align-items: center; gap: 8px;
+      padding: 0 12px; border-bottom: 1px solid var(--line);
+    }
+    .search {
+      flex: 1; height: 32px; border: 0; background: #ebebeb;
+      border-radius: 6px; padding: 0 10px; font-size: 13px; outline: none;
+    }
+    .add-btn {
+      width: 32px; height: 32px; border: 0; background: #ebebeb;
+      border-radius: 6px; cursor: pointer; font-size: 18px; color: #555;
+    }
+    .conv { overflow: auto; flex: 1; }
+    .conv-item {
+      display: grid; grid-template-columns: 44px 1fr auto;
+      gap: 10px; padding: 12px; cursor: pointer; align-items: center;
+    }
+    .conv-item:hover { background: #efefef; }
+    .conv-item.active { background: #d9d9d9; }
+    .avatar {
+      width: 44px; height: 44px; border-radius: 6px;
+      display: grid; place-items: center; color: #fff; font-weight: 700;
+      font-size: 15px; flex-shrink: 0;
+    }
+    .avatar.sm { width: 36px; height: 36px; font-size: 13px; }
+    .avatar.round { border-radius: 50%; }
+    .name-row { display: flex; justify-content: space-between; gap: 8px; }
+    .name { font-size: 14px; }
+    .time { font-size: 11px; color: var(--muted); }
+    .preview { font-size: 12px; color: var(--sub); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .unread {
+      min-width: 16px; height: 16px; background: var(--danger); color: #fff;
+      border-radius: 8px; font-size: 10px; text-align: center; line-height: 16px;
+      margin-top: 4px; justify-self: end;
+    }
+
+    .main { display: flex; flex-direction: column; min-width: 0; background: var(--bg); }
+    .chat-head {
+      height: 60px; background: #f5f5f5; border-bottom: 1px solid #e1e1e1;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 18px;
+    }
+    .chat-head h2 { font-size: 16px; font-weight: 600; }
+    .chat-head .meta { font-size: 12px; color: var(--sub); margin-top: 2px; }
+    .icon-btn {
+      width: 34px; height: 34px; border: 0; background: transparent;
+      cursor: pointer; color: #666; border-radius: 8px;
+    }
+    .icon-btn:hover { background: #eaeaea; }
+
+    .thread { flex: 1; overflow: auto; padding: 18px 24px 8px; }
+    .day-sep {
+      text-align: center; color: #9a9a9a; font-size: 12px; margin: 8px 0 16px;
+    }
+    .msg { display: flex; gap: 10px; margin-bottom: 16px; align-items: flex-start; }
+    .msg.me { flex-direction: row-reverse; }
+    .bubble {
+      max-width: 58%;
+      background: #fff;
+      padding: 9px 12px;
+      border-radius: 6px;
+      font-size: 14px; line-height: 1.55;
+      position: relative;
+      box-shadow: 0 1px 1px rgba(0,0,0,.04);
+    }
+    .msg.me .bubble { background: var(--self-bubble); }
+    .bubble .who { font-size: 12px; color: #6a8aaa; margin-bottom: 3px; }
+    .status { font-size: 11px; color: #8a8a8a; margin-top: 6px; text-align: right; }
+    .voice {
+      display: flex; align-items: center; gap: 8px; min-width: 120px;
+    }
+    .voice-bars { display: flex; gap: 2px; align-items: center; height: 16px; }
+    .voice-bars i {
+      width: 3px; background: #3d3d3d; display: block; border-radius: 2px;
+    }
+    .img-card {
+      width: 220px; height: 140px; border-radius: 6px; overflow: hidden;
+      background: linear-gradient(135deg, #8fb4a0, #4a6d5c);
+      color: #fff; display: flex; align-items: flex-end; padding: 10px;
+      font-size: 12px;
+    }
+    .img-card.alt { background: linear-gradient(135deg, #c9b07a, #7a5b32); }
+    .img-card.night { background: linear-gradient(135deg, #6a7bb5, #2c3558); }
+
+    .composer {
+      background: #f5f5f5; border-top: 1px solid #e1e1e1;
+      padding: 8px 12px 14px;
+    }
+    .tools { display: flex; gap: 6px; padding: 2px 4px 8px; color: #555; }
+    .tools button { border: 0; background: transparent; cursor: pointer; font-size: 16px; padding: 4px 6px; }
+    .composer textarea {
+      width: 100%; height: 72px; border: 0; resize: none; outline: none;
+      background: transparent; font-size: 14px; font-family: inherit;
+    }
+    .send-row { display: flex; justify-content: flex-end; }
+    .send {
+      background: var(--green); color: #fff; border: 0; height: 32px;
+      padding: 0 16px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    }
+    .send:hover { background: var(--green-deep); }
+
+    .page { display: none; flex-direction: column; min-width: 0; background: #fff; }
+    .page.active { display: flex; }
+    .page-head {
+      height: 60px; display: flex; align-items: center; justify-content: space-between;
+      padding: 0 20px; border-bottom: 1px solid var(--line); background: #fafafa;
+    }
+    .moments { overflow: auto; background: #fff; }
+    .cover {
+      height: 240px; position: relative;
+      background:
+        linear-gradient(180deg, transparent 30%, rgba(0,0,0,.45)),
+        linear-gradient(135deg, #3e5a4a, #1d2a24 60%, #0f1412);
+    }
+    .cover-user {
+      position: absolute; right: 28px; bottom: 18px;
+      display: flex; align-items: center; gap: 12px; color: #fff;
+    }
+    .cover-user strong { font-size: 18px; text-shadow: 0 1px 8px rgba(0,0,0,.4); }
+    .cover-user .avatar { width: 68px; height: 68px; border: 2px solid #fff; font-size: 22px; }
+    .moment {
+      display: grid; grid-template-columns: 44px 1fr; gap: 12px;
+      padding: 20px 28px; border-bottom: 1px solid #f0f0f0;
+    }
+    .moment h3 { font-size: 15px; color: #576b95; font-weight: 600; }
+    .moment .body { font-size: 14px; line-height: 1.7; margin: 6px 0 10px; }
+    .photos { display: grid; grid-template-columns: repeat(3, 96px); gap: 6px; }
+    .photo {
+      width: 96px; height: 96px; border-radius: 3px;
+    }
+    .m-meta { color: #b1b1b1; font-size: 12px; margin-top: 8px; display: flex; justify-content: space-between; }
+    .actions { color: #576b95; display: flex; gap: 12px; }
+    .like-box, .cmt-box {
+      background: #f7f7f7; border-radius: 4px; margin-top: 8px; padding: 8px 10px; font-size: 13px;
+    }
+    .like-box { color: #576b95; }
+    .cmt { margin-top: 4px; line-height: 1.55; }
+    .cmt b { color: #576b95; font-weight: 600; }
+
+    .contacts { overflow: auto; }
+    .letter { padding: 6px 16px; font-size: 12px; color: #888; background: #f3f3f3; }
+    .contact {
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 16px; cursor: pointer;
+    }
+    .contact:hover { background: #f6f6f6; }
+
+    .profile {
+      overflow: auto; background: #f2f2f2;
+    }
+    .profile-hero {
+      background: #fff; padding: 28px 32px 18px;
+      display: grid; grid-template-columns: 84px 1fr auto; gap: 16px;
+      align-items: center;
+    }
+    .profile-hero h2 { font-size: 22px; }
+    .sign { color: #888; font-size: 13px; margin-top: 6px; }
+    .chip {
+      border: 1px solid #ddd; background: #fff; height: 32px; padding: 0 14px;
+      border-radius: 4px; cursor: pointer;
+    }
+    .stats {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      background: #fff; margin-top: 10px; text-align: center;
+    }
+    .stats div { padding: 16px 0; }
+    .stats b { display: block; font-size: 18px; }
+    .stats span { color: #999; font-size: 12px; }
+    .block { background: #fff; margin-top: 10px; padding: 16px 22px; }
+    .block h4 { font-size: 14px; margin-bottom: 10px; }
+    .album { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .album i {
+      display: block; height: 92px; border-radius: 4px;
+    }
+    .bio { font-size: 14px; line-height: 1.8; color: #333; }
+
+    .group-side {
+      width: 240px; background: #f7f7f7; border-left: 1px solid var(--line);
+      display: none; flex-direction: column;
+    }
+    .app.with-side { grid-template-columns: 64px 260px minmax(0, 1fr) 220px; }
+    .app.with-side .group-side { display: flex; }
+    .side-h { padding: 16px; font-size: 13px; color: #666; }
+    .member { display: flex; align-items: center; gap: 8px; padding: 8px 16px; font-size: 13px; }
+    .notice { margin: 0 12px 12px; background: #fff; border-radius: 8px; padding: 10px 12px; font-size: 12px; color: #555; line-height: 1.6; }
+
+    .hidden { display: none !important; }
+    .hint {
+      width: min(1280px, 100%);
+      color: #9aa59e; font-size: 12px; line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage-caption">
+    <div>
+      <h1>WeTavern · 酒馆社交</h1>
+      <p>SillyTavern 微信风增强方案 · 高保真前端效果图（可点击切换页面）</p>
+    </div>
+    <div class="pills">
+      <button class="pill active" data-view="chat">01 单人私聊</button>
+      <button class="pill" data-view="group">02 多智能体群聊</button>
+      <button class="pill" data-view="moments">03 朋友圈</button>
+      <button class="pill" data-view="contacts">04 通讯录</button>
+      <button class="pill" data-view="profile">05 角色主页</button>
+    </div>
+  </div>
+
+  <div class="app" id="app">
+    <aside class="nav">
+      <div class="me-mini">我</div>
+      <button class="active" id="nav-chat" title="聊天" onclick="showView('chat')">
+        <span class="icon-wrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6.5A3.5 3.5 0 0 1 7.5 3h9A3.5 3.5 0 0 1 20 6.5v6A3.5 3.5 0 0 1 16.5 16H10l-4.2 3.2A.8.8 0 0 1 4.5 18.6V16A3.5 3.5 0 0 1 4 12.5v-6Z"/></svg>
+          <span class="badge">3</span>
+        </span>
+      </button>
+      <button id="nav-contacts" title="通讯录" onclick="showView('contacts')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M4 18c.6-2.8 2.6-4.2 5-4.2s4.4 1.4 5 4.2"/><circle cx="17" cy="9" r="2.4"/><path d="M16 18c.4-1.8 1.6-2.8 3.2-3"/></svg>
+      </button>
+      <button id="nav-moments" title="朋友圈" onclick="showView('moments')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.2"/><path d="M12 4c2 3 2 13 0 16M4.8 9.2h14.4M4.8 14.8h14.4"/></svg>
+      </button>
+      <div class="spacer"></div>
+      <button title="主题">◐</button>
+    </aside>
+
+    <section class="list" id="left-chat">
+      <div class="list-head">
+        <input class="search" placeholder="搜索角色、群聊、消息" />
+        <button class="add-btn">+</button>
+      </div>
+      <div class="conv">
+        <div class="conv-item active" id="item-lin" onclick="showView('chat')">
+          <div class="avatar" style="background:#5b7c6a">林</div>
+          <div>
+            <div class="name-row"><span class="name">林深</span><span class="time">18:42</span></div>
+            <div class="preview">今晚月色很好，要不要去城墙上走走？</div>
+          </div>
+        </div>
+        <div class="conv-item" id="item-group" onclick="showView('group')">
+          <div class="avatar" style="background:#6d5b8c">公</div>
+          <div>
+            <div class="name-row"><span class="name">冒险者公会</span><span class="time">18:21</span></div>
+            <div class="preview">小春: @林深 你又把任务榜揭走了？</div>
+          </div>
+          <div class="unread">2</div>
+        </div>
+        <div class="conv-item">
+          <div class="avatar" style="background:#3d5a80">夜</div>
+          <div>
+            <div class="name-row"><span class="name">夜见</span><span class="time">昨天</span></div>
+            <div class="preview">[图片] 观测记录已经写好了。</div>
+          </div>
+        </div>
+        <div class="conv-item">
+          <div class="avatar" style="background:#b57a4a">阿</div>
+          <div>
+            <div class="name-row"><span class="name">阿棠</span><span class="time">昨天</span></div>
+            <div class="preview">[语音] 0:08</div>
+          </div>
+        </div>
+        <div class="conv-item">
+          <div class="avatar" style="background:#8a4a4a">红</div>
+          <div>
+            <div class="name-row"><span class="name">红叶</span><span class="time">周五</span></div>
+            <div class="preview">主页相册更新了，记得来看。</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="list hidden" id="left-contacts">
+      <div class="list-head">
+        <input class="search" placeholder="搜索角色" />
+        <button class="add-btn">+</button>
+      </div>
+      <div class="contacts">
+        <div class="letter">群聊</div>
+        <div class="contact" onclick="showView('group')">
+          <div class="avatar sm" style="background:#6d5b8c">公</div>
+          <div>冒险者公会 <span style="color:#999;font-size:12px">4 人</span></div>
+        </div>
+        <div class="letter">角色</div>
+        <div class="contact" onclick="showView('chat')">
+          <div class="avatar sm" style="background:#5b7c6a">林</div><div>林深</div>
+        </div>
+        <div class="contact" onclick="showView('profile')">
+          <div class="avatar sm" style="background:#3d5a80">夜</div><div>夜见</div>
+        </div>
+        <div class="contact">
+          <div class="avatar sm" style="background:#c46b7b">春</div><div>小春</div>
+        </div>
+        <div class="contact">
+          <div class="avatar sm" style="background:#b57a4a">阿</div><div>阿棠</div>
+        </div>
+        <div class="contact">
+          <div class="avatar sm" style="background:#8a4a4a">红</div><div>红叶</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="list hidden" id="left-moments">
+      <div class="list-head">
+        <div style="font-size:15px;font-weight:600;padding-left:6px">朋友圈</div>
+        <button class="add-btn" title="发动态">✎</button>
+      </div>
+      <div class="conv">
+        <div class="conv-item" onclick="showView('moments')">
+          <div class="avatar" style="background:#c46b7b">春</div>
+          <div>
+            <div class="name-row"><span class="name">小春</span><span class="time">17:08</span></div>
+            <div class="preview">新动态 · 花市买到了糖炒栗子</div>
+          </div>
+        </div>
+        <div class="conv-item">
+          <div class="avatar" style="background:#5b7c6a">林</div>
+          <div>
+            <div class="name-row"><span class="name">林深</span><span class="time">15:40</span></div>
+            <div class="preview">新动态 · 城墙看月</div>
+          </div>
+        </div>
+        <div class="conv-item">
+          <div class="avatar" style="background:#3d5a80">夜</div>
+          <div>
+            <div class="name-row"><span class="name">夜见</span><span class="time">12:16</span></div>
+            <div class="preview">新动态 · 观测日志</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRIVATE CHAT -->
+    <main class="main" id="view-chat">
+      <div class="chat-head">
+        <div>
+          <h2>林深</h2>
+          <div class="meta">在线 · 古风剑客 · 来自角色卡 V3</div>
+        </div>
+        <div>
+          <button class="icon-btn" title="主页" onclick="showView('profile')">⌂</button>
+          <button class="icon-btn">···</button>
+        </div>
+      </div>
+      <div class="thread">
+        <div class="day-sep">今天 18:21</div>
+        <div class="msg">
+          <div class="avatar sm" style="background:#5b7c6a">林</div>
+          <div class="bubble">你回来了。茶还温着，我在窗边等了一会儿。</div>
+        </div>
+        <div class="msg me">
+          <div class="avatar sm" style="background:linear-gradient(145deg,#7ee0a5,#2f8f5b)">我</div>
+          <div>
+            <div class="bubble">刚从公会回来。任务榜又被你揭走一张？</div>
+            <div class="status">已读 18:22</div>
+          </div>
+        </div>
+        <div class="msg">
+          <div class="avatar sm" style="background:#5b7c6a">林</div>
+          <div class="bubble">
+            <div class="img-card">城墙上的暮色 · 林深拍摄</div>
+          </div>
+        </div>
+        <div class="msg me">
+          <div class="avatar sm" style="background:linear-gradient(145deg,#7ee0a5,#2f8f5b)">我</div>
+          <div class="bubble">
+            <div class="voice">
+              <div class="voice-bars">
+                <i style="height:5px"></i><i style="height:11px"></i><i style="height:7px"></i>
+                <i style="height:14px"></i><i style="height:8px"></i><i style="height:12px"></i>
+                <i style="height:6px"></i>
+              </div>
+              <span>0:06</span>
+            </div>
+          </div>
+        </div>
+        <div class="msg">
+          <div class="avatar sm" style="background:#5b7c6a">林</div>
+          <div class="bubble">今晚月色很好，要不要去城墙上走走？</div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="tools">
+          <button title="表情">☺</button>
+          <button title="图片">🖼</button>
+          <button title="语音">🎙</button>
+          <button title="附件">＋</button>
+        </div>
+        <textarea placeholder="发消息给林深…"></textarea>
+        <div class="send-row"><button class="send">发送</button></div>
+      </div>
+    </main>
+
+    <!-- GROUP CHAT -->
+    <main class="main hidden" id="view-group">
+      <div class="chat-head">
+        <div>
+          <h2>冒险者公会 (4)</h2>
+          <div class="meta">多角色轮流 / 可 @指定发言 · 群公告已置顶</div>
+        </div>
+        <div>
+          <button class="icon-btn">···</button>
+        </div>
+      </div>
+      <div class="thread">
+        <div class="day-sep">今天 18:05</div>
+        <div class="msg">
+          <div class="avatar sm" style="background:#c46b7b">春</div>
+          <div class="bubble">
+            <div class="who">小春</div>
+            大家晚上好！任务榜更新啦，有谁要组队去东林？
+          </div>
+        </div>
+        <div class="msg">
+          <div class="avatar sm" style="background:#3d5a80">夜</div>
+          <div class="bubble">
+            <div class="who">夜见</div>
+            东林夜里能见度偏低。如果去，记得带照明。
+          </div>
+        </div>
+        <div class="msg me">
+          <div class="avatar sm" style="background:linear-gradient(145deg,#7ee0a5,#2f8f5b)">我</div>
+          <div>
+            <div class="bubble">@林深 你是不是又提前揭了高阶任务？</div>
+            <div class="status">已送达 18:18</div>
+          </div>
+        </div>
+        <div class="msg">
+          <div class="avatar sm" style="background:#5b7c6a">林</div>
+          <div class="bubble">
+            <div class="who">林深</div>
+            ……只是路过看了一眼。名单我贴在公告里了。
+          </div>
+        </div>
+        <div class="msg">
+          <div class="avatar sm" style="background:#c46b7b">春</div>
+          <div class="bubble">
+            <div class="who">小春</div>
+            @林深 你又把任务榜揭走了？下次先说一声嘛～
+          </div>
+        </div>
+      </div>
+      <div class="composer">
+        <div class="tools">
+          <button>☺</button><button>🖼</button><button>🎙</button><button>@</button>
+        </div>
+        <textarea placeholder="发送到冒险者公会，输入 @ 可指定角色回答…"></textarea>
+        <div class="send-row"><button class="send">发送</button></div>
+      </div>
+    </main>
+
+    <aside class="group-side" id="group-side">
+      <div class="side-h">群公告</div>
+      <div class="notice">本周高阶任务：东林夜巡。带队：林深。补给由小春负责。夜见负责观测记录。</div>
+      <div class="side-h">群成员 4</div>
+      <div class="member"><div class="avatar sm" style="background:linear-gradient(145deg,#7ee0a5,#2f8f5b)">我</div>我（群主）</div>
+      <div class="member"><div class="avatar sm" style="background:#5b7c6a">林</div>林深</div>
+      <div class="member"><div class="avatar sm" style="background:#c46b7b">春</div>小春</div>
+      <div class="member"><div class="avatar sm" style="background:#3d5a80">夜</div>夜见</div>
+    </aside>
+
+    <!-- MOMENTS -->
+    <main class="page" id="view-moments">
+      <div class="moments" style="flex:1">
+        <div class="cover">
+          <div class="cover-user">
+            <strong>我的朋友圈</strong>
+            <div class="avatar" style="background:linear-gradient(145deg,#7ee0a5,#2f8f5b)">我</div>
+          </div>
+        </div>
+        <div style="height:36px"></div>
+        <article class="moment">
+          <div class="avatar" style="background:#c46b7b">春</div>
+          <div>
+            <h3>小春</h3>
+            <div class="body">花市收摊前买到了最后一袋糖炒栗子。分给你们，不准嫌烫。</div>
+            <div class="photos">
+              <div class="photo" style="background:linear-gradient(135deg,#e8c48a,#c46b4a)"></div>
+              <div class="photo" style="background:linear-gradient(135deg,#efd6c0,#d9899a)"></div>
+            </div>
+            <div class="m-meta">
+              <span>17:08 · 花市东街</span>
+              <span class="actions">赞  评论</span>
+            </div>
+            <div class="like-box">林深，夜见，我</div>
+            <div class="cmt-box">
+              <div class="cmt"><b>林深</b>：下次留一袋在窗台就好。</div>
+              <div class="cmt"><b>夜见</b>：热量偏高，但……谢谢。</div>
+              <div class="cmt"><b>小春</b> 回复 <b>夜见</b>：你就说好不好吃！</div>
+            </div>
+          </div>
+        </article>
+        <article class="moment">
+          <div class="avatar" style="background:#5b7c6a">林</div>
+          <div>
+            <h3>林深</h3>
+            <div class="body">城墙上风很大。月色比刀光干净。</div>
+            <div class="photos">
+              <div class="photo" style="background:linear-gradient(135deg,#8fb4a0,#24352d);width:200px;height:120px"></div>
+            </div>
+            <div class="m-meta"><span>15:40</span><span class="actions">赞  评论</span></div>
+            <div class="like-box">我，小春</div>
+            <div class="cmt-box">
+              <div class="cmt"><b>我</b>：晚上一起去。</div>
+            </div>
+          </div>
+        </article>
+        <article class="moment">
+          <div class="avatar" style="background:#3d5a80">夜</div>
+          <div>
+            <h3>夜见</h3>
+            <div class="body">观测日志 #28：西南方向云层变薄，适合夜巡。数据已同步到主页。</div>
+            <div class="m-meta"><span>12:16 · 心情：冷静</span><span class="actions">赞  评论</span></div>
+            <div class="like-box">林深</div>
+          </div>
+        </article>
+      </div>
+    </main>
+
+    <!-- CONTACTS MAIN placeholder -->
+    <main class="page" id="view-contacts">
+      <div class="page-head"><h2 style="font-size:16px">通讯录</h2><span style="color:#888;font-size:13px">5 个角色 · 1 个群</span></div>
+      <div class="contacts" style="flex:1">
+        <div class="letter">新的朋友</div>
+        <div class="contact"><div class="avatar sm" style="background:#07c160">+</div><div>添加角色 / 导入角色卡</div></div>
+        <div class="letter">群聊</div>
+        <div class="contact" onclick="showView('group')"><div class="avatar sm" style="background:#6d5b8c">公</div><div>冒险者公会</div></div>
+        <div class="letter">L</div>
+        <div class="contact" onclick="showView('chat')"><div class="avatar sm" style="background:#5b7c6a">林</div><div>林深<div class="sign">今晚月色很好</div></div></div>
+        <div class="letter">X</div>
+        <div class="contact" onclick="showView('profile')"><div class="avatar sm" style="background:#3d5a80">夜</div><div>夜见<div class="sign">观测仍在继续</div></div></div>
+        <div class="letter">X</div>
+        <div class="contact"><div class="avatar sm" style="background:#c46b7b">春</div><div>小春<div class="sign">糖炒栗子要不要？</div></div></div>
+      </div>
+    </main>
+
+    <!-- PROFILE -->
+    <main class="page" id="view-profile">
+      <div class="profile" style="flex:1">
+        <div class="profile-hero">
+          <div class="avatar" style="width:84px;height:84px;font-size:28px;background:#5b7c6a">林</div>
+          <div>
+            <h2>林深</h2>
+            <div class="sign">城墙上的风，比人话更诚实。</div>
+            <div class="sign">来源：角色卡 V3 · 世界书：东林夜巡</div>
+          </div>
+          <button class="chip" onclick="showView('chat')">发消息</button>
+        </div>
+        <div class="stats">
+          <div><b>28</b><span>动态</span></div>
+          <div><b>6</b><span>相册</span></div>
+          <div><b>3</b><span>共同群聊</span></div>
+        </div>
+        <div class="block">
+          <h4>简介</h4>
+          <div class="bio">东林守夜人。少言，重诺，刀法干净。不主动揭榜，但高阶任务往往在他手里。主页文案由角色设定与世界书共同维护，可随剧情更新。</div>
+        </div>
+        <div class="block">
+          <h4>相册</h4>
+          <div class="album">
+            <i style="background:linear-gradient(135deg,#8fb4a0,#24352d)"></i>
+            <i style="background:linear-gradient(135deg,#c9b07a,#5a4320)"></i>
+            <i style="background:linear-gradient(135deg,#6a7bb5,#222844)"></i>
+            <i style="background:linear-gradient(135deg,#d7c4b0,#7a5a4a)"></i>
+          </div>
+        </div>
+        <div class="block">
+          <h4>最近动态</h4>
+          <div class="bio">15:40 城墙上风很大。月色比刀光干净。</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <p class="hint">
+    效果图说明：左侧为微信 PC 式导航（聊天 / 通讯录 / 朋友圈）。顶部标签可切换 5 个核心界面。
+    单聊展示文字、图片、语音与已读状态；群聊展示多角色气泡、@ 与成员侧栏；朋友圈展示点赞评论链；主页展示角色卡驱动的简介与相册。
+    本文件为静态高保真原型，不含真实 LLM 调用。
+  </p>
+
+  <script>
+    const views = ["chat", "group", "moments", "contacts", "profile"];
+    function showView(name) {
+      views.forEach((v) => {
+        const el = document.getElementById("view-" + v);
+        if (el) el.classList.toggle("hidden", v !== name);
+        if (el) el.classList.toggle("active", v === name && (v === "moments" || v === "contacts" || v === "profile"));
+      });
+      document.querySelectorAll(".pill").forEach((p) => p.classList.toggle("active", p.dataset.view === name));
+      document.getElementById("left-chat").classList.toggle("hidden", name === "moments" || name === "contacts" || name === "profile");
+      document.getElementById("left-moments").classList.toggle("hidden", name !== "moments");
+      document.getElementById("left-contacts").classList.toggle("hidden", name !== "contacts" && name !== "profile");
+      if (name === "profile") document.getElementById("left-contacts").classList.remove("hidden");
+      document.getElementById("app").classList.toggle("with-side", name === "group");
+      document.getElementById("nav-chat").classList.toggle("active", name === "chat" || name === "group");
+      document.getElementById("nav-contacts").classList.toggle("active", name === "contacts" || name === "profile");
+      document.getElementById("nav-moments").classList.toggle("active", name === "moments");
+      const lin = document.getElementById("item-lin");
+      const grp = document.getElementById("item-group");
+      if (lin && grp) {
+        lin.classList.toggle("active", name === "chat");
+        grp.classList.toggle("active", name === "group");
+      }
+    }
+    document.querySelectorAll(".pill").forEach((p) => p.addEventListener("click", () => showView(p.dataset.view)));
+  </script>
+</body>
+</html>
