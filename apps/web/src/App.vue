@@ -18,6 +18,8 @@ const fileInput = ref<HTMLInputElement | null>(null);
 const chatBody = ref<HTMLElement | null>(null);
 const mentionId = ref<string>('');
 const commentDrafts = reactive<Record<string, string>>({});
+const menuOpen = ref(false);
+const msgMenuId = ref<string | null>(null);
 
 const activeConversation = computed(() =>
   conversations.value.find((c) => c.id === activeConversationId.value) ?? null
@@ -58,6 +60,8 @@ async function openConversation(id: string) {
   activeConversationId.value = id;
   tab.value = 'chat';
   mentionId.value = '';
+  menuOpen.value = false;
+  msgMenuId.value = null;
   const res = await api.listMessages(id);
   messages.value = res.messages;
   await nextTick();
@@ -132,6 +136,77 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+async function renameGroup() {
+  menuOpen.value = false;
+  const conv = activeConversation.value;
+  if (!conv || conv.type !== 'group') return;
+  const next = window.prompt('修改群名称', conv.title);
+  if (next == null) return;
+  const title = next.trim();
+  if (!title) {
+    status.value = '群名称不能为空';
+    return;
+  }
+  try {
+    await api.renameConversation(conv.id, title);
+    await refreshConversations();
+    status.value = '';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function dissolveGroup() {
+  menuOpen.value = false;
+  const conv = activeConversation.value;
+  if (!conv || conv.type !== 'group') return;
+  const ok = window.confirm(`确定解散群「${conv.title}」？\n群消息与成员关系将删除，私聊不受影响。`);
+  if (!ok) return;
+  try {
+    await api.dissolveConversation(conv.id);
+    activeConversationId.value = null;
+    messages.value = [];
+    await refreshConversations();
+    status.value = '群已解散';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function clearChat() {
+  menuOpen.value = false;
+  const conv = activeConversation.value;
+  if (!conv) return;
+  const ok = window.confirm('清空当前会话的全部聊天记录？此操作不可恢复。');
+  if (!ok) return;
+  try {
+    await api.clearMessages(conv.id);
+    messages.value = [];
+    await refreshConversations();
+    status.value = '已清空聊天记录';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function deleteOneMessage(m: ChatMessage) {
+  msgMenuId.value = null;
+  if (!activeConversationId.value) return;
+  const ok = window.confirm('删除这条消息？');
+  if (!ok) return;
+  try {
+    await api.deleteMessage(activeConversationId.value, m.id);
+    messages.value = messages.value.filter((x) => x.id !== m.id);
+    await refreshConversations();
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+function toggleMsgMenu(id: string) {
+  msgMenuId.value = msgMenuId.value === id ? null : id;
+}
+
 async function letThemPost(characterId: string) {
   status.value = '生成朋友圈…';
   try {
@@ -185,7 +260,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="wx-shell">
+  <div class="wx-shell" @click="menuOpen = false; msgMenuId = null">
     <aside class="wx-nav">
       <div class="wx-nav-avatar" title="Agent Chat">馆</div>
       <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" @click="tab = 'chat'">
@@ -320,7 +395,23 @@ onMounted(async () => {
 
       <template v-else>
         <div class="wx-main-header">
-          <span>{{ activeConversation?.title || '未选择会话' }}</span>
+          <div class="wx-header-left">
+            <span>{{ activeConversation?.title || '未选择会话' }}</span>
+            <div v-if="activeConversation" class="wx-menu-wrap" @click.stop>
+              <button class="wx-icon-more" title="会话设置" @click="menuOpen = !menuOpen">…</button>
+              <div v-if="menuOpen" class="wx-menu">
+                <button v-if="activeConversation.type === 'group'" @click="renameGroup">修改群名称</button>
+                <button @click="clearChat">清空聊天记录</button>
+                <button
+                  v-if="activeConversation.type === 'group'"
+                  class="danger"
+                  @click="dissolveGroup"
+                >
+                  解散群聊
+                </button>
+              </div>
+            </div>
+          </div>
           <span class="wx-hint">{{ status }}</span>
         </div>
 
@@ -341,7 +432,15 @@ onMounted(async () => {
                     <div v-if="m.role !== 'user' && activeConversation.type === 'group'" class="wx-msg-name">
                       {{ m.character_name || '角色' }}
                     </div>
-                    <div class="wx-bubble">{{ m.content }}</div>
+                    <div class="wx-bubble-row">
+                      <div class="wx-bubble">{{ m.content }}</div>
+                      <div class="wx-msg-actions" @click.stop>
+                        <button class="wx-msg-more" title="消息操作" @click="toggleMsgMenu(m.id)">⋯</button>
+                        <div v-if="msgMenuId === m.id" class="wx-menu msg">
+                          <button class="danger" @click="deleteOneMessage(m)">删除</button>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </template>

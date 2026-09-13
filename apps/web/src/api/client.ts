@@ -77,6 +77,18 @@ export const api = {
       body: JSON.stringify({ characterIds, title, type }),
     }).then((r) => json<{ conversation: Conversation }>(r)),
 
+  renameConversation: (id: string, title: string) =>
+    fetch(`/api/conversations/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    }).then((r) => json<{ conversation: Conversation }>(r)),
+
+  dissolveConversation: (id: string) =>
+    fetch(`/api/conversations/${id}`, { method: 'DELETE' }).then((r) =>
+      json<{ ok: boolean }>(r)
+    ),
+
   listMessages: (id: string) =>
     fetch(`/api/conversations/${id}/messages`).then((r) => json<{ messages: ChatMessage[] }>(r)),
 
@@ -89,6 +101,16 @@ export const api = {
       json<{ userMessage: ChatMessage; assistantMessages: ChatMessage[] }>(r)
     ),
 
+  deleteMessage: (conversationId: string, messageId: string) =>
+    fetch(`/api/conversations/${conversationId}/messages/${messageId}`, {
+      method: 'DELETE',
+    }).then((r) => json<{ ok: boolean }>(r)),
+
+  clearMessages: (conversationId: string) =>
+    fetch(`/api/conversations/${conversationId}/messages`, { method: 'DELETE' }).then((r) =>
+      json<{ ok: boolean }>(r)
+    ),
+
   listMoments: () => fetch('/api/moments').then((r) => json<{ moments: Moment[] }>(r)),
 
   generateMoment: (characterId: string) =>
@@ -99,9 +121,11 @@ export const api = {
     }).then((r) => json<{ moment: Moment }>(r)),
 
   likeMoment: (id: string) =>
-    fetch(`/api/moments/${id}/like`, { method: 'POST' }).then((r) =>
-      json<{ moment: Moment }>(r)
-    ),
+    fetch(`/api/moments/${id}/like`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    }).then((r) => json<{ moment: Moment }>(r)),
 
   commentMoment: (id: string, content: string) =>
     fetch(`/api/moments/${id}/comments`, {

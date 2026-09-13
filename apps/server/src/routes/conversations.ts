@@ -35,7 +35,6 @@ function pickGroupResponder(
     if (hit) return hit;
   }
 
-  // Round-robin: next member after the last assistant speaker
   const lastAssistant = db
     .prepare(
       `SELECT character_id FROM messages
@@ -54,6 +53,15 @@ function pickGroupResponder(
   return members[(idx + 1) % members.length];
 }
 
+function loadMembers(conversationId: string) {
+  return db
+    .prepare(
+      `SELECT ch.id, ch.name, ch.avatar_path FROM conversation_members cm
+       JOIN characters ch ON ch.id = cm.character_id WHERE cm.conversation_id = ?`
+    )
+    .all(conversationId);
+}
+
 export async function conversationRoutes(app: FastifyInstance) {
   app.get('/api/conversations', async () => {
     const rows = db
@@ -65,17 +73,10 @@ export async function conversationRoutes(app: FastifyInstance) {
       )
       .all();
 
-    const withMembers = rows.map((c: any) => {
-      const members = db
-        .prepare(
-          `SELECT ch.id, ch.name, ch.avatar_path
-           FROM conversation_members cm
-           JOIN characters ch ON ch.id = cm.character_id
-           WHERE cm.conversation_id = ?`
-        )
-        .all(c.id);
-      return { ...c, members };
-    });
+    const withMembers = rows.map((c: any) => ({
+      ...c,
+      members: loadMembers(c.id),
+    }));
 
     return { conversations: withMembers };
   });
@@ -125,14 +126,51 @@ export async function conversationRoutes(app: FastifyInstance) {
     }
 
     const conversation = db.prepare('SELECT * FROM conversations WHERE id = ?').get(id);
-    const members = db
-      .prepare(
-        `SELECT ch.id, ch.name, ch.avatar_path FROM conversation_members cm
-         JOIN characters ch ON ch.id = cm.character_id WHERE cm.conversation_id = ?`
-      )
-      .all(id);
+    return { conversation: { ...conversation, members: loadMembers(id) } };
+  });
 
-    return { conversation: { ...conversation, members } };
+  app.patch<{ Params: { id: string } }>('/api/conversations/:id', async (req, reply) => {
+    const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(req.params.id) as
+      | { id: string; type: string; title: string }
+      | undefined;
+    if (!conv) return reply.code(404).send({ error: '会话不存在' });
+
+    const body = (req.body ?? {}) as { title?: string };
+    const title = body.title?.trim();
+    if (!title) return reply.code(400).send({ error: '群名称不能为空' });
+    if (conv.type !== 'group') {
+      return reply.code(400).send({ error: '仅群聊可改名' });
+    }
+
+    const now = new Date().toISOString();
+    db.prepare(`UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?`).run(
+      title,
+      now,
+      conv.id
+    );
+    const updated = db.prepare('SELECT * FROM conversations WHERE id = ?').get(conv.id);
+    return { conversation: { ...updated, members: loadMembers(conv.id) } };
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/conversations/:id', async (req, reply) => {
+    const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(req.params.id) as
+      | { id: string; type: string }
+      | undefined;
+    if (!conv) return reply.code(404).send({ error: '会话不存在' });
+    if (conv.type !== 'group') {
+      return reply.code(400).send({ error: '仅可解散群聊' });
+    }
+
+    const delMessages = db.prepare(`DELETE FROM messages WHERE conversation_id = ?`);
+    const delMembers = db.prepare(`DELETE FROM conversation_members WHERE conversation_id = ?`);
+    const delConv = db.prepare(`DELETE FROM conversations WHERE id = ?`);
+    const tx = db.transaction(() => {
+      delMessages.run(conv.id);
+      delMembers.run(conv.id);
+      delConv.run(conv.id);
+    });
+    tx();
+    return { ok: true };
   });
 
   app.get<{ Params: { id: string } }>('/api/conversations/:id/messages', async (req, reply) => {
@@ -152,6 +190,38 @@ export async function conversationRoutes(app: FastifyInstance) {
     return { messages };
   });
 
+  app.delete<{ Params: { id: string; messageId: string } }>(
+    '/api/conversations/:id/messages/:messageId',
+    async (req, reply) => {
+      const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(req.params.id);
+      if (!conv) return reply.code(404).send({ error: '会话不存在' });
+
+      const msg = db
+        .prepare(`SELECT * FROM messages WHERE id = ? AND conversation_id = ?`)
+        .get(req.params.messageId, req.params.id);
+      if (!msg) return reply.code(404).send({ error: '消息不存在' });
+
+      db.prepare(`DELETE FROM messages WHERE id = ?`).run(req.params.messageId);
+      db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(
+        new Date().toISOString(),
+        req.params.id
+      );
+      return { ok: true };
+    }
+  );
+
+  app.delete<{ Params: { id: string } }>('/api/conversations/:id/messages', async (req, reply) => {
+    const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(req.params.id);
+    if (!conv) return reply.code(404).send({ error: '会话不存在' });
+
+    db.prepare(`DELETE FROM messages WHERE conversation_id = ?`).run(req.params.id);
+    db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(
+      new Date().toISOString(),
+      req.params.id
+    );
+    return { ok: true };
+  });
+
   app.post<{ Params: { id: string } }>('/api/conversations/:id/messages', async (req, reply) => {
     const conversationId = req.params.id;
     const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(conversationId) as
@@ -162,13 +232,6 @@ export async function conversationRoutes(app: FastifyInstance) {
     const body = (req.body ?? {}) as { content?: string; mentionCharacterId?: string };
     const content = body.content?.trim();
     if (!content) return reply.code(400).send({ error: '消息不能为空' });
-
-    const now = new Date().toISOString();
-    const userMsgId = uuid();
-    db.prepare(
-      `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at)
-       VALUES (?, ?, 'user', NULL, ?, ?)`
-    ).run(userMsgId, conversationId, content, now);
 
     const members = db
       .prepare(
@@ -182,11 +245,35 @@ export async function conversationRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: '会话没有角色成员' });
     }
 
+    // Persist visible @Name in user bubble when a mention is selected
+    let storedContent = content;
+    let mentioned: CharacterRow | undefined;
+    if (conv.type === 'group' && body.mentionCharacterId) {
+      mentioned = members.find((m) => m.id === body.mentionCharacterId);
+      if (mentioned) {
+        const tag = `@${mentioned.name}`;
+        const already =
+          storedContent.startsWith(`${tag} `) ||
+          storedContent === tag ||
+          storedContent.includes(`${tag} `) ||
+          storedContent.endsWith(` ${tag}`);
+        if (!already) {
+          storedContent = `${tag} ${storedContent}`;
+        }
+      }
+    }
+
+    const now = new Date().toISOString();
+    const userMsgId = uuid();
+    db.prepare(
+      `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at)
+       VALUES (?, ?, 'user', NULL, ?, ?)`
+    ).run(userMsgId, conversationId, storedContent, now);
+
     let character: CharacterRow;
     if (conv.type === 'private') {
       character = members[0];
     } else {
-      // group: @指定只回一人；未 @ 则轮询只回一名
       character = pickGroupResponder(members, conversationId, body.mentionCharacterId);
     }
 
@@ -199,7 +286,11 @@ export async function conversationRoutes(app: FastifyInstance) {
       )
       .all(conversationId) as MessageRow[];
 
-    const system = buildSystemPrompt(character);
+    let system = buildSystemPrompt(character);
+    if (mentioned && mentioned.id === character.id) {
+      system += `\n\n（系统提示：用户在本条消息中 @了你「${mentioned.name}」，请以被点名的身份直接回应，不必复读 @。）`;
+    }
+
     const llmMessages = [
       { role: 'system' as const, content: system },
       ...history.map((m) => ({

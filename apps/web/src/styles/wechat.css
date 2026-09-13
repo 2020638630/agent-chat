@@ -467,3 +467,96 @@ textarea {
   gap: 8px;
   align-items: center;
 }
+
+.wx-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wx-menu-wrap {
+  position: relative;
+}
+
+.wx-icon-more {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 20px;
+  line-height: 1;
+  padding: 2px 8px;
+  color: #666;
+  border-radius: 6px;
+}
+
+.wx-icon-more:hover {
+  background: #eaeaea;
+}
+
+.wx-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 20;
+  background: #fff;
+  border: 1px solid #e5e5e5;
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  min-width: 140px;
+  padding: 4px 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.wx-menu.msg {
+  left: auto;
+  right: 0;
+}
+
+.wx-menu button {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #222;
+}
+
+.wx-menu button:hover {
+  background: #f3f3f3;
+}
+
+.wx-menu button.danger {
+  color: #fa5151;
+}
+
+.wx-bubble-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.wx-msg.me .wx-bubble-row {
+  flex-direction: row-reverse;
+}
+
+.wx-msg-actions {
+  position: relative;
+  opacity: 0;
+  transition: opacity .15s;
+}
+
+.wx-msg:hover .wx-msg-actions {
+  opacity: 1;
+}
+
+.wx-msg-more {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #999;
+  padding: 0 2px;
+  font-size: 14px;
+}
