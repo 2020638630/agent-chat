@@ -26,6 +26,13 @@ export type ChatMessage = {
   created_at: string;
 };
 
+export type MomentComment = {
+  id: string;
+  author: string;
+  content: string;
+  created_at: string;
+};
+
 export type Moment = {
   id: string;
   character_id: string;
@@ -33,6 +40,9 @@ export type Moment = {
   avatar_path?: string | null;
   content: string;
   created_at: string;
+  liked?: boolean;
+  like_count?: number;
+  comments?: MomentComment[];
 };
 
 async function json<T>(res: Response): Promise<T> {
@@ -86,5 +96,17 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ characterId }),
+    }).then((r) => json<{ moment: Moment }>(r)),
+
+  likeMoment: (id: string) =>
+    fetch(`/api/moments/${id}/like`, { method: 'POST' }).then((r) =>
+      json<{ moment: Moment }>(r)
+    ),
+
+  commentMoment: (id: string, content: string) =>
+    fetch(`/api/moments/${id}/comments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content }),
     }).then((r) => json<{ moment: Moment }>(r)),
 };

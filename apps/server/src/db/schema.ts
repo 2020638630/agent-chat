@@ -50,5 +50,22 @@ export function migrate(db: Database.Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS moment_likes (
+      moment_id TEXT NOT NULL,
+      user_key TEXT NOT NULL DEFAULT 'me',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (moment_id, user_key),
+      FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS moment_comments (
+      id TEXT PRIMARY KEY,
+      moment_id TEXT NOT NULL,
+      author TEXT NOT NULL DEFAULT '我',
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
+    );
   `);
 }

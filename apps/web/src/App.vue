@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { api, type Character, type ChatMessage, type Conversation, type Moment } from './api/client';
 
 type Tab = 'chat' | 'contacts' | 'moments';
@@ -17,19 +17,26 @@ const selectedForGroup = ref<string[]>([]);
 const fileInput = ref<HTMLInputElement | null>(null);
 const chatBody = ref<HTMLElement | null>(null);
 const mentionId = ref<string>('');
+const commentDrafts = reactive<Record<string, string>>({});
 
 const activeConversation = computed(() =>
   conversations.value.find((c) => c.id === activeConversationId.value) ?? null
 );
 
 const midTitle = computed(() => {
-  if (tab.value === 'chat') return '微信';
+  if (tab.value === 'chat') return '酒馆';
   if (tab.value === 'contacts') return '通讯录';
   return '朋友圈';
 });
 
 function avatarText(name?: string) {
   return (name || '?').slice(0, 1);
+}
+
+function collageMembers(c: Conversation) {
+  const mems = c.members || [];
+  if (c.type === 'group' && mems.length) return mems.slice(0, 4);
+  return [];
 }
 
 async function refreshCharacters() {
@@ -50,6 +57,7 @@ async function refreshMoments() {
 async function openConversation(id: string) {
   activeConversationId.value = id;
   tab.value = 'chat';
+  mentionId.value = '';
   const res = await api.listMessages(id);
   messages.value = res.messages;
   await nextTick();
@@ -128,8 +136,32 @@ async function letThemPost(characterId: string) {
   status.value = '生成朋友圈…';
   try {
     await api.generateMoment(characterId);
+    tab.value = 'moments';
     await refreshMoments();
     status.value = '';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function toggleLike(m: Moment) {
+  try {
+    const res = await api.likeMoment(m.id);
+    const idx = moments.value.findIndex((x) => x.id === m.id);
+    if (idx >= 0) moments.value[idx] = res.moment;
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function submitComment(m: Moment) {
+  const text = (commentDrafts[m.id] || '').trim();
+  if (!text) return;
+  try {
+    const res = await api.commentMoment(m.id, text);
+    commentDrafts[m.id] = '';
+    const idx = moments.value.findIndex((x) => x.id === m.id);
+    if (idx >= 0) moments.value[idx] = res.moment;
   } catch (err) {
     status.value = err instanceof Error ? err.message : String(err);
   }
@@ -154,9 +186,8 @@ onMounted(async () => {
 
 <template>
   <div class="wx-shell">
-    <!-- 最左导航 -->
     <aside class="wx-nav">
-      <div class="wx-nav-avatar">我</div>
+      <div class="wx-nav-avatar" title="Agent Chat">馆</div>
       <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" @click="tab = 'chat'">
         <span class="icon">💬</span>
         <span>聊天</span>
@@ -171,7 +202,6 @@ onMounted(async () => {
       </button>
     </aside>
 
-    <!-- 中栏 -->
     <section class="wx-mid">
       <div class="wx-mid-header">
         <span>{{ midTitle }}</span>
@@ -202,7 +232,10 @@ onMounted(async () => {
           :class="{ active: c.id === activeConversationId }"
           @click="openConversation(c.id)"
         >
-          <div class="wx-avatar">{{ avatarText(c.title) }}</div>
+          <div v-if="collageMembers(c).length" class="wx-avatar collage" :data-n="Math.min(collageMembers(c).length, 4)">
+            <span v-for="mem in collageMembers(c)" :key="mem.id">{{ avatarText(mem.name) }}</span>
+          </div>
+          <div v-else class="wx-avatar">{{ avatarText(c.title) }}</div>
           <div class="wx-list-meta">
             <div class="wx-list-title">{{ c.title }}</div>
             <div class="wx-list-sub">{{ c.last_message || (c.type === 'group' ? '群聊' : '私聊') }}</div>
@@ -226,6 +259,7 @@ onMounted(async () => {
             <div class="wx-list-title">{{ ch.name }}</div>
             <div class="wx-list-sub">{{ ch.description || '点击开始私聊' }}</div>
           </div>
+          <button class="wx-mini-btn" @click.stop="letThemPost(ch.id)">让 TA 发一条</button>
         </div>
         <div v-if="!characters.length" class="wx-empty" style="padding: 40px 16px">
           还没有角色<br />点击「导入角色」选择 samples/characters/*.json
@@ -243,20 +277,44 @@ onMounted(async () => {
       </div>
     </section>
 
-    <!-- 右侧主区 -->
     <main class="wx-main">
       <template v-if="tab === 'moments'">
-        <div class="wx-main-header">朋友圈</div>
-        <div class="wx-chat-body" style="background: #f5f5f5">
+        <div class="wx-main-header">
+          <span>朋友圈</span>
+          <span class="wx-hint">{{ status }}</span>
+        </div>
+        <div class="wx-chat-body wx-moments-body">
           <div v-for="m in moments" :key="m.id" class="wx-moment-card">
             <div class="wx-moment-head">
               <div class="wx-avatar" style="width: 36px; height: 36px">{{ avatarText(m.character_name) }}</div>
               <span>{{ m.character_name }}</span>
               <span class="wx-moment-time">{{ m.created_at }}</span>
             </div>
-            <div>{{ m.content }}</div>
+            <div class="wx-moment-content">{{ m.content }}</div>
+            <div class="wx-moment-actions">
+              <button class="wx-mini-btn" :class="{ liked: m.liked }" @click="toggleLike(m)">
+                {{ m.liked ? '取消赞' : '点赞' }}{{ m.like_count ? ` · ${m.like_count}` : '' }}
+              </button>
+            </div>
+            <div v-if="m.comments?.length" class="wx-moment-comments">
+              <div v-for="c in m.comments" :key="c.id" class="wx-moment-comment">
+                <b>{{ c.author }}：</b>{{ c.content }}
+              </div>
+            </div>
+            <div class="wx-moment-comment-box">
+              <input
+                v-model="commentDrafts[m.id]"
+                class="wx-search"
+                style="margin: 0; flex: 1"
+                placeholder="写评论…"
+                @keydown.enter.prevent="submitComment(m)"
+              />
+              <button class="wx-mini-btn primary" @click="submitComment(m)">评论</button>
+            </div>
           </div>
-          <div v-if="!moments.length" class="wx-empty">还没有动态。左侧点「让 TA 发一条」。</div>
+          <div v-if="!moments.length" class="wx-empty">
+            还没有动态。<br />左侧「朋友圈」点角色，或通讯录点「让 TA 发一条」。
+          </div>
         </div>
       </template>
 
@@ -276,7 +334,7 @@ onMounted(async () => {
                   class="wx-msg"
                   :class="m.role === 'user' ? 'me' : 'other'"
                 >
-                  <div class="wx-avatar">
+                  <div class="wx-avatar sm">
                     {{ m.role === 'user' ? '我' : avatarText(m.character_name || activeConversation.title) }}
                   </div>
                   <div class="wx-msg-col">
@@ -288,7 +346,7 @@ onMounted(async () => {
                 </div>
               </template>
               <div v-else class="wx-empty">
-                微信风格多角色聊天<br />
+                酒馆 · 多角色聊天<br />
                 从左侧「通讯录」导入角色并开始私聊
               </div>
             </div>
@@ -297,7 +355,7 @@ onMounted(async () => {
               <div v-if="activeConversation.type === 'group'" class="wx-composer-bar" style="justify-content: flex-start">
                 <span class="wx-hint">@指定回复：</span>
                 <select v-model="mentionId" style="padding: 4px 8px">
-                  <option value="">（默认首位）</option>
+                  <option value="">（未选则轮询下一位）</option>
                   <option v-for="mem in activeConversation.members || []" :key="mem.id" :value="mem.id">
                     @{{ mem.name }}
                   </option>
@@ -318,7 +376,7 @@ onMounted(async () => {
           <aside v-if="activeConversation?.type === 'group'" class="wx-members">
             <div style="font-weight: 600; margin-bottom: 10px">群成员</div>
             <div v-for="mem in activeConversation.members || []" :key="mem.id" class="wx-list-item" style="padding: 8px 0; border: none">
-              <div class="wx-avatar" style="width: 32px; height: 32px">{{ avatarText(mem.name) }}</div>
+              <div class="wx-avatar sm">{{ avatarText(mem.name) }}</div>
               <div class="wx-list-title">{{ mem.name }}</div>
             </div>
           </aside>

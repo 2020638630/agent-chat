@@ -25,6 +25,35 @@ type MessageRow = {
   created_at: string;
 };
 
+function pickGroupResponder(
+  members: CharacterRow[],
+  conversationId: string,
+  mentionCharacterId?: string
+): CharacterRow {
+  if (mentionCharacterId) {
+    const hit = members.find((m) => m.id === mentionCharacterId);
+    if (hit) return hit;
+  }
+
+  // Round-robin: next member after the last assistant speaker
+  const lastAssistant = db
+    .prepare(
+      `SELECT character_id FROM messages
+       WHERE conversation_id = ? AND role = 'assistant' AND character_id IS NOT NULL
+       ORDER BY created_at DESC, rowid DESC
+       LIMIT 1`
+    )
+    .get(conversationId) as { character_id: string } | undefined;
+
+  if (!lastAssistant?.character_id) {
+    return members[0];
+  }
+
+  const idx = members.findIndex((m) => m.id === lastAssistant.character_id);
+  if (idx < 0) return members[0];
+  return members[(idx + 1) % members.length];
+}
+
 export async function conversationRoutes(app: FastifyInstance) {
   app.get('/api/conversations', async () => {
     const rows = db
@@ -59,7 +88,7 @@ export async function conversationRoutes(app: FastifyInstance) {
     };
     const characterIds = body.characterIds ?? [];
     if (!characterIds.length) {
-      return reply.code(400).send({ error: '需要至少一个角色 characterIds' });
+      return reply.code(400).send({ error: '至少需要一个角色 characterIds' });
     }
 
     const chars = characterIds
@@ -88,7 +117,6 @@ export async function conversationRoutes(app: FastifyInstance) {
       insertMember.run(id, cid);
     }
 
-    // private: seed first_mes if present
     if (type === 'private' && chars[0].first_mes?.trim()) {
       db.prepare(
         `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at)
@@ -154,17 +182,12 @@ export async function conversationRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: '会话没有角色成员' });
     }
 
-    // Phase B: private chat — one character replies
-    // Phase C prep: group — if @mention, only that one; else first member (MVP)
-    let responders = members;
-    if (conv.type === 'group' && body.mentionCharacterId) {
-      const hit = members.find((m) => m.id === body.mentionCharacterId);
-      if (hit) responders = [hit];
-    } else if (conv.type === 'private') {
-      responders = [members[0]];
+    let character: CharacterRow;
+    if (conv.type === 'private') {
+      character = members[0];
     } else {
-      // group without @ : only first for MVP stability
-      responders = [members[0]];
+      // group: @指定只回一人；未 @ 则轮询只回一名
+      character = pickGroupResponder(members, conversationId, body.mentionCharacterId);
     }
 
     const history = db
@@ -176,55 +199,47 @@ export async function conversationRoutes(app: FastifyInstance) {
       )
       .all(conversationId) as MessageRow[];
 
-    const assistantMessages: unknown[] = [];
+    const system = buildSystemPrompt(character);
+    const llmMessages = [
+      { role: 'system' as const, content: system },
+      ...history.map((m) => ({
+        role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+        content: m.content,
+      })),
+    ];
 
-    for (const character of responders) {
-      const system = buildSystemPrompt(character);
-      const llmMessages = [
-        { role: 'system' as const, content: system },
-        ...history.map((m) => ({
-          role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-          content: m.content,
-        })),
-      ];
-
-      // history already includes the just-inserted user message
-      let replyText: string;
-      try {
-        replyText = await chatCompletion(llmMessages);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        replyText = `（LLM 暂时不可用：${msg}。请确认 Ollama 已启动或 .env 中 DeepSeek 配置正确。）`;
-      }
-
-      const aid = uuid();
-      const at = new Date().toISOString();
-      db.prepare(
-        `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at)
-         VALUES (?, ?, 'assistant', ?, ?, ?)`
-      ).run(aid, conversationId, character.id, replyText, at);
-
-      assistantMessages.push({
-        id: aid,
-        conversation_id: conversationId,
-        role: 'assistant',
-        character_id: character.id,
-        character_name: character.name,
-        content: replyText,
-        created_at: at,
-      });
+    let replyText: string;
+    try {
+      replyText = await chatCompletion(llmMessages);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      replyText = `（LLM 暂时不可用：${msg}。请确认 Ollama 已启动或 .env 里 DeepSeek 配置正确。）`;
     }
 
-    db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(
-      new Date().toISOString(),
-      conversationId
-    );
+    const aid = uuid();
+    const at = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at)
+       VALUES (?, ?, 'assistant', ?, ?, ?)`
+    ).run(aid, conversationId, character.id, replyText, at);
+
+    db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(at, conversationId);
 
     const userMessage = db.prepare('SELECT * FROM messages WHERE id = ?').get(userMsgId);
 
     return {
       userMessage,
-      assistantMessages,
+      assistantMessages: [
+        {
+          id: aid,
+          conversation_id: conversationId,
+          role: 'assistant',
+          character_id: character.id,
+          character_name: character.name,
+          content: replyText,
+          created_at: at,
+        },
+      ],
     };
   });
 }

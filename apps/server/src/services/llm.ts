@@ -24,6 +24,7 @@ export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
       temperature: 0.8,
       stream: false,
     }),
+    signal: AbortSignal.timeout(120_000),
   });
 
   if (!res.ok) {
