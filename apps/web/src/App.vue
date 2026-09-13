@@ -539,7 +539,7 @@ onMounted(async () => {
         </div>
 
         <div class="wx-main-row">
-          <div style="flex: 1; display: flex; flex-direction: column; min-width: 0">
+          <div class="wx-chat-pane">
             <div ref="chatBody" class="wx-chat-body">
               <template v-if="activeConversation">
                 <div
