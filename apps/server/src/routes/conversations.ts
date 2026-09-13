@@ -286,18 +286,65 @@ export async function conversationRoutes(app: FastifyInstance) {
       )
       .all(conversationId) as MessageRow[];
 
-    let system = buildSystemPrompt(character);
-    if (mentioned && mentioned.id === character.id) {
-      system += `\n\n（系统提示：用户在本条消息中 @了你「${mentioned.name}」，请以被点名的身份直接回应，不必复读 @。）`;
+    const nameById = new Map(members.map((m) => [m.id, m.name] as const));
+    const otherNames = members.filter((m) => m.id !== character.id).map((m) => m.name);
+
+    function isNoticeBubble(content: string): boolean {
+      return (
+        content.startsWith('（LLM 暂时不可用') ||
+        content.startsWith('(LLM 暂时不可用') ||
+        content.includes('LLM 暂时不可用')
+      );
     }
 
-    const llmMessages = [
-      { role: 'system' as const, content: system },
-      ...history.map((m) => ({
-        role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
-        content: m.content,
-      })),
-    ];
+    let system = buildSystemPrompt(character);
+
+    if (conv.type === 'group') {
+      const roster = members.map((m) => m.name).join('、');
+      system += `\n\n【群聊设定】这是群聊。群成员：${roster}。发言者是用户（真人）；「你」默认指用户，不是某个角色。`;
+
+      if (mentioned && mentioned.id === character.id) {
+        system += `\n\n【被点名】你是${character.name}。用户在本条消息里 @了你。
+要求：
+1. 只回答用户刚刚对你说的那句话（可看气泡里的 @${character.name} 正文）；
+2. 直接回用户，不要当成旁白，不要跟其他角色打招呼或续他们的戏；
+3. 不要替其他角色说话，不要去叫其他角色的名字演戏；
+4. 可以知道群里还有谁（${otherNames.join('、') || '无'}），但默认把「你」理解成用户；
+5. 不必复读 @。`;
+      } else if (!body.mentionCharacterId) {
+        system += `\n\n【轮询发言】你是${character.name}，这次轮到你简短发言。优先回应用户最后一句，而不是角色互聊；不要替别人说话。`;
+      }
+    }
+
+    type LlmMsg = { role: 'system' | 'user' | 'assistant'; content: string };
+    const llmMessages: LlmMsg[] = [{ role: 'system', content: system }];
+
+    for (const m of history) {
+      if (isNoticeBubble(m.content)) continue; // 系统失败提示不当剧情
+
+      if (m.role === 'user') {
+        llmMessages.push({ role: 'user', content: m.content });
+        continue;
+      }
+
+      // assistant / character lines
+      if (conv.type === 'private') {
+        llmMessages.push({ role: 'assistant', content: m.content });
+        continue;
+      }
+
+      const who = m.character_id ? nameById.get(m.character_id) : undefined;
+      if (who && who === character.name) {
+        llmMessages.push({ role: 'assistant', content: m.content });
+      } else {
+        // 其他角色的话标成旁观上下文，避免模型当成自己的上一句
+        const label = who || '某人';
+        llmMessages.push({
+          role: 'user',
+          content: `【群聊记录·${label}说】${m.content}`,
+        });
+      }
+    }
 
     let replyText: string;
     try {
