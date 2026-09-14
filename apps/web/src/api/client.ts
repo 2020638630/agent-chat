@@ -125,6 +125,11 @@ export const api = {
       body: JSON.stringify({ characterId }),
     }).then((r) => json<{ moment: Moment }>(r)),
 
+  deleteMoment: (id: string) =>
+    fetch(`/api/moments/${id}`, { method: 'DELETE' }).then((r) =>
+      json<{ ok: boolean }>(r)
+    ),
+
   likeMoment: (id: string) =>
     fetch(`/api/moments/${id}/like`, {
       method: 'POST',

@@ -88,6 +88,24 @@ export async function momentRoutes(app: FastifyInstance) {
     };
   });
 
+  app.delete<{ Params: { id: string } }>('/api/moments/:id', async (req, reply) => {
+    const moment = db.prepare('SELECT id FROM moments WHERE id = ?').get(req.params.id) as
+      | { id: string }
+      | undefined;
+    if (!moment) return reply.code(404).send({ error: '动态不存在' });
+
+    const delLikes = db.prepare('DELETE FROM moment_likes WHERE moment_id = ?');
+    const delComments = db.prepare('DELETE FROM moment_comments WHERE moment_id = ?');
+    const delMoment = db.prepare('DELETE FROM moments WHERE id = ?');
+    const tx = db.transaction(() => {
+      delLikes.run(moment.id);
+      delComments.run(moment.id);
+      delMoment.run(moment.id);
+    });
+    tx();
+    return { ok: true };
+  });
+
   app.post<{ Params: { id: string } }>('/api/moments/:id/like', async (req, reply) => {
     const moment = db.prepare('SELECT * FROM moments WHERE id = ?').get(req.params.id);
     if (!moment) return reply.code(404).send({ error: '动态不存在' });

@@ -964,3 +964,13 @@ select {
     display: none;
   }
 }
+
+
+.wx-mini-btn.danger {
+  color: var(--red);
+  border-color: rgba(242, 63, 67, 0.35);
+}
+
+.wx-mini-btn.danger:hover {
+  background: rgba(242, 63, 67, 0.08);
+}

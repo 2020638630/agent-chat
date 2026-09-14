@@ -414,6 +414,20 @@ async function letThemPost(characterId: string) {
   }
 }
 
+async function deleteMoment(m: Moment) {
+  const name = m.character_name || '角色';
+  const ok = window.confirm(`确定删除「${name}」的这条动态？\n点赞与评论也会一起删除。`);
+  if (!ok) return;
+  try {
+    await api.deleteMoment(m.id);
+    moments.value = moments.value.filter((x) => x.id !== m.id);
+    delete commentDrafts[m.id];
+    status.value = '动态已删除';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
 async function toggleLike(m: Moment) {
   try {
     const res = await api.likeMoment(m.id);
@@ -596,6 +610,7 @@ onMounted(async () => {
                 <button class="wx-mini-btn" :class="{ liked: m.liked }" @click="toggleLike(m)">
                   {{ m.liked ? '♥ 已赞' : '♡ 点赞' }}{{ m.like_count ? ` · ${m.like_count}` : '' }}
                 </button>
+                <button class="wx-mini-btn danger" @click="deleteMoment(m)">删除</button>
               </div>
               <div v-if="m.comments?.length" class="wx-moment-comments">
                 <div v-for="c in m.comments" :key="c.id" class="wx-moment-comment">
