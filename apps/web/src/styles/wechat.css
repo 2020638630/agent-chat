@@ -875,7 +875,7 @@ select {
 .wx-swipe-row {
   position: relative;
   overflow: hidden;
-  background: var(--red);
+  background: transparent;
   border-radius: 12px;
   margin-bottom: 2px;
 }
@@ -883,23 +883,25 @@ select {
 .wx-swipe-front {
   position: relative;
   z-index: 1;
-  background: rgba(255, 255, 255, 0.62);
-  transition: transform 0.12s ease-out;
+  /* opaque so the red delete rail never bleeds through glass */
+  background: #f3f4f8;
+  transition: transform 0.12s ease-out, background 0.12s;
   touch-action: pan-y;
   user-select: none;
+  border-radius: 12px;
 }
 
 .wx-swipe-front.active,
 .wx-list-item.wx-swipe-front:hover {
-  background: rgba(0, 0, 0, 0.06);
+  background: #e8e9ef;
 }
 
 .wx-list-item.wx-swipe-front {
-  background: rgba(255, 255, 255, 0.62);
+  background: #f3f4f8;
 }
 
 .wx-list-item.wx-swipe-front.active {
-  background: rgba(0, 0, 0, 0.06);
+  background: #e8e9ef;
 }
 
 .wx-swipe-delete {
@@ -914,6 +916,7 @@ select {
   font-size: 14px;
   cursor: pointer;
   z-index: 0;
+  border-radius: 0 12px 12px 0;
 }
 
 .wx-menu.list-ctx {
