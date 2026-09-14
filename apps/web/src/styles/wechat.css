@@ -1172,3 +1172,68 @@ select {
   flex-direction: column;
   gap: 12px;
 }
+
+
+.wx-contact-row {
+  gap: 10px;
+}
+
+.wx-contact-more {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.wx-contact-more-btn {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-3);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.wx-contact-more-btn:hover {
+  background: var(--hover);
+  color: var(--text-2);
+}
+
+.wx-menu.contact {
+  right: 0;
+  left: auto;
+  top: 32px;
+  min-width: 132px;
+}
+
+.wx-group-create {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.wx-group-create-fields {
+  padding: 0 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.wx-group-pick-list {
+  flex: 1;
+  min-height: 0;
+}
+
+.wx-group-pick-item {
+  cursor: pointer;
+}
+
+.wx-group-pick-item input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: var(--accent-deep);
+}

@@ -14,6 +14,10 @@ const draft = ref('');
 const sending = ref(false);
 const status = ref('');
 const selectedForGroup = ref<string[]>([]);
+const creatingGroup = ref(false);
+const groupTitleDraft = ref('');
+const groupSearch = ref('');
+const contactMenuId = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const chatBody = ref<HTMLElement | null>(null);
 const mentionId = ref<string>('');
@@ -45,8 +49,18 @@ const activeConversation = computed(() =>
 
 const midTitle = computed(() => {
   if (tab.value === 'chat') return '消息';
-  if (tab.value === 'contacts') return '通讯录';
+  if (tab.value === 'contacts') return creatingGroup.value ? '创建群聊' : '通讯录';
   return '空间';
+});
+
+const groupPickableCharacters = computed(() => {
+  const q = groupSearch.value.trim().toLowerCase();
+  if (!q) return characters.value;
+  return characters.value.filter((ch) => {
+    const name = (ch.name || '').toLowerCase();
+    const desc = (ch.description || '').toLowerCase();
+    return name.includes(q) || desc.includes(q);
+  });
 });
 
 function avatarText(name?: string) {
@@ -261,15 +275,52 @@ async function startPrivate(characterId: string) {
   await openConversation(conversation.id);
 }
 
+function openGroupCreator() {
+  creatingGroup.value = true;
+  selectedForGroup.value = [];
+  groupTitleDraft.value = '';
+  groupSearch.value = '';
+  contactMenuId.value = null;
+  status.value = '';
+}
+
+function cancelGroupCreator() {
+  creatingGroup.value = false;
+  selectedForGroup.value = [];
+  groupTitleDraft.value = '';
+  groupSearch.value = '';
+  status.value = '';
+}
+
+function toggleGroupPick(id: string) {
+  const list = selectedForGroup.value;
+  const i = list.indexOf(id);
+  if (i >= 0) list.splice(i, 1);
+  else list.push(id);
+}
+
+function toggleContactMenu(id: string) {
+  contactMenuId.value = contactMenuId.value === id ? null : id;
+}
+
 async function createGroup() {
   if (selectedForGroup.value.length < 2) {
-    status.value = '建群请至少勾选 2 个角色';
+    status.value = '请至少选择 2 名角色';
     return;
   }
-  const { conversation } = await api.createConversation(selectedForGroup.value, undefined, 'group');
-  selectedForGroup.value = [];
-  await refreshConversations();
-  await openConversation(conversation.id);
+  const title = groupTitleDraft.value.trim() || undefined;
+  try {
+    const { conversation } = await api.createConversation(selectedForGroup.value, title, 'group');
+    creatingGroup.value = false;
+    selectedForGroup.value = [];
+    groupTitleDraft.value = '';
+    groupSearch.value = '';
+    await refreshConversations();
+    await openConversation(conversation.id);
+    status.value = '';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  }
 }
 
 async function onImport(e: Event) {
@@ -548,6 +599,10 @@ async function submitComment(m: Moment) {
 }
 
 watch(tab, (t) => {
+  if (t !== 'contacts') {
+    creatingGroup.value = false;
+    contactMenuId.value = null;
+  }
   if (t === 'moments') void refreshMoments();
   if (t === 'contacts') void refreshCharacters();
   if (t === 'chat') void refreshConversations();
@@ -565,7 +620,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="wx-shell" @click="menuOpen = false; msgMenuId = null; listCtxId = null; momentMenuId = null">
+  <div class="wx-shell" @click="menuOpen = false; msgMenuId = null; listCtxId = null; momentMenuId = null; contactMenuId = null">
     <aside class="wx-nav">
       <div class="wx-nav-avatar" title="我的主页" role="button" @click.stop="openMyProfile">馆</div>
       <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" title="消息" aria-label="消息" @click="tab = 'chat'">
@@ -583,16 +638,30 @@ onMounted(async () => {
       <div class="wx-mid-header">
         <span>{{ midTitle }}</span>
         <div class="actions">
-          <template v-if="tab === 'contacts'">
+          <template v-if="tab === 'contacts' && !creatingGroup">
             <button class="wx-mini-btn primary" @click="fileInput?.click()">导入角色</button>
-            <button class="wx-mini-btn" @click="createGroup">建群</button>
+            <button class="wx-mini-btn" @click="openGroupCreator">创建群聊</button>
+          </template>
+          <template v-else-if="tab === 'contacts' && creatingGroup">
+            <button class="wx-mini-btn" @click="cancelGroupCreator">取消</button>
+            <button
+              class="wx-mini-btn primary"
+              :disabled="selectedForGroup.length < 2"
+              @click="createGroup"
+            >
+              确认创建
+            </button>
           </template>
           <template v-else-if="tab === 'moments'">
             <span class="wx-hint">动态</span>
           </template>
         </div>
       </div>
-      <input class="wx-search" placeholder="搜索" />
+      <input
+        v-if="!(tab === 'contacts' && creatingGroup)"
+        class="wx-search"
+        placeholder="搜索"
+      />
       <input
         ref="fileInput"
         type="file"
@@ -646,26 +715,69 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div v-else-if="tab === 'contacts'" class="wx-list">
-        <div v-for="ch in characters" :key="ch.id" class="wx-list-item">
-          <label class="wx-check" @click.stop>
-            <input v-model="selectedForGroup" type="checkbox" :value="ch.id" />
+      <div v-else-if="tab === 'contacts' && creatingGroup" class="wx-group-create">
+        <div class="wx-group-create-fields">
+          <input
+            v-model="groupTitleDraft"
+            class="wx-search"
+            placeholder="群名称（可选）"
+          />
+          <input
+            v-model="groupSearch"
+            class="wx-search"
+            placeholder="搜索角色"
+          />
+          <div class="wx-hint">已选 {{ selectedForGroup.length }} 人（至少 2 人）</div>
+        </div>
+        <div class="wx-list wx-group-pick-list">
+          <label
+            v-for="ch in groupPickableCharacters"
+            :key="ch.id"
+            class="wx-list-item wx-group-pick-item"
+          >
+            <input
+              type="checkbox"
+              :checked="selectedForGroup.includes(ch.id)"
+              @change="toggleGroupPick(ch.id)"
+            />
+            <div class="wx-avatar">
+              <img v-if="ch.avatar_path" :src="ch.avatar_path" alt="" />
+              <template v-else>{{ avatarText(ch.name) }}</template>
+            </div>
+            <div class="wx-list-meta">
+              <div class="wx-list-title">{{ ch.name }}</div>
+              <div class="wx-list-sub">{{ ch.description || '角色' }}</div>
+            </div>
           </label>
+          <div v-if="!groupPickableCharacters.length" class="wx-empty" style="padding: 40px 16px">
+            没有匹配的角色
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="tab === 'contacts'" class="wx-list">
+        <div v-for="ch in characters" :key="ch.id" class="wx-list-item wx-contact-row">
           <div class="wx-avatar" role="button" title="查看主页" @click.stop="openCharacterProfile(ch.id)">
             <img v-if="ch.avatar_path" :src="ch.avatar_path" alt="" />
             <template v-else>{{ avatarText(ch.name) }}</template>
           </div>
-          <div class="wx-list-meta">
-            <div class="wx-list-title" role="button" @click.stop="openCharacterProfile(ch.id)">{{ ch.name }}</div>
-            <div class="wx-list-sub" role="button" @click.stop="startPrivate(ch.id)">{{ ch.description || '点击开始私聊' }}</div>
+          <div class="wx-list-meta" @click.stop="openCharacterProfile(ch.id)">
+            <div class="wx-list-title">{{ ch.name }}</div>
+            <div class="wx-list-sub">{{ ch.description || '查看主页' }}</div>
           </div>
-          <button class="wx-mini-btn" @click.stop="letThemPost(ch.id)">发一条</button>
+          <button class="wx-mini-btn primary" @click.stop="startPrivate(ch.id)">发消息</button>
+          <div class="wx-contact-more" @click.stop>
+            <button class="wx-contact-more-btn" title="更多" @click="toggleContactMenu(ch.id)">⋯</button>
+            <div v-if="contactMenuId === ch.id" class="wx-menu contact">
+              <button @click="contactMenuId = null; openCharacterProfile(ch.id)">查看主页</button>
+              <button @click="contactMenuId = null; letThemPost(ch.id)">让 TA 发动态</button>
+            </div>
+          </div>
         </div>
         <div v-if="!characters.length" class="wx-empty" style="padding: 40px 16px">
           还没有角色<br />点击「导入角色」选择 samples/characters/*.json
         </div>
       </div>
-
       <div v-else class="wx-list">
         <div v-for="ch in characters" :key="ch.id" class="wx-list-item" @click="letThemPost(ch.id)">
           <div class="wx-avatar">{{ avatarText(ch.name) }}</div>
@@ -796,7 +908,7 @@ onMounted(async () => {
               </div>
             </div>
             <div v-if="!moments.length" class="wx-empty">
-              还没有动态。<br />左侧点角色，或通讯录点「发一条」。
+              还没有动态。<br />左侧点角色，或通讯录「⋯ → 让 TA 发动态」。
             </div>
           </div>
         </div>
