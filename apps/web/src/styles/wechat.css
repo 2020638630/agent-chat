@@ -96,6 +96,7 @@ select {
 }
 
 .wx-nav-btn {
+  position: relative;
   width: 44px;
   height: 44px;
   border: 0;
@@ -103,18 +104,16 @@ select {
   border-radius: 12px;
   cursor: pointer;
   color: var(--text-2);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 1px;
-  font-size: 9px;
+  display: grid;
+  place-items: center;
   transition: background 0.15s, color 0.15s;
 }
 
-.wx-nav-btn .icon {
-  font-size: 20px;
-  line-height: 1;
+.wx-nav-btn .wx-nav-icon {
+  display: block;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
 }
 
 .wx-nav-btn:hover {
@@ -123,8 +122,20 @@ select {
 }
 
 .wx-nav-btn.active {
-  background: var(--active);
+  background: rgba(139, 143, 168, 0.18);
   color: var(--accent-deep);
+}
+
+.wx-nav-btn.active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 22px;
+  border-radius: 0 3px 3px 0;
+  background: var(--accent-deep);
 }
 
 /* ===== Mid list ===== */

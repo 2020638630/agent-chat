@@ -458,14 +458,14 @@ onMounted(async () => {
   <div class="wx-shell" @click="menuOpen = false; msgMenuId = null; listCtxId = null">
     <aside class="wx-nav">
       <div class="wx-nav-avatar" title="Agent Chat">馆</div>
-      <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" title="消息" @click="tab = 'chat'">
-        <span class="icon">💬</span>
+      <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" title="消息" aria-label="消息" @click="tab = 'chat'">
+        <svg class="wx-nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </button>
-      <button class="wx-nav-btn" :class="{ active: tab === 'contacts' }" title="通讯录" @click="tab = 'contacts'">
-        <span class="icon">👥</span>
+      <button class="wx-nav-btn" :class="{ active: tab === 'contacts' }" title="通讯录" aria-label="通讯录" @click="tab = 'contacts'">
+        <svg class="wx-nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </button>
-      <button class="wx-nav-btn" :class="{ active: tab === 'moments' }" title="空间" @click="tab = 'moments'">
-        <span class="icon">🌐</span>
+      <button class="wx-nav-btn" :class="{ active: tab === 'moments' }" title="空间" aria-label="空间" @click="tab = 'moments'">
+        <svg class="wx-nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       </button>
     </aside>
 
