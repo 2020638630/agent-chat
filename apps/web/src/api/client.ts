@@ -33,6 +33,20 @@ export type MomentComment = {
   created_at: string;
 };
 
+export type Profile = {
+  id: string;
+  kind: 'user' | 'character';
+  name: string;
+  mood: string;
+  bio: string;
+  avatar_path?: string | null;
+};
+
+export type ProfileResponse = {
+  profile: Profile;
+  moments: Moment[];
+};
+
 export type Moment = {
   id: string;
   character_id: string;
@@ -117,6 +131,18 @@ export const api = {
     ),
 
   listMoments: () => fetch('/api/moments').then((r) => json<{ moments: Moment[] }>(r)),
+
+  getMyProfile: () => fetch('/api/profiles/me').then((r) => json<ProfileResponse>(r)),
+
+  updateMyProfile: (body: { name?: string; mood?: string; bio?: string }) =>
+    fetch('/api/profiles/me', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((r) => json<{ profile: Profile }>(r)),
+
+  getCharacterProfile: (id: string) =>
+    fetch(`/api/profiles/characters/${id}`).then((r) => json<ProfileResponse>(r)),
 
   generateMoment: (characterId: string) =>
     fetch('/api/moments/generate', {

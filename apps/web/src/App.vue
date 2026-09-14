@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
-import { api, type Character, type ChatMessage, type Conversation, type Moment } from './api/client';
+import { api, type Character, type ChatMessage, type Conversation, type Moment, type Profile } from './api/client';
 
 type Tab = 'chat' | 'contacts' | 'moments';
 
@@ -29,6 +29,15 @@ const swipeX = ref(0);
 let swipeStartX = 0;
 let swipeActiveId: string | null = null;
 let swipeMoved = false;
+
+type ProfileView = null | { kind: 'user' } | { kind: 'character'; id: string };
+const profileView = ref<ProfileView>(null);
+const profile = ref<Profile | null>(null);
+const profileMoments = ref<Moment[]>([]);
+const profileLoading = ref(false);
+const profileEditing = ref(false);
+const editMood = ref('');
+const editBio = ref('');
 
 const activeConversation = computed(() =>
   conversations.value.find((c) => c.id === activeConversationId.value) ?? null
@@ -138,6 +147,78 @@ function headerStatus(c: Conversation | null) {
   return '私聊';
 }
 
+
+async function closeProfile() {
+  profileView.value = null;
+  profile.value = null;
+  profileMoments.value = [];
+  profileEditing.value = false;
+}
+
+async function openMyProfile() {
+  profileLoading.value = true;
+  profileView.value = { kind: 'user' };
+  profileEditing.value = false;
+  try {
+    const res = await api.getMyProfile();
+    profile.value = res.profile;
+    profileMoments.value = res.moments || [];
+    editMood.value = res.profile.mood || '';
+    editBio.value = res.profile.bio || '';
+    status.value = '';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    profileLoading.value = false;
+  }
+}
+
+async function openCharacterProfile(id: string) {
+  if (!id) return;
+  profileLoading.value = true;
+  profileView.value = { kind: 'character', id };
+  profileEditing.value = false;
+  try {
+    const res = await api.getCharacterProfile(id);
+    profile.value = res.profile;
+    profileMoments.value = res.moments || [];
+    status.value = '';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    profileLoading.value = false;
+  }
+}
+
+async function saveMyProfile() {
+  try {
+    const res = await api.updateMyProfile({
+      mood: editMood.value,
+      bio: editBio.value,
+    });
+    profile.value = res.profile;
+    profileEditing.value = false;
+    status.value = '已保存';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+async function messageFromProfile() {
+  if (profileView.value?.kind !== 'character') return;
+  const id = profileView.value.id;
+  await closeProfile();
+  await startPrivate(id);
+}
+
+function onMsgAvatarClick(m: ChatMessage) {
+  if (m.role === 'user') {
+    void openMyProfile();
+    return;
+  }
+  if (m.character_id) void openCharacterProfile(m.character_id);
+}
+
 async function refreshCharacters() {
   const res = await api.listCharacters();
   characters.value = res.characters;
@@ -154,6 +235,7 @@ async function refreshMoments() {
 }
 
 async function openConversation(id: string) {
+  await closeProfile();
   activeConversationId.value = id;
   tab.value = 'chat';
   mentionId.value = '';
@@ -485,7 +567,7 @@ onMounted(async () => {
 <template>
   <div class="wx-shell" @click="menuOpen = false; msgMenuId = null; listCtxId = null; momentMenuId = null">
     <aside class="wx-nav">
-      <div class="wx-nav-avatar" title="Agent Chat">馆</div>
+      <div class="wx-nav-avatar" title="我的主页" role="button" @click.stop="openMyProfile">馆</div>
       <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" title="消息" aria-label="消息" @click="tab = 'chat'">
         <svg class="wx-nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </button>
@@ -569,13 +651,13 @@ onMounted(async () => {
           <label class="wx-check" @click.stop>
             <input v-model="selectedForGroup" type="checkbox" :value="ch.id" />
           </label>
-          <div class="wx-avatar">
+          <div class="wx-avatar" role="button" title="查看主页" @click.stop="openCharacterProfile(ch.id)">
             <img v-if="ch.avatar_path" :src="ch.avatar_path" alt="" />
             <template v-else>{{ avatarText(ch.name) }}</template>
           </div>
-          <div class="wx-list-meta" @click="startPrivate(ch.id)">
-            <div class="wx-list-title">{{ ch.name }}</div>
-            <div class="wx-list-sub">{{ ch.description || '点击开始私聊' }}</div>
+          <div class="wx-list-meta">
+            <div class="wx-list-title" role="button" @click.stop="openCharacterProfile(ch.id)">{{ ch.name }}</div>
+            <div class="wx-list-sub" role="button" @click.stop="startPrivate(ch.id)">{{ ch.description || '点击开始私聊' }}</div>
           </div>
           <button class="wx-mini-btn" @click.stop="letThemPost(ch.id)">发一条</button>
         </div>
@@ -596,13 +678,80 @@ onMounted(async () => {
     </section>
 
     <main class="wx-main">
-      <template v-if="tab === 'moments'">
+      <template v-if="profileView">
+        <div class="wx-profile">
+          <div class="wx-profile-bar">
+            <button class="wx-mini-btn" @click="closeProfile">← 返回</button>
+            <span class="wx-hint">{{ profileLoading ? '加载中…' : (profileView.kind === 'user' ? '我的主页' : '角色主页') }}</span>
+            <span class="wx-hint" style="margin-left:auto">{{ status }}</span>
+          </div>
+          <div class="wx-profile-card">
+            <div class="wx-profile-hero">
+              <div class="wx-avatar lg">
+                <img v-if="profile?.avatar_path" :src="profile.avatar_path" alt="" />
+                <template v-else>{{ avatarText(profile?.name || (profileView.kind === 'user' ? '旅人' : '?')) }}</template>
+              </div>
+              <div class="wx-profile-id">
+                <div class="wx-profile-name">{{ profile?.name || '…' }}</div>
+                <div class="wx-profile-mood">
+                  <template v-if="profileView.kind === 'user' && profileEditing">
+                    <input v-model="editMood" class="wx-search" maxlength="80" placeholder="说说（可空）" />
+                  </template>
+                  <template v-else>
+                    <span class="wx-profile-mood-text">{{ profile?.mood ? '「' + profile.mood + '」' : '「说说」' }}</span>
+                  </template>
+                </div>
+              </div>
+              <div class="wx-profile-actions">
+                <template v-if="profileView.kind === 'user'">
+                  <button v-if="!profileEditing" class="wx-mini-btn primary" @click="profileEditing = true">编辑</button>
+                  <template v-else>
+                    <button class="wx-mini-btn primary" @click="saveMyProfile">保存</button>
+                    <button class="wx-mini-btn" @click="profileEditing = false; editMood = profile?.mood || ''; editBio = profile?.bio || ''">取消</button>
+                  </template>
+                </template>
+                <button v-else class="wx-mini-btn primary" @click="messageFromProfile">发消息</button>
+              </div>
+            </div>
+            <div class="wx-profile-bio">
+              <div class="wx-profile-label">简介</div>
+              <template v-if="profileView.kind === 'user' && profileEditing">
+                <textarea v-model="editBio" class="wx-profile-bio-input" rows="3" maxlength="500" placeholder="写一点关于自己…" />
+              </template>
+              <template v-else>
+                <p>{{ profile?.bio || '暂无简介' }}</p>
+              </template>
+            </div>
+          </div>
+          <div class="wx-profile-moments">
+            <div class="wx-profile-label">动态</div>
+            <div v-for="m in profileMoments" :key="m.id" class="wx-moment-card">
+              <div class="wx-moment-head">
+                <div class="wx-avatar">
+                  <img v-if="m.avatar_path" :src="m.avatar_path" alt="" />
+                  <template v-else>{{ avatarText(m.character_name || profile?.name) }}</template>
+                </div>
+                <div class="wx-moment-who">
+                  <span class="pn">{{ m.character_name || profile?.name }}</span>
+                  <span class="wx-moment-time">{{ formatTime(m.created_at) }}</span>
+                </div>
+              </div>
+              <div class="wx-moment-content">{{ m.content }}</div>
+            </div>
+            <div v-if="!profileMoments.length" class="wx-empty">
+              {{ profileView.kind === 'user' ? '你还没有动态（动态目前由角色发布）' : '还没有动态' }}
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <template v-else-if="tab === 'moments'">
         <div class="wx-moments">
           <div class="wx-moments-cover"></div>
           <div class="wx-moments-profile">
-            <div class="wx-avatar">我</div>
+            <div class="wx-avatar" role="button" title="我的主页" @click.stop="openMyProfile">我</div>
             <div>
-              <div class="nm">旅人</div>
+              <div class="nm" role="button" @click.stop="openMyProfile">旅人</div>
               <div class="sg">记录与角色的日常</div>
             </div>
             <span class="wx-hint" style="margin-left:auto;margin-bottom:8px">{{ status }}</span>
@@ -610,7 +759,7 @@ onMounted(async () => {
           <div class="wx-moments-feed">
             <div v-for="m in moments" :key="m.id" class="wx-moment-card">
               <div class="wx-moment-head">
-                <div class="wx-avatar">
+                <div class="wx-avatar" role="button" title="查看主页" @click.stop="openCharacterProfile(m.character_id)">
                   <img v-if="m.avatar_path" :src="m.avatar_path" alt="" />
                   <template v-else>{{ avatarText(m.character_name) }}</template>
                 </div>
@@ -685,7 +834,12 @@ onMounted(async () => {
                     class="wx-msg"
                     :class="{ me: m.role === 'user', continued: isContinued(i) }"
                   >
-                    <div class="wx-avatar sm">
+                    <div
+                      class="wx-avatar sm"
+                      role="button"
+                      title="查看主页"
+                      @click.stop="onMsgAvatarClick(m)"
+                    >
                       {{ m.role === 'user' ? '我' : avatarText(m.character_name || activeConversation.title) }}
                     </div>
                     <div class="wx-msg-col">

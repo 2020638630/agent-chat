@@ -111,7 +111,25 @@ export function migrate(db: Database.Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS user_profile (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL DEFAULT '旅人',
+      mood TEXT NOT NULL DEFAULT '',
+      bio TEXT NOT NULL DEFAULT '',
+      avatar_path TEXT,
+      updated_at TEXT NOT NULL
+    );
   `);
+
+  
+  const me = db.prepare(`SELECT id FROM user_profile WHERE id = 'me'`).get();
+  if (!me) {
+    db.prepare(
+      `INSERT INTO user_profile (id, name, mood, bio, avatar_path, updated_at)
+       VALUES ('me', '旅人', '', '', NULL, ?)`
+    ).run(new Date().toISOString());
+  }
 
   mergeDuplicatePrivateConversations(db);
 }

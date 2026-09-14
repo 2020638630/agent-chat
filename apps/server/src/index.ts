@@ -9,6 +9,7 @@ import { healthRoutes } from './routes/health.js';
 import { characterRoutes } from './routes/characters.js';
 import { conversationRoutes } from './routes/conversations.js';
 import { momentRoutes } from './routes/moments.js';
+import { profileRoutes } from './routes/profile.js';
 import { getUploadsDir } from './db/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -39,6 +40,7 @@ await app.register(healthRoutes);
 await app.register(characterRoutes);
 await app.register(conversationRoutes);
 await app.register(momentRoutes);
+await app.register(profileRoutes);
 
 try {
   await app.listen({ port, host });
