@@ -20,6 +20,8 @@ const mentionId = ref<string>('');
 const commentDrafts = reactive<Record<string, string>>({});
 const menuOpen = ref(false);
 const msgMenuId = ref<string | null>(null);
+const momentMenuId = ref<string | null>(null);
+const pendingDeleteMoment = ref<Moment | null>(null);
 const listCtxId = ref<string | null>(null);
 const listCtxPos = ref({ x: 0, y: 0 });
 const swipeId = ref<string | null>(null);
@@ -414,20 +416,32 @@ async function letThemPost(characterId: string) {
   }
 }
 
-async function deleteMoment(m: Moment) {
-  const name = m.character_name || '角色';
-  const ok = window.confirm(`确定删除「${name}」的这条动态？\n点赞与评论也会一起删除。`);
-  if (!ok) return;
+function toggleMomentMenu(id: string) {
+  momentMenuId.value = momentMenuId.value === id ? null : id;
+}
+
+function askDeleteMoment(m: Moment) {
+  momentMenuId.value = null;
+  pendingDeleteMoment.value = m;
+}
+
+function cancelDeleteMoment() {
+  pendingDeleteMoment.value = null;
+}
+
+async function confirmDeleteMoment() {
+  const m = pendingDeleteMoment.value;
+  if (!m) return;
   try {
     await api.deleteMoment(m.id);
     moments.value = moments.value.filter((x) => x.id !== m.id);
     delete commentDrafts[m.id];
     status.value = '动态已删除';
+    pendingDeleteMoment.value = null;
   } catch (err) {
     status.value = err instanceof Error ? err.message : String(err);
   }
 }
-
 async function toggleLike(m: Moment) {
   try {
     const res = await api.likeMoment(m.id);
@@ -469,7 +483,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="wx-shell" @click="menuOpen = false; msgMenuId = null; listCtxId = null">
+  <div class="wx-shell" @click="menuOpen = false; msgMenuId = null; listCtxId = null; momentMenuId = null">
     <aside class="wx-nav">
       <div class="wx-nav-avatar" title="Agent Chat">馆</div>
       <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" title="消息" aria-label="消息" @click="tab = 'chat'">
@@ -604,13 +618,18 @@ onMounted(async () => {
                   <span class="pn">{{ m.character_name }}</span>
                   <span class="wx-moment-time">{{ formatTime(m.created_at) }}</span>
                 </div>
+                <div class="wx-moment-more" @click.stop>
+                  <button class="wx-moment-more-btn" title="更多" @click="toggleMomentMenu(m.id)">⋯</button>
+                  <div v-if="momentMenuId === m.id" class="wx-menu moment">
+                    <button class="danger" @click="askDeleteMoment(m)">删除</button>
+                  </div>
+                </div>
               </div>
               <div class="wx-moment-content">{{ m.content }}</div>
               <div class="wx-moment-actions">
                 <button class="wx-mini-btn" :class="{ liked: m.liked }" @click="toggleLike(m)">
                   {{ m.liked ? '♥ 已赞' : '♡ 点赞' }}{{ m.like_count ? ` · ${m.like_count}` : '' }}
                 </button>
-                <button class="wx-mini-btn danger" @click="deleteMoment(m)">删除</button>
               </div>
               <div v-if="m.comments?.length" class="wx-moment-comments">
                 <div v-for="c in m.comments" :key="c.id" class="wx-moment-comment">
@@ -724,5 +743,23 @@ onMounted(async () => {
         </div>
       </template>
     </main>
+    <div
+      v-if="pendingDeleteMoment"
+      class="wx-confirm-mask"
+      @click.self="cancelDeleteMoment"
+    >
+      <div class="wx-confirm-card" @click.stop>
+        <div class="wx-confirm-title">删除动态</div>
+        <div class="wx-confirm-body">
+          确定删除「{{ pendingDeleteMoment.character_name || '角色' }}」的这条动态？点赞与评论也会一起删除。
+        </div>
+        <div class="wx-confirm-actions">
+          <button class="wx-mini-btn" @click="cancelDeleteMoment">取消</button>
+          <button class="wx-confirm-ok" @click="confirmDeleteMoment">确定删除</button>
+        </div>
+      </div>
+    </div>
+
+
   </div>
 </template>
