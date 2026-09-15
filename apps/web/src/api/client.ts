@@ -75,12 +75,28 @@ export const api = {
   listCharacters: () =>
     fetch('/api/characters').then((r) => json<{ characters: Character[] }>(r)),
 
-  importCharacter: async (file: File) => {
+  importCharacter: async (file: File, opts?: { overwrite?: boolean }) => {
     const fd = new FormData();
     fd.append('file', file);
-    return fetch('/api/characters/import', { method: 'POST', body: fd }).then((r) =>
-      json<{ character: Character }>(r)
-    );
+    const qs = opts?.overwrite ? '?overwrite=1' : '';
+    const res = await fetch('/api/characters/import' + qs, { method: 'POST', body: fd });
+    if (res.status === 409) {
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        code?: string;
+        existing?: { id: string; name: string };
+      };
+      return {
+        conflict: true as const,
+        error: body.error || '角色已存在',
+        existing: body.existing,
+      };
+    }
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error((err as any).error || res.statusText);
+    }
+    return res.json() as Promise<{ character: Character; overwritten?: boolean; conflict?: false }>;
   },
 
   listConversations: () =>

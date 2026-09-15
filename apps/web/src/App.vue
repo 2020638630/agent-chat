@@ -26,6 +26,7 @@ const menuOpen = ref(false);
 const msgMenuId = ref<string | null>(null);
 const momentMenuId = ref<string | null>(null);
 const pendingDeleteMoment = ref<Moment | null>(null);
+const pendingOverwriteImport = ref<{ file: File; name: string } | null>(null);
 const listCtxId = ref<string | null>(null);
 const listCtxPos = ref({ x: 0, y: 0 });
 const swipeId = ref<string | null>(null);
@@ -323,19 +324,50 @@ async function createGroup() {
   }
 }
 
+async function runCharacterImport(file: File, overwrite = false) {
+  status.value = overwrite ? '正在覆盖人设…' : '正在导入…';
+  const res = await api.importCharacter(file, { overwrite });
+  if ('conflict' in res && res.conflict) {
+    pendingOverwriteImport.value = {
+      file,
+      name: res.existing?.name || '该角色',
+    };
+    status.value = '';
+    return;
+  }
+  pendingOverwriteImport.value = null;
+  await refreshCharacters();
+  status.value = res.overwritten
+    ? `已覆盖「${res.character.name}」的人设（聊天记录保留）`
+    : `已导入：${res.character.name}`;
+}
+
 async function onImport(e: Event) {
   const input = e.target as HTMLInputElement;
   const file = input.files?.[0];
   if (!file) return;
   try {
-    status.value = '正在导入…';
-    await api.importCharacter(file);
-    await refreshCharacters();
-    status.value = `已导入：${file.name}`;
+    await runCharacterImport(file, false);
   } catch (err) {
     status.value = err instanceof Error ? err.message : String(err);
   } finally {
     input.value = '';
+  }
+}
+
+function cancelOverwriteImport() {
+  pendingOverwriteImport.value = null;
+  status.value = '已取消覆盖导入';
+}
+
+async function confirmOverwriteImport() {
+  const pending = pendingOverwriteImport.value;
+  if (!pending) return;
+  try {
+    await runCharacterImport(pending.file, true);
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+    pendingOverwriteImport.value = null;
   }
 }
 
@@ -1023,6 +1055,23 @@ onMounted(async () => {
         <div class="wx-confirm-actions">
           <button class="wx-mini-btn" @click="cancelDeleteMoment">取消</button>
           <button class="wx-confirm-ok" @click="confirmDeleteMoment">确定删除</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="pendingOverwriteImport"
+      class="wx-confirm-mask"
+      @click.self="cancelOverwriteImport"
+    >
+      <div class="wx-confirm-card" @click.stop>
+        <div class="wx-confirm-title">覆盖人设</div>
+        <div class="wx-confirm-body">
+          将覆盖「{{ pendingOverwriteImport.name }}」的人设，聊天记录保留。
+        </div>
+        <div class="wx-confirm-actions">
+          <button class="wx-mini-btn" @click="cancelOverwriteImport">取消</button>
+          <button class="wx-confirm-ok" @click="confirmOverwriteImport">确认覆盖</button>
         </div>
       </div>
     </div>
