@@ -1227,7 +1227,6 @@ onMounted(async () => {
                 </template>
               </div>
             </div>
-            <div 
             <div class="wx-profile-media">
               <button type="button" class="wx-mini-btn" :disabled="mediaBusy" @click="avatarFileInput?.click()">更换头像</button>
               <button
@@ -1238,7 +1237,7 @@ onMounted(async () => {
                 @click="clearAvatar"
               >恢复默认头像</button>
             </div>
-class="wx-profile-bio">
+            <div class="wx-profile-bio">
               <div class="wx-profile-label">简介</div>
               <template v-if="profileView.kind === 'user' && profileEditing">
                 <textarea v-model="editBio" class="wx-profile-bio-input" rows="3" maxlength="500" placeholder="写一点关于自己…" />
