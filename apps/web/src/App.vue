@@ -1217,7 +1217,28 @@ onMounted(async () => {
               >
                 <button
                   type="button"
-                  class="wx-mic-icon"
+                  class="wx-composer-btn wx-plus-btn"
+                  title="图片 / 表情（即将支持）"
+                  aria-label="添加（即将支持）"
+                  @click="status = '图片与表情稍后支持'"
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
+                </button>
+                <template v-if="!voiceActive">
+                  <textarea
+                    v-model="draft"
+                    rows="1"
+                    placeholder="发消息…"
+                    @keydown="onKeydown"
+                  />
+                </template>
+                <div v-else class="wx-record-strip" aria-live="polite">
+                  <span class="wx-record-pulse" aria-hidden="true"></span>
+                  <span class="wx-record-text">{{ voiceCancelHint ? '松开取消' : '松开发送 · 上滑取消' }}</span>
+                </div>
+                <button
+                  type="button"
+                  class="wx-composer-btn wx-mic-icon"
                   :class="{ active: voiceActive, busy: voiceBusy }"
                   :disabled="sending || voiceBusy"
                   title="按住说话"
@@ -1228,20 +1249,19 @@ onMounted(async () => {
                   @pointercancel="onVoicePointerCancel"
                   @contextmenu.prevent
                 >
-                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                 </button>
-                <template v-if="!(voiceActive)">
-                  <textarea
-                    v-model="draft"
-                    placeholder="发消息…"
-                    @keydown="onKeydown"
-                  />
-                  <button class="wx-send" :disabled="sending || !draft.trim()" @click="send">发送</button>
-                </template>
-                <div v-else class="wx-record-strip" aria-live="polite">
-                  <span class="wx-record-pulse" aria-hidden="true"></span>
-                  <span class="wx-record-text">{{ voiceCancelHint ? '松开取消' : '松开发送 · 上滑取消' }}</span>
-                </div>
+                <button
+                  v-if="!voiceActive"
+                  type="button"
+                  class="wx-send"
+                  :disabled="sending || !draft.trim()"
+                  title="发送"
+                  aria-label="发送"
+                  @click="send"
+                >
+                  <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+                </button>
               </div>
             </div>
           </div>
