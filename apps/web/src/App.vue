@@ -10,6 +10,7 @@ const characters = ref<Character[]>([]);
 const conversations = ref<Conversation[]>([]);
 const messages = ref<ChatMessage[]>([]);
 const moments = ref<Moment[]>([]);
+const momentsFilterId = ref<string | null>(null);
 const activeConversationId = ref<string | null>(null);
 const draft = ref('');
 const sending = ref(false);
@@ -77,6 +78,59 @@ const midTitle = computed(() => {
   if (tab.value === 'contacts') return creatingGroup.value ? '创建群聊' : '通讯录';
   return '空间';
 });
+
+function isSameLocalDay(iso: string, now = new Date()) {
+  const d = new Date(iso);
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
+const momentsToday = computed(() => moments.value.filter((m) => isSameLocalDay(m.created_at)));
+
+const momentsTodayAuthors = computed(() => {
+  const seen = new Set<string>();
+  const list: Array<{ id: string; name: string; avatar_path?: string | null }> = [];
+  for (const m of momentsToday.value) {
+    if (!m.character_id || seen.has(m.character_id)) continue;
+    seen.add(m.character_id);
+    list.push({
+      id: m.character_id,
+      name: m.character_name || '角色',
+      avatar_path: m.avatar_path,
+    });
+  }
+  return list;
+});
+
+const spaceCharacterStats = computed(() => {
+  const countBy = new Map<string, number>();
+  for (const m of moments.value) {
+    if (!m.character_id) continue;
+    countBy.set(m.character_id, (countBy.get(m.character_id) || 0) + 1);
+  }
+  return characters.value
+    .map((ch) => ({
+      id: ch.id,
+      name: ch.name,
+      avatar_path: ch.avatar_path,
+      count: countBy.get(ch.id) || 0,
+    }))
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh'));
+});
+
+const filteredMoments = computed(() => {
+  const id = momentsFilterId.value;
+  if (!id) return moments.value;
+  return moments.value.filter((m) => m.character_id === id);
+});
+
+function setMomentsFilter(id: string | null) {
+  momentsFilterId.value = id;
+}
+
 
 const groupPickableCharacters = computed(() => {
   const q = groupSearch.value.trim().toLowerCase();
@@ -1039,7 +1093,7 @@ onMounted(async () => {
         </div>
       </div>
       <input
-        v-if="!(tab === 'contacts' && creatingGroup)"
+        v-if="(tab === 'chat' || tab === 'contacts') && !(tab === 'contacts' && creatingGroup)"
         class="wx-search"
         placeholder="搜索"
       />
@@ -1188,9 +1242,64 @@ onMounted(async () => {
           还没有角色<br />点击「导入角色」选择 samples/characters/*.json
         </div>
       </div>
-      <div v-else class="wx-list">
-        <div class="wx-empty" style="padding: 40px 16px">
-          在通讯录点角色「⋯ → 让 TA 发动态」
+      <div v-else class="wx-space-mid">
+        <div class="wx-space-overview">
+          <div class="wx-space-overview-title">今日概览</div>
+          <div class="wx-space-overview-stat">
+            <span class="n">{{ momentsToday.length }}</span>
+            <span class="l">条动态</span>
+          </div>
+          <div v-if="momentsTodayAuthors.length" class="wx-space-overview-who">
+            <span class="l">今天发过：</span>
+            <button
+              v-for="a in momentsTodayAuthors"
+              :key="a.id"
+              type="button"
+              class="wx-space-chip"
+              @click="setMomentsFilter(a.id)"
+            >
+              <span class="wx-avatar xs">
+                <img v-if="a.avatar_path" :src="a.avatar_path" alt="" />
+                <template v-else>{{ avatarText(a.name) }}</template>
+              </span>
+              {{ a.name }}
+            </button>
+          </div>
+          <div v-else class="wx-hint">今天还没有新动态</div>
+          <button type="button" class="wx-mini-btn" style="margin-top:10px" @click="tab = 'contacts'">
+            去通讯录发动态
+          </button>
+        </div>
+        <div class="wx-space-filter-head">
+          <span>按角色看</span>
+          <button
+            type="button"
+            class="wx-space-all"
+            :class="{ active: !momentsFilterId }"
+            @click="setMomentsFilter(null)"
+          >全部</button>
+        </div>
+        <div class="wx-list wx-space-filter-list">
+          <button
+            v-for="ch in spaceCharacterStats"
+            :key="ch.id"
+            type="button"
+            class="wx-list-item wx-space-filter-item"
+            :class="{ active: momentsFilterId === ch.id }"
+            @click="setMomentsFilter(ch.id)"
+          >
+            <div class="wx-avatar">
+              <img v-if="ch.avatar_path" :src="ch.avatar_path" alt="" />
+              <template v-else>{{ avatarText(ch.name) }}</template>
+            </div>
+            <div class="wx-list-meta">
+              <div class="wx-list-title">{{ ch.name }}</div>
+              <div class="wx-list-sub">{{ ch.count ? ch.count + ' 条动态' : '暂无动态' }}</div>
+            </div>
+          </button>
+          <div v-if="!spaceCharacterStats.length" class="wx-empty" style="padding: 24px 16px">
+            还没有角色
+          </div>
         </div>
       </div>
     </section>
@@ -1327,7 +1436,7 @@ onMounted(async () => {
             </div>
           </div>
           <div class="wx-moments-feed">
-            <div v-for="m in moments" :key="m.id" class="wx-moment-card">
+            <div v-for="m in filteredMoments" :key="m.id" class="wx-moment-card">
               <div class="wx-moment-head">
                 <div class="wx-avatar" role="button" title="查看主页" @click.stop="openCharacterProfile(m.character_id)">
                   <img v-if="m.avatar_path" :src="m.avatar_path" alt="" />
@@ -1365,8 +1474,12 @@ onMounted(async () => {
                 <button class="wx-mini-btn primary" @click="submitComment(m)">评论</button>
               </div>
             </div>
-            <div v-if="!moments.length" class="wx-empty">
-              还没有动态。<br />去通讯录点角色「⋯ → 让 TA 发动态」。
+            <div v-if="!filteredMoments.length" class="wx-empty">
+              {{ momentsFilterId ? '该角色还没有动态' : '还没有动态' }}。<br />
+              去通讯录点角色「⋯ → 让 TA 发动态」。
+              <div v-if="momentsFilterId" style="margin-top:12px">
+                <button type="button" class="wx-mini-btn" @click="setMomentsFilter(null)">查看全部</button>
+              </div>
             </div>
           </div>
         </div>

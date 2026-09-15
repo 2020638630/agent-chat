@@ -1606,3 +1606,120 @@ select {
   gap: 8px;
   margin: 0 0 12px;
 }
+
+
+/* ===== Space mid: overview + filter ===== */
+.wx-space-mid {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.wx-space-overview {
+  flex-shrink: 0;
+  margin: 10px 12px 8px;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+.wx-space-overview-title {
+  font-size: 12px;
+  color: var(--text-3);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.wx-space-overview-stat {
+  margin-top: 8px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.wx-space-overview-stat .n {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+}
+.wx-space-overview-stat .l {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.wx-space-overview-who {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.wx-space-overview-who > .l {
+  font-size: 12px;
+  color: var(--text-3);
+  width: 100%;
+}
+.wx-space-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(120, 120, 140, 0.18);
+  background: rgba(255, 255, 255, 0.65);
+  border-radius: 999px;
+  padding: 4px 10px 4px 4px;
+  font-size: 12px;
+  color: var(--text);
+  cursor: pointer;
+}
+.wx-space-chip:hover {
+  background: var(--hover);
+}
+.wx-avatar.xs {
+  width: 22px;
+  height: 22px;
+  font-size: 10px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.wx-space-filter-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px 4px;
+  font-size: 12px;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.wx-space-all {
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+.wx-space-all.active,
+.wx-space-all:hover {
+  color: var(--accent-deep);
+  background: rgba(110, 95, 170, 0.08);
+}
+.wx-space-filter-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+button.wx-space-filter-item {
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.wx-space-filter-item.active {
+  background: rgba(110, 95, 170, 0.1);
+}
