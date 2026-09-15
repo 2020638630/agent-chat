@@ -591,9 +591,9 @@ select {
   border: 1px solid rgba(255, 255, 255, 0.5);
   border-radius: 14px;
   display: flex;
-  align-items: flex-end;
-  gap: 8px;
-  padding: 6px 12px 6px 16px;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px 6px 8px;
   min-height: 46px;
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
@@ -619,6 +619,7 @@ select {
 }
 
 .wx-send {
+  align-self: center;
   background: var(--accent-deep);
   color: #fff;
   border: none;
@@ -1260,20 +1261,30 @@ select {
 /* ===== Voice (B-04 / B-06) ===== */
 .wx-mic-icon {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  align-self: center;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.55);
   background: rgba(255, 255, 255, 0.45);
   color: var(--text-2);
   border-radius: 10px;
-  display: grid;
-  place-items: center;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
   cursor: pointer;
   user-select: none;
   touch-action: none;
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.wx-mic-icon svg {
+  display: block;
+  /* mic glyph has extra stem at bottom — nudge up for optical center */
+  transform: translateY(-0.5px);
 }
 .wx-mic-icon:hover:not(:disabled) {
   background: var(--hover);
