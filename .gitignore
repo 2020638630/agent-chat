@@ -10,3 +10,5 @@ uploads/
 *.log
 apps/web/dist/
 apps/server/dist/
+picture/
+docs/*待优化点*.md
