@@ -162,6 +162,25 @@ function speakerName(m: ChatMessage) {
   return m.character_name || activeConversation.value?.title || '角色';
 }
 
+/** Same avatar source as contacts / timeline: uploaded path, else letter circle. */
+function messageAvatarUrl(m: ChatMessage): string | null {
+  if (m.role === 'user') return meProfile.value?.avatar_path || null;
+  if (m.character_id) {
+    const fromList = characters.value.find((c) => c.id === m.character_id);
+    if (fromList?.avatar_path) return fromList.avatar_path;
+    const fromMembers = activeConversation.value?.members?.find((mem) => mem.id === m.character_id);
+    if (fromMembers?.avatar_path) return fromMembers.avatar_path;
+  }
+  const peer = privatePeer(activeConversation.value);
+  if (peer?.avatar_path && activeConversation.value?.type === 'private') return peer.avatar_path;
+  return null;
+}
+
+function messageAvatarLetter(m: ChatMessage) {
+  if (m.role === 'user') return avatarText(meProfile.value?.name || '我');
+  return avatarText(m.character_name || activeConversation.value?.title || '?');
+}
+
 function escapeHtml(s: string) {
   return s
     .replace(/&/g, '&amp;')
@@ -1389,7 +1408,8 @@ onMounted(async () => {
                       title="查看主页"
                       @click.stop="onMsgAvatarClick(m)"
                     >
-                      {{ m.role === 'user' ? '我' : avatarText(m.character_name || activeConversation.title) }}
+                      <img v-if="messageAvatarUrl(m)" :src="messageAvatarUrl(m)!" alt="" />
+                      <template v-else>{{ messageAvatarLetter(m) }}</template>
                     </div>
                     <div class="wx-msg-col">
                       <div v-if="!isContinued(i)" class="wx-msg-head">
