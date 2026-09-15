@@ -92,10 +92,10 @@ function avatarText(name?: string) {
   return (name || '?').slice(0, 1);
 }
 
-function collageMembers(c: Conversation) {
+function collageMembers(c: Conversation | null | undefined) {
+  if (!c || c.type !== 'group') return [];
   const mems = c.members || [];
-  if (c.type === 'group' && mems.length) return mems.slice(0, 4);
-  return [];
+  return mems.slice(0, 3);
 }
 
 function speakerKey(m: ChatMessage) {
@@ -1074,7 +1074,7 @@ onMounted(async () => {
             @pointerup="onSwipeEnd"
             @pointercancel="onSwipeEnd"
           >
-            <div v-if="collageMembers(c).length" class="wx-avatar collage" :data-n="Math.min(collageMembers(c).length, 4)">
+            <div v-if="collageMembers(c).length" class="wx-avatar collage" :data-n="collageMembers(c).length">
               <span v-for="mem in collageMembers(c)" :key="mem.id">
                 <img v-if="mem.avatar_path" :src="mem.avatar_path" alt="" />
                 <template v-else>{{ avatarText(mem.name) }}</template>
@@ -1370,7 +1370,17 @@ onMounted(async () => {
       <template v-else>
         <div class="wx-main-header">
           <div class="wx-header-left">
-            <div class="wx-header-ava">
+            <div
+              v-if="collageMembers(activeConversation).length"
+              class="wx-header-ava collage"
+              :data-n="collageMembers(activeConversation).length"
+            >
+              <span v-for="mem in collageMembers(activeConversation)" :key="mem.id">
+                <img v-if="mem.avatar_path" :src="mem.avatar_path" alt="" />
+                <template v-else>{{ avatarText(mem.name) }}</template>
+              </span>
+            </div>
+            <div v-else class="wx-header-ava">
               <img v-if="headerAvatar(activeConversation)" :src="headerAvatar(activeConversation)!" alt="" />
               <template v-else>{{ avatarText(activeConversation?.title) }}</template>
             </div>

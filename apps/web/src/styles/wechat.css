@@ -277,8 +277,7 @@ select {
   grid-template-columns: 1fr 1fr;
 }
 
-.wx-avatar.collage[data-n="3"],
-.wx-avatar.collage[data-n="4"] {
+.wx-avatar.collage[data-n="3"] {
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
 }
@@ -293,6 +292,42 @@ select {
 
 .wx-avatar.collage[data-n="3"] span:first-child {
   grid-column: 1 / -1;
+}
+
+.wx-header-ava.collage {
+  display: grid;
+  gap: 1px;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px;
+  place-items: stretch;
+  overflow: hidden;
+  border-radius: 12px;
+}
+.wx-header-ava.collage[data-n="2"] {
+  grid-template-columns: 1fr 1fr;
+}
+.wx-header-ava.collage[data-n="3"] {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+.wx-header-ava.collage[data-n="3"] span:first-child {
+  grid-column: 1 / -1;
+}
+.wx-header-ava.collage span {
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  font-size: 10px;
+  line-height: 1;
+  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+}
+.wx-header-ava.collage span img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .wx-avatar img {
