@@ -508,8 +508,8 @@ function onVoicePointerCancel() {
   voiceCancel();
 }
 
-function isUserVoice(m: ChatMessage) {
-  return m.role === 'user' && m.source === 'voice';
+function isVoiceBubble(m: ChatMessage) {
+  return m.source === 'voice';
 }
 
 async function playTts(m: ChatMessage) {
@@ -1160,7 +1160,7 @@ onMounted(async () => {
                       </div>
                       <div class="wx-bubble-row">
                         <button
-                          v-if="isUserVoice(m)"
+                          v-if="isVoiceBubble(m)"
                           type="button"
                           class="wx-voice-bubble"
                           :class="{ playing: ttsPlayingId === m.id, loading: ttsLoadingId === m.id }"
@@ -1176,7 +1176,7 @@ onMounted(async () => {
                         <div v-else class="wx-bubble" v-html="mentionHtml(m.content)"></div>
                         <div class="wx-msg-actions" @click.stop>
                           <button
-                            v-if="!isUserVoice(m)"
+                            v-if="!isVoiceBubble(m)"
                             class="wx-msg-tts"
                             type="button"
                             title="朗读"

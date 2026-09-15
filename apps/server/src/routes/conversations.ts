@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { v4 as uuid } from 'uuid';
 import { db } from '../db/index.js';
 import { buildSystemPrompt } from '../utils/characterCard.js';
+import { shouldAssistantUseVoice } from '../utils/voiceRequest.js';
 import { chatCompletion } from '../services/llm.js';
 import {
   isTtsCacheFileForMessage,
@@ -454,10 +455,16 @@ export async function conversationRoutes(app: FastifyInstance) {
 
     const aid = uuid();
     const at = new Date().toISOString();
+    // B-07: voice bubble when user spoke, or text asks to sing/speak aloud
+    const llmFailed =
+      replyText.includes('LLM 暂时不可用') || replyText.startsWith('（LLM');
+    const assistantSource: 'text' | 'voice' =
+      !llmFailed && shouldAssistantUseVoice(source, trimmed) ? 'voice' : 'text';
+
     db.prepare(
       `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at, source)
-       VALUES (?, ?, 'assistant', ?, ?, ?, 'text')`
-    ).run(aid, conversationId, character.id, replyText, at);
+       VALUES (?, ?, 'assistant', ?, ?, ?, ?)`
+    ).run(aid, conversationId, character.id, replyText, at, assistantSource);
 
     db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(at, conversationId);
 
@@ -475,7 +482,7 @@ export async function conversationRoutes(app: FastifyInstance) {
           character_name: character.name,
           content: replyText,
           created_at: at,
-          source: 'text',
+          source: assistantSource,
         },
       ],
       transcript: source === 'voice' ? trimmed : undefined,
