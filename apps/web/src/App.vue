@@ -92,10 +92,22 @@ function avatarText(name?: string) {
   return (name || '?').slice(0, 1);
 }
 
-function collageMembers(c: Conversation | null | undefined) {
+type CollageMember = { id: string; name: string; avatar_path?: string | null };
+
+function collageMembers(c: Conversation | null | undefined): CollageMember[] {
   if (!c || c.type !== 'group') return [];
-  const mems = c.members || [];
-  return mems.slice(0, 4);
+  const me: CollageMember = {
+    id: 'me',
+    name: meProfile.value?.name || '旅人',
+    avatar_path: meProfile.value?.avatar_path || null,
+  };
+  const chars = (c.members || []).map((m) => ({
+    id: m.id,
+    name: m.name,
+    avatar_path: m.avatar_path ?? null,
+  }));
+  // user counts as one seat; fill remaining with characters (max 4 tiles)
+  return [me, ...chars].slice(0, 4);
 }
 
 function speakerKey(m: ChatMessage) {
