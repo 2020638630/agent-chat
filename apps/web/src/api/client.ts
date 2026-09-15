@@ -43,6 +43,8 @@ export type Profile = {
   mood: string;
   bio: string;
   avatar_path?: string | null;
+  bg_path?: string | null;
+  space_bg_path?: string | null;
 };
 
 export type ProfileResponse = {
@@ -185,6 +187,62 @@ export const api = {
 
   getCharacterProfile: (id: string) =>
     fetch(`/api/profiles/characters/${id}`).then((r) => json<ProfileResponse>(r)),
+
+  uploadMyAvatar: async (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return fetch('/api/profiles/me/avatar', { method: 'POST', body: fd }).then((r) =>
+      json<{ profile: Profile }>(r)
+    );
+  },
+  clearMyAvatar: () =>
+    fetch('/api/profiles/me/avatar', { method: 'DELETE' }).then((r) =>
+      json<{ profile: Profile }>(r)
+    ),
+  uploadMyBg: async (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return fetch('/api/profiles/me/bg', { method: 'POST', body: fd }).then((r) =>
+      json<{ profile: Profile }>(r)
+    );
+  },
+  clearMyBg: () =>
+    fetch('/api/profiles/me/bg', { method: 'DELETE' }).then((r) =>
+      json<{ profile: Profile }>(r)
+    ),
+  uploadSpaceBg: async (file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return fetch('/api/space/bg', { method: 'POST', body: fd }).then((r) =>
+      json<{ profile: Profile }>(r)
+    );
+  },
+  clearSpaceBg: () =>
+    fetch('/api/space/bg', { method: 'DELETE' }).then((r) =>
+      json<{ profile: Profile }>(r)
+    ),
+  uploadCharacterAvatar: async (id: string, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return fetch(`/api/profiles/characters/${id}/avatar`, { method: 'POST', body: fd }).then((r) =>
+      json<{ profile: Profile }>(r)
+    );
+  },
+  clearCharacterAvatar: (id: string) =>
+    fetch(`/api/profiles/characters/${id}/avatar`, { method: 'DELETE' }).then((r) =>
+      json<{ profile: Profile }>(r)
+    ),
+  uploadCharacterBg: async (id: string, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return fetch(`/api/profiles/characters/${id}/bg`, { method: 'POST', body: fd }).then((r) =>
+      json<{ profile: Profile }>(r)
+    );
+  },
+  clearCharacterBg: (id: string) =>
+    fetch(`/api/profiles/characters/${id}/bg`, { method: 'DELETE' }).then((r) =>
+      json<{ profile: Profile }>(r)
+    ),
 
   generateMoment: (characterId: string) =>
     fetch('/api/moments/generate', {

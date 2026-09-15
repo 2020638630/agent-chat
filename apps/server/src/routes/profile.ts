@@ -1,5 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
+import {
+  readImageFromRequest,
+  saveImageBuffer,
+  unlinkUploadPublicPath,
+} from '../services/uploadImage.js';
 
 type UserProfileRow = {
   id: string;
@@ -7,6 +12,8 @@ type UserProfileRow = {
   mood: string;
   bio: string;
   avatar_path: string | null;
+  bg_path: string | null;
+  space_bg_path: string | null;
   updated_at: string;
 };
 
@@ -17,6 +24,7 @@ type CharacterRow = {
   personality: string | null;
   first_mes: string | null;
   avatar_path: string | null;
+  bg_path: string | null;
 };
 
 function enrichMoment(row: any) {
@@ -88,23 +96,47 @@ function momentsForCharacter(characterId: string) {
   return rows.map(enrichMoment);
 }
 
+function userProfileDto(row: UserProfileRow) {
+  return {
+    id: 'me' as const,
+    kind: 'user' as const,
+    name: row.name,
+    mood: row.mood ?? '',
+    bio: row.bio ?? '',
+    avatar_path: row.avatar_path ?? null,
+    bg_path: row.bg_path ?? null,
+    space_bg_path: row.space_bg_path ?? null,
+  };
+}
+
+function characterProfileDto(character: CharacterRow) {
+  return {
+    id: character.id,
+    kind: 'character' as const,
+    name: character.name,
+    mood: assembleMood(character.first_mes, character.personality),
+    bio: assembleBio(character.description, character.personality),
+    avatar_path: character.avatar_path ?? null,
+    bg_path: character.bg_path ?? null,
+  };
+}
+
+function httpError(e: unknown, reply: any) {
+  const status = (e as any)?.statusCode || 500;
+  const msg = e instanceof Error ? e.message : String(e);
+  return reply.code(status >= 400 && status < 600 ? status : 500).send({ error: msg });
+}
+
 export async function profileRoutes(app: FastifyInstance) {
   app.get('/api/profiles/me', async () => {
     const row = ensureMeProfile();
     return {
-      profile: {
-        id: 'me',
-        kind: 'user' as const,
-        name: row.name,
-        mood: row.mood ?? '',
-        bio: row.bio ?? '',
-        avatar_path: row.avatar_path,
-      },
+      profile: userProfileDto(row),
       moments: [] as unknown[],
     };
   });
 
-  app.patch('/api/profiles/me', async (req, reply) => {
+  app.patch('/api/profiles/me', async (req) => {
     const body = (req.body ?? {}) as { name?: string; mood?: string; bio?: string };
     const current = ensureMeProfile();
     const name =
@@ -115,17 +147,7 @@ export async function profileRoutes(app: FastifyInstance) {
     db.prepare(
       `UPDATE user_profile SET name = ?, mood = ?, bio = ?, updated_at = ? WHERE id = 'me'`
     ).run(name, mood, bio, updated_at);
-    const row = ensureMeProfile();
-    return {
-      profile: {
-        id: 'me',
-        kind: 'user' as const,
-        name: row.name,
-        mood: row.mood ?? '',
-        bio: row.bio ?? '',
-        avatar_path: row.avatar_path,
-      },
-    };
+    return { profile: userProfileDto(ensureMeProfile()) };
   });
 
   app.get<{ Params: { id: string } }>('/api/profiles/characters/:id', async (req, reply) => {
@@ -133,17 +155,145 @@ export async function profileRoutes(app: FastifyInstance) {
       | CharacterRow
       | undefined;
     if (!character) return reply.code(404).send({ error: '角色不存在' });
-
     return {
-      profile: {
-        id: character.id,
-        kind: 'character' as const,
-        name: character.name,
-        mood: assembleMood(character.first_mes, character.personality),
-        bio: assembleBio(character.description, character.personality),
-        avatar_path: character.avatar_path,
-      },
+      profile: characterProfileDto(character),
       moments: momentsForCharacter(character.id),
     };
+  });
+
+  // —— user avatar ——
+  app.post('/api/profiles/me/avatar', async (req, reply) => {
+    try {
+      const { buffer, ext } = await readImageFromRequest(req);
+      const me = ensureMeProfile();
+      const saved = saveImageBuffer(buffer, ext, 'avatar-me');
+      unlinkUploadPublicPath(me.avatar_path);
+      db.prepare(
+        `UPDATE user_profile SET avatar_path = ?, updated_at = ? WHERE id = 'me'`
+      ).run(saved.publicPath, new Date().toISOString());
+      return { profile: userProfileDto(ensureMeProfile()) };
+    } catch (e) {
+      return httpError(e, reply);
+    }
+  });
+
+  app.delete('/api/profiles/me/avatar', async () => {
+    const me = ensureMeProfile();
+    unlinkUploadPublicPath(me.avatar_path);
+    db.prepare(
+      `UPDATE user_profile SET avatar_path = NULL, updated_at = ? WHERE id = 'me'`
+    ).run(new Date().toISOString());
+    return { profile: userProfileDto(ensureMeProfile()) };
+  });
+
+  // —— user homepage bg ——
+  app.post('/api/profiles/me/bg', async (req, reply) => {
+    try {
+      const { buffer, ext } = await readImageFromRequest(req);
+      const me = ensureMeProfile();
+      const saved = saveImageBuffer(buffer, ext, 'bg-me');
+      unlinkUploadPublicPath(me.bg_path);
+      db.prepare(
+        `UPDATE user_profile SET bg_path = ?, updated_at = ? WHERE id = 'me'`
+      ).run(saved.publicPath, new Date().toISOString());
+      return { profile: userProfileDto(ensureMeProfile()) };
+    } catch (e) {
+      return httpError(e, reply);
+    }
+  });
+
+  app.delete('/api/profiles/me/bg', async () => {
+    const me = ensureMeProfile();
+    unlinkUploadPublicPath(me.bg_path);
+    db.prepare(
+      `UPDATE user_profile SET bg_path = NULL, updated_at = ? WHERE id = 'me'`
+    ).run(new Date().toISOString());
+    return { profile: userProfileDto(ensureMeProfile()) };
+  });
+
+  // —— space / moments cover ——
+  app.post('/api/space/bg', async (req, reply) => {
+    try {
+      const { buffer, ext } = await readImageFromRequest(req);
+      const me = ensureMeProfile();
+      const saved = saveImageBuffer(buffer, ext, 'bg-space');
+      unlinkUploadPublicPath(me.space_bg_path);
+      db.prepare(
+        `UPDATE user_profile SET space_bg_path = ?, updated_at = ? WHERE id = 'me'`
+      ).run(saved.publicPath, new Date().toISOString());
+      return { profile: userProfileDto(ensureMeProfile()) };
+    } catch (e) {
+      return httpError(e, reply);
+    }
+  });
+
+  app.delete('/api/space/bg', async () => {
+    const me = ensureMeProfile();
+    unlinkUploadPublicPath(me.space_bg_path);
+    db.prepare(
+      `UPDATE user_profile SET space_bg_path = NULL, updated_at = ? WHERE id = 'me'`
+    ).run(new Date().toISOString());
+    return { profile: userProfileDto(ensureMeProfile()) };
+  });
+
+  // —— character avatar ——
+  app.post<{ Params: { id: string } }>('/api/profiles/characters/:id/avatar', async (req, reply) => {
+    const character = db.prepare('SELECT * FROM characters WHERE id = ?').get(req.params.id) as
+      | CharacterRow
+      | undefined;
+    if (!character) return reply.code(404).send({ error: '角色不存在' });
+    try {
+      const { buffer, ext } = await readImageFromRequest(req);
+      const saved = saveImageBuffer(buffer, ext, `avatar-ch-${character.id.slice(0, 8)}`);
+      unlinkUploadPublicPath(character.avatar_path);
+      db.prepare(`UPDATE characters SET avatar_path = ? WHERE id = ?`).run(
+        saved.publicPath,
+        character.id
+      );
+      const updated = db.prepare('SELECT * FROM characters WHERE id = ?').get(character.id) as CharacterRow;
+      return { profile: characterProfileDto(updated) };
+    } catch (e) {
+      return httpError(e, reply);
+    }
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/profiles/characters/:id/avatar', async (req, reply) => {
+    const character = db.prepare('SELECT * FROM characters WHERE id = ?').get(req.params.id) as
+      | CharacterRow
+      | undefined;
+    if (!character) return reply.code(404).send({ error: '角色不存在' });
+    unlinkUploadPublicPath(character.avatar_path);
+    db.prepare(`UPDATE characters SET avatar_path = NULL WHERE id = ?`).run(character.id);
+    const updated = db.prepare('SELECT * FROM characters WHERE id = ?').get(character.id) as CharacterRow;
+    return { profile: characterProfileDto(updated) };
+  });
+
+  // —— character homepage bg ——
+  app.post<{ Params: { id: string } }>('/api/profiles/characters/:id/bg', async (req, reply) => {
+    const character = db.prepare('SELECT * FROM characters WHERE id = ?').get(req.params.id) as
+      | CharacterRow
+      | undefined;
+    if (!character) return reply.code(404).send({ error: '角色不存在' });
+    try {
+      const { buffer, ext } = await readImageFromRequest(req);
+      const saved = saveImageBuffer(buffer, ext, `bg-ch-${character.id.slice(0, 8)}`);
+      unlinkUploadPublicPath(character.bg_path);
+      db.prepare(`UPDATE characters SET bg_path = ? WHERE id = ?`).run(saved.publicPath, character.id);
+      const updated = db.prepare('SELECT * FROM characters WHERE id = ?').get(character.id) as CharacterRow;
+      return { profile: characterProfileDto(updated) };
+    } catch (e) {
+      return httpError(e, reply);
+    }
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/profiles/characters/:id/bg', async (req, reply) => {
+    const character = db.prepare('SELECT * FROM characters WHERE id = ?').get(req.params.id) as
+      | CharacterRow
+      | undefined;
+    if (!character) return reply.code(404).send({ error: '角色不存在' });
+    unlinkUploadPublicPath(character.bg_path);
+    db.prepare(`UPDATE characters SET bg_path = NULL WHERE id = ?`).run(character.id);
+    const updated = db.prepare('SELECT * FROM characters WHERE id = ?').get(character.id) as CharacterRow;
+    return { profile: characterProfileDto(updated) };
   });
 }

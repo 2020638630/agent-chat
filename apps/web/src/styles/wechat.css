@@ -1471,3 +1471,68 @@ select {
   align-items: center;
   gap: 2px;
 }
+
+
+/* ===== U-05 media ===== */
+.wx-nav-avatar img,
+.wx-header-ava img,
+.wx-avatar img,
+.wx-avatar.collage span img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  border-radius: inherit;
+}
+.wx-nav-avatar {
+  padding: 0;
+  overflow: hidden;
+}
+.wx-header-ava {
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+.wx-avatar.collage span {
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.wx-profile-cover {
+  height: 120px;
+  margin: -4px -4px 14px;
+  border-radius: 14px;
+  background:
+    linear-gradient(180deg, rgba(30, 31, 34, 0.08) 0%, rgba(236, 238, 242, 0.35) 100%),
+    radial-gradient(700px 220px at 50% 0%, rgba(107, 111, 136, 0.45), transparent 70%),
+    linear-gradient(135deg, #6B6F88 0%, #8B8FA8 42%, #c9ccd8 100%);
+  background-size: cover;
+  background-position: center;
+  position: relative;
+}
+.wx-moments-cover {
+  position: relative;
+  background-size: cover !important;
+  background-position: center !important;
+}
+.wx-cover-actions {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.wx-profile-cover:hover .wx-cover-actions,
+.wx-moments-cover:hover .wx-cover-actions,
+.wx-cover-actions:focus-within {
+  opacity: 1;
+}
+.wx-profile-media {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+}

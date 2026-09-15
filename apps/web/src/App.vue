@@ -57,6 +57,11 @@ let swipeMoved = false;
 type ProfileView = null | { kind: 'user' } | { kind: 'character'; id: string };
 const profileView = ref<ProfileView>(null);
 const profile = ref<Profile | null>(null);
+const meProfile = ref<Profile | null>(null);
+const mediaBusy = ref(false);
+const avatarFileInput = ref<HTMLInputElement | null>(null);
+const bgFileInput = ref<HTMLInputElement | null>(null);
+const spaceBgFileInput = ref<HTMLInputElement | null>(null);
 const profileMoments = ref<Moment[]>([]);
 const profileLoading = ref(false);
 const profileEditing = ref(false);
@@ -189,6 +194,147 @@ async function closeProfile() {
   profileEditing.value = false;
 }
 
+
+async function refreshMeProfile() {
+  try {
+    const res = await api.getMyProfile();
+    meProfile.value = res.profile;
+  } catch {
+    /* keep previous */
+  }
+}
+
+async function applyProfileMedia(next: Profile) {
+  profile.value = next;
+  if (next.kind === 'user') {
+    meProfile.value = next;
+  } else {
+    await refreshCharacters();
+    await refreshConversations();
+  }
+}
+
+async function onAvatarFileChange(ev: Event) {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file || !profileView.value) return;
+  mediaBusy.value = true;
+  status.value = '上传头像…';
+  try {
+    const res =
+      profileView.value.kind === 'user'
+        ? await api.uploadMyAvatar(file)
+        : await api.uploadCharacterAvatar(profileView.value.id, file);
+    await applyProfileMedia(res.profile);
+    status.value = '头像已更新';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    mediaBusy.value = false;
+  }
+}
+
+async function onBgFileChange(ev: Event) {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file || !profileView.value) return;
+  mediaBusy.value = true;
+  status.value = '上传背景…';
+  try {
+    const res =
+      profileView.value.kind === 'user'
+        ? await api.uploadMyBg(file)
+        : await api.uploadCharacterBg(profileView.value.id, file);
+    await applyProfileMedia(res.profile);
+    status.value = '背景已更新';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    mediaBusy.value = false;
+  }
+}
+
+async function onSpaceBgFileChange(ev: Event) {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  mediaBusy.value = true;
+  status.value = '上传空间封面…';
+  try {
+    const res = await api.uploadSpaceBg(file);
+    meProfile.value = res.profile;
+    if (profileView.value?.kind === 'user' && profile.value) {
+      profile.value = { ...profile.value, space_bg_path: res.profile.space_bg_path };
+    }
+    status.value = '空间封面已更新';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    mediaBusy.value = false;
+  }
+}
+
+async function clearAvatar() {
+  if (!profileView.value) return;
+  mediaBusy.value = true;
+  try {
+    const res =
+      profileView.value.kind === 'user'
+        ? await api.clearMyAvatar()
+        : await api.clearCharacterAvatar(profileView.value.id);
+    await applyProfileMedia(res.profile);
+    status.value = '已恢复默认头像';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    mediaBusy.value = false;
+  }
+}
+
+async function clearBg() {
+  if (!profileView.value) return;
+  mediaBusy.value = true;
+  try {
+    const res =
+      profileView.value.kind === 'user'
+        ? await api.clearMyBg()
+        : await api.clearCharacterBg(profileView.value.id);
+    await applyProfileMedia(res.profile);
+    status.value = '已恢复默认背景';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    mediaBusy.value = false;
+  }
+}
+
+async function clearSpaceBg() {
+  mediaBusy.value = true;
+  try {
+    const res = await api.clearSpaceBg();
+    meProfile.value = res.profile;
+    status.value = '已恢复默认空间封面';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    mediaBusy.value = false;
+  }
+}
+
+function privatePeer(c: Conversation | null | undefined) {
+  if (!c || c.type !== 'private') return null;
+  return (c.members && c.members[0]) || null;
+}
+
+function headerAvatar(c: Conversation | null | undefined) {
+  const peer = privatePeer(c);
+  if (peer?.avatar_path) return peer.avatar_path;
+  return null;
+}
+
 async function openMyProfile() {
   profileLoading.value = true;
   profileView.value = { kind: 'user' };
@@ -231,6 +377,7 @@ async function saveMyProfile() {
       bio: editBio.value,
     });
     profile.value = res.profile;
+    meProfile.value = res.profile;
     profileEditing.value = false;
     status.value = '已保存';
   } catch (err) {
@@ -808,6 +955,7 @@ watch(tab, (t) => {
 });
 
 onMounted(async () => {
+  await refreshMeProfile();
   try {
     const h = await api.health();
     status.value = h.ok ? '' : '后端异常';
@@ -821,7 +969,10 @@ onMounted(async () => {
 <template>
   <div class="wx-shell" @click="menuOpen = false; msgMenuId = null; listCtxId = null; momentMenuId = null; contactMenuId = null">
     <aside class="wx-nav">
-      <div class="wx-nav-avatar" title="我的主页" role="button" @click.stop="openMyProfile">馆</div>
+      <div class="wx-nav-avatar" title="我的主页" role="button" @click.stop="openMyProfile">
+        <img v-if="meProfile?.avatar_path" :src="meProfile.avatar_path" alt="" />
+        <template v-else>{{ avatarText(meProfile?.name || '旅人') }}</template>
+      </div>
       <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" title="消息" aria-label="消息" @click="tab = 'chat'">
         <svg class="wx-nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </button>
@@ -868,6 +1019,27 @@ onMounted(async () => {
         style="display: none"
         @change="onImport"
       />
+      <input
+        ref="avatarFileInput"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+        style="display: none"
+        @change="onAvatarFileChange"
+      />
+      <input
+        ref="bgFileInput"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+        style="display: none"
+        @change="onBgFileChange"
+      />
+      <input
+        ref="spaceBgFileInput"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+        style="display: none"
+        @change="onSpaceBgFileChange"
+      />
 
       <div v-if="tab === 'chat'" class="wx-list">
         <div v-for="c in conversations" :key="c.id" class="wx-swipe-row">
@@ -884,9 +1056,15 @@ onMounted(async () => {
             @pointercancel="onSwipeEnd"
           >
             <div v-if="collageMembers(c).length" class="wx-avatar collage" :data-n="Math.min(collageMembers(c).length, 4)">
-              <span v-for="mem in collageMembers(c)" :key="mem.id">{{ avatarText(mem.name) }}</span>
+              <span v-for="mem in collageMembers(c)" :key="mem.id">
+                <img v-if="mem.avatar_path" :src="mem.avatar_path" alt="" />
+                <template v-else>{{ avatarText(mem.name) }}</template>
+              </span>
             </div>
-            <div v-else class="wx-avatar">{{ avatarText(c.title) }}</div>
+            <div v-else class="wx-avatar">
+              <img v-if="privatePeer(c)?.avatar_path" :src="privatePeer(c)!.avatar_path!" alt="" />
+              <template v-else>{{ avatarText(c.title) }}</template>
+            </div>
             <div class="wx-list-meta">
               <div class="wx-list-top">
                 <div class="wx-list-title">{{ c.title }}</div>
@@ -999,8 +1177,23 @@ onMounted(async () => {
             <span class="wx-hint" style="margin-left:auto">{{ status }}</span>
           </div>
           <div class="wx-profile-card">
+            <div
+              class="wx-profile-cover"
+              :style="profile?.bg_path ? { backgroundImage: 'url(' + profile.bg_path + ')' } : undefined"
+            >
+              <div class="wx-cover-actions">
+                <button type="button" class="wx-mini-btn" :disabled="mediaBusy" @click.stop="bgFileInput?.click()">更换背景</button>
+                <button
+                  v-if="profile?.bg_path"
+                  type="button"
+                  class="wx-mini-btn"
+                  :disabled="mediaBusy"
+                  @click.stop="clearBg"
+                >恢复默认</button>
+              </div>
+            </div>
             <div class="wx-profile-hero">
-              <div class="wx-avatar lg">
+              <div class="wx-avatar lg" role="button" title="更换头像" @click="avatarFileInput?.click()">
                 <img v-if="profile?.avatar_path" :src="profile.avatar_path" alt="" />
                 <template v-else>{{ avatarText(profile?.name || (profileView.kind === 'user' ? '旅人' : '?')) }}</template>
               </div>
@@ -1034,7 +1227,18 @@ onMounted(async () => {
                 </template>
               </div>
             </div>
-            <div class="wx-profile-bio">
+            <div 
+            <div class="wx-profile-media">
+              <button type="button" class="wx-mini-btn" :disabled="mediaBusy" @click="avatarFileInput?.click()">更换头像</button>
+              <button
+                v-if="profile?.avatar_path"
+                type="button"
+                class="wx-mini-btn"
+                :disabled="mediaBusy"
+                @click="clearAvatar"
+              >恢复默认头像</button>
+            </div>
+class="wx-profile-bio">
               <div class="wx-profile-label">简介</div>
               <template v-if="profileView.kind === 'user' && profileEditing">
                 <textarea v-model="editBio" class="wx-profile-bio-input" rows="3" maxlength="500" placeholder="写一点关于自己…" />
@@ -1068,11 +1272,28 @@ onMounted(async () => {
 
       <template v-else-if="tab === 'moments'">
         <div class="wx-moments">
-          <div class="wx-moments-cover"></div>
+          <div
+            class="wx-moments-cover"
+            :style="meProfile?.space_bg_path ? { backgroundImage: 'url(' + meProfile.space_bg_path + ')' } : undefined"
+          >
+            <div class="wx-cover-actions">
+              <button type="button" class="wx-mini-btn" :disabled="mediaBusy" @click.stop="spaceBgFileInput?.click()">更换封面</button>
+              <button
+                v-if="meProfile?.space_bg_path"
+                type="button"
+                class="wx-mini-btn"
+                :disabled="mediaBusy"
+                @click.stop="clearSpaceBg"
+              >恢复默认</button>
+            </div>
+          </div>
           <div class="wx-moments-profile">
-            <div class="wx-avatar" role="button" title="我的主页" @click.stop="openMyProfile">我</div>
+            <div class="wx-avatar" role="button" title="我的主页" @click.stop="openMyProfile">
+              <img v-if="meProfile?.avatar_path" :src="meProfile.avatar_path" alt="" />
+              <template v-else>{{ avatarText(meProfile?.name || '旅人') }}</template>
+            </div>
             <div>
-              <div class="nm" role="button" @click.stop="openMyProfile">旅人</div>
+              <div class="nm" role="button" @click.stop="openMyProfile">{{ meProfile?.name || '旅人' }}</div>
               <div class="sg">记录与角色的日常</div>
             </div>
             <span class="wx-hint" style="margin-left:auto;margin-bottom:8px">{{ status }}</span>
@@ -1126,7 +1347,10 @@ onMounted(async () => {
       <template v-else>
         <div class="wx-main-header">
           <div class="wx-header-left">
-            <div class="wx-header-ava">{{ avatarText(activeConversation?.title) }}</div>
+            <div class="wx-header-ava">
+              <img v-if="headerAvatar(activeConversation)" :src="headerAvatar(activeConversation)!" alt="" />
+              <template v-else>{{ avatarText(activeConversation?.title) }}</template>
+            </div>
             <div class="wx-header-meta">
               <div class="cname">{{ activeConversation?.title || '未选择会话' }}</div>
               <div class="cstatus">{{ headerStatus(activeConversation) }}</div>

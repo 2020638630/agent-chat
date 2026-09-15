@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { unlinkUploadPublicPath } from '../services/uploadImage.js';
 import { v4 as uuid } from 'uuid';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -157,8 +158,10 @@ export async function characterRoutes(app: FastifyInstance) {
 
   app.delete<{ Params: { id: string } }>('/api/characters/:id', async (req, reply) => {
     const character = db
-      .prepare('SELECT id, name FROM characters WHERE id = ?')
-      .get(req.params.id) as { id: string; name: string } | undefined;
+      .prepare('SELECT id, name, avatar_path, bg_path FROM characters WHERE id = ?')
+      .get(req.params.id) as
+      | { id: string; name: string; avatar_path: string | null; bg_path: string | null }
+      | undefined;
     if (!character) return reply.code(404).send({ error: '角色不存在' });
 
     const privateConvs = db
@@ -188,6 +191,9 @@ export async function characterRoutes(app: FastifyInstance) {
       delChar.run(character.id);
     });
     tx();
+
+    unlinkUploadPublicPath(character.avatar_path);
+    unlinkUploadPublicPath(character.bg_path);
 
     return { ok: true, deletedId: character.id, name: character.name };
   });

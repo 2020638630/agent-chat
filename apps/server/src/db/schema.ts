@@ -2,6 +2,21 @@ import type Database from 'better-sqlite3';
 
 
 
+
+export function ensureMediaPathColumns(db: Database.Database) {
+  const userCols = db.prepare(`PRAGMA table_info(user_profile)`).all() as Array<{ name: string }>;
+  if (!userCols.some((c) => c.name === 'bg_path')) {
+    db.exec(`ALTER TABLE user_profile ADD COLUMN bg_path TEXT`);
+  }
+  if (!userCols.some((c) => c.name === 'space_bg_path')) {
+    db.exec(`ALTER TABLE user_profile ADD COLUMN space_bg_path TEXT`);
+  }
+  const charCols = db.prepare(`PRAGMA table_info(characters)`).all() as Array<{ name: string }>;
+  if (!charCols.some((c) => c.name === 'bg_path')) {
+    db.exec(`ALTER TABLE characters ADD COLUMN bg_path TEXT`);
+  }
+}
+
 export function ensureMessageSourceColumn(db: Database.Database) {
   const cols = db.prepare(`PRAGMA table_info(messages)`).all() as Array<{ name: string }>;
   if (!cols.some((c) => c.name === 'source')) {
@@ -149,5 +164,6 @@ export function migrate(db: Database.Database) {
 
   ensureConversationReadColumns(db);
   ensureMessageSourceColumn(db);
+  ensureMediaPathColumns(db);
   mergeDuplicatePrivateConversations(db);
 }
