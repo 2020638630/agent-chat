@@ -1189,15 +1189,8 @@ onMounted(async () => {
         </div>
       </div>
       <div v-else class="wx-list">
-        <div v-for="ch in characters" :key="ch.id" class="wx-list-item" @click="letThemPost(ch.id)">
-          <div class="wx-avatar">
-            <img v-if="ch.avatar_path" :src="ch.avatar_path" alt="" />
-            <template v-else>{{ avatarText(ch.name) }}</template>
-          </div>
-          <div class="wx-list-meta">
-            <div class="wx-list-title">让 {{ ch.name }} 发一条</div>
-            <div class="wx-list-sub">点击生成空间动态</div>
-          </div>
+        <div class="wx-empty" style="padding: 40px 16px">
+          在通讯录点角色「⋯ → 让 TA 发动态」
         </div>
       </div>
     </section>
@@ -1373,7 +1366,7 @@ onMounted(async () => {
               </div>
             </div>
             <div v-if="!moments.length" class="wx-empty">
-              还没有动态。<br />左侧点角色，或通讯录「⋯ → 让 TA 发动态」。
+              还没有动态。<br />去通讯录点角色「⋯ → 让 TA 发动态」。
             </div>
           </div>
         </div>
