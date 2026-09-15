@@ -75,6 +75,11 @@ export const api = {
   listCharacters: () =>
     fetch('/api/characters').then((r) => json<{ characters: Character[] }>(r)),
 
+  deleteCharacter: (id: string) =>
+    fetch(`/api/characters/${id}`, { method: 'DELETE' }).then((r) =>
+      json<{ ok: boolean; deletedId: string; name: string }>(r)
+    ),
+
   importCharacter: async (file: File, opts?: { overwrite?: boolean }) => {
     const fd = new FormData();
     fd.append('file', file);

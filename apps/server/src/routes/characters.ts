@@ -154,4 +154,42 @@ export async function characterRoutes(app: FastifyInstance) {
     const row = db.prepare('SELECT * FROM characters WHERE id = ?').get(id);
     return { character: row, overwritten: false };
   });
+
+  app.delete<{ Params: { id: string } }>('/api/characters/:id', async (req, reply) => {
+    const character = db
+      .prepare('SELECT id, name FROM characters WHERE id = ?')
+      .get(req.params.id) as { id: string; name: string } | undefined;
+    if (!character) return reply.code(404).send({ error: '角色不存在' });
+
+    const privateConvs = db
+      .prepare(
+        `SELECT c.id FROM conversations c
+         WHERE c.type = 'private'
+           AND (SELECT COUNT(*) FROM conversation_members cm WHERE cm.conversation_id = c.id) = 1
+           AND EXISTS (
+             SELECT 1 FROM conversation_members cm2
+             WHERE cm2.conversation_id = c.id AND cm2.character_id = ?
+           )`
+      )
+      .all(character.id) as Array<{ id: string }>;
+
+    const delMessages = db.prepare('DELETE FROM messages WHERE conversation_id = ?');
+    const delMembers = db.prepare('DELETE FROM conversation_members WHERE conversation_id = ?');
+    const delConv = db.prepare('DELETE FROM conversations WHERE id = ?');
+    const delChar = db.prepare('DELETE FROM characters WHERE id = ?');
+
+    const tx = db.transaction(() => {
+      for (const c of privateConvs) {
+        delMessages.run(c.id);
+        delMembers.run(c.id);
+        delConv.run(c.id);
+      }
+      // group memberships + moments cascade from character delete
+      delChar.run(character.id);
+    });
+    tx();
+
+    return { ok: true, deletedId: character.id, name: character.name };
+  });
+
 }

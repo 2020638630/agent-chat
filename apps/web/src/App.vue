@@ -27,6 +27,7 @@ const msgMenuId = ref<string | null>(null);
 const momentMenuId = ref<string | null>(null);
 const pendingDeleteMoment = ref<Moment | null>(null);
 const pendingOverwriteImport = ref<{ file: File; name: string } | null>(null);
+const pendingDeleteCharacter = ref<{ id: string; name: string } | null>(null);
 const listCtxId = ref<string | null>(null);
 const listCtxPos = ref({ x: 0, y: 0 });
 const swipeId = ref<string | null>(null);
@@ -352,6 +353,42 @@ async function onImport(e: Event) {
     status.value = err instanceof Error ? err.message : String(err);
   } finally {
     input.value = '';
+  }
+}
+
+function askDeleteCharacter(id: string, name: string) {
+  contactMenuId.value = null;
+  pendingDeleteCharacter.value = { id, name };
+}
+
+function cancelDeleteCharacter() {
+  pendingDeleteCharacter.value = null;
+}
+
+async function confirmDeleteCharacter() {
+  const pending = pendingDeleteCharacter.value;
+  if (!pending) return;
+  try {
+    await api.deleteCharacter(pending.id);
+    pendingDeleteCharacter.value = null;
+    if (profileView.value?.kind === 'character' && profileView.value.id === pending.id) {
+      await closeProfile();
+    }
+    // clear open private chat with this character
+    const open = conversations.value.find((c) => c.id === activeConversationId.value);
+    if (
+      open &&
+      open.type === 'private' &&
+      open.members?.length === 1 &&
+      open.members[0].id === pending.id
+    ) {
+      activeConversationId.value = null;
+      messages.value = [];
+    }
+    await Promise.all([refreshCharacters(), refreshConversations(), refreshMoments()]);
+    status.value = `已删除角色「${pending.name}」`;
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
   }
 }
 
@@ -804,6 +841,7 @@ onMounted(async () => {
             <div v-if="contactMenuId === ch.id" class="wx-menu contact">
               <button @click="contactMenuId = null; openCharacterProfile(ch.id)">查看主页</button>
               <button @click="contactMenuId = null; letThemPost(ch.id)">让 TA 发动态</button>
+              <button class="danger" @click="askDeleteCharacter(ch.id, ch.name)">删除角色</button>
             </div>
           </div>
         </div>
@@ -855,7 +893,15 @@ onMounted(async () => {
                     <button class="wx-mini-btn" @click="profileEditing = false; editMood = profile?.mood || ''; editBio = profile?.bio || ''">取消</button>
                   </template>
                 </template>
-                <button v-else class="wx-mini-btn primary" @click="messageFromProfile">发消息</button>
+                <template v-else>
+                  <button class="wx-mini-btn primary" @click="messageFromProfile">发消息</button>
+                  <button
+                    class="wx-mini-btn danger"
+                    @click="askDeleteCharacter(profileView.id, profile?.name || '角色')"
+                  >
+                    删除角色
+                  </button>
+                </template>
               </div>
             </div>
             <div class="wx-profile-bio">
@@ -1072,6 +1118,23 @@ onMounted(async () => {
         <div class="wx-confirm-actions">
           <button class="wx-mini-btn" @click="cancelOverwriteImport">取消</button>
           <button class="wx-confirm-ok" @click="confirmOverwriteImport">确认覆盖</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="pendingDeleteCharacter"
+      class="wx-confirm-mask"
+      @click.self="cancelDeleteCharacter"
+    >
+      <div class="wx-confirm-card" @click.stop>
+        <div class="wx-confirm-title">删除角色</div>
+        <div class="wx-confirm-body">
+          确定删除「{{ pendingDeleteCharacter.name }}」？其私聊、动态和群成员关系也会一并删除，此操作不可恢复。
+        </div>
+        <div class="wx-confirm-actions">
+          <button class="wx-mini-btn" @click="cancelDeleteCharacter">取消</button>
+          <button class="wx-confirm-ok" @click="confirmDeleteCharacter">确定删除</button>
         </div>
       </div>
     </div>
