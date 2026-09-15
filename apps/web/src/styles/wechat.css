@@ -1256,37 +1256,169 @@ select {
 }
 
 
-/* ===== Voice (B-04) ===== */
-.wx-mic {
+
+/* ===== Voice (B-04 / B-06) ===== */
+.wx-mic-icon {
   flex-shrink: 0;
-  border: 1px solid rgba(120, 120, 140, 0.25);
-  background: rgba(255, 255, 255, 0.55);
-  color: var(--text);
-  border-radius: 8px;
-  padding: 8px 12px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.45);
+  color: var(--text-2);
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
   cursor: pointer;
-  font-size: 13px;
   user-select: none;
   touch-action: none;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
-.wx-mic:hover:not(:disabled) {
+.wx-mic-icon:hover:not(:disabled) {
   background: var(--hover);
+  color: var(--accent-deep);
 }
-.wx-mic.recording {
-  background: #e85d5d;
-  color: #fff;
-  border-color: transparent;
+.wx-mic-icon.active {
+  background: rgba(232, 93, 93, 0.12);
+  color: #d94848;
+  border-color: rgba(232, 93, 93, 0.35);
 }
-.wx-mic:disabled {
-  opacity: 0.5;
+.wx-mic-icon:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
-.wx-voice-hint {
-  margin-top: 6px;
+
+.wx-input-bar.is-recording {
+  background: rgba(255, 245, 245, 0.75);
+  border-color: rgba(232, 93, 93, 0.28);
+}
+.wx-input-bar.is-recording.is-cancel {
+  background: rgba(255, 250, 240, 0.85);
+  border-color: rgba(200, 140, 60, 0.35);
+}
+
+.wx-record-strip {
+  flex: 1;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 4px 8px;
+}
+.wx-record-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e85d5d;
+  box-shadow: 0 0 0 0 rgba(232, 93, 93, 0.45);
+  animation: wx-rec-pulse 1.2s ease-out infinite;
+}
+.wx-input-bar.is-cancel .wx-record-pulse {
+  background: #c48a2e;
+  box-shadow: none;
+  animation: none;
+}
+.wx-record-text {
+  font-size: 13px;
+  color: var(--text-2);
+  letter-spacing: 0.02em;
+}
+.wx-input-bar.is-cancel .wx-record-text {
+  color: #a06a1a;
+}
+@keyframes wx-rec-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(232, 93, 93, 0.45); }
+  70% { box-shadow: 0 0 0 10px rgba(232, 93, 93, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(232, 93, 93, 0); }
+}
+
+.wx-voice-bubble {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(280px, 70%);
+  padding: 10px 12px;
+  border: 1px solid rgba(140, 130, 180, 0.28);
+  border-radius: 14px 14px 4px 14px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.72), rgba(230, 226, 245, 0.55));
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+}
+.wx-msg.me .wx-voice-bubble {
+  border-radius: 14px 14px 14px 4px;
+  background: linear-gradient(135deg, rgba(236, 232, 255, 0.85), rgba(255, 255, 255, 0.55));
+}
+.wx-voice-bubble:hover {
+  border-color: rgba(120, 100, 180, 0.4);
+}
+.wx-voice-bubble.playing {
+  border-color: var(--accent-deep);
+}
+.wx-voice-play {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(110, 95, 170, 0.14);
+  color: var(--accent-deep);
+  font-size: 11px;
+}
+.wx-voice-wave {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+  flex-shrink: 0;
+}
+.wx-voice-wave i {
+  display: block;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent-deep);
+  opacity: 0.55;
+  height: 6px;
+}
+.wx-voice-wave i:nth-child(1) { height: 6px; }
+.wx-voice-wave i:nth-child(2) { height: 12px; }
+.wx-voice-wave i:nth-child(3) { height: 8px; }
+.wx-voice-wave i:nth-child(4) { height: 14px; }
+.wx-voice-wave i:nth-child(5) { height: 7px; }
+.wx-voice-bubble.playing .wx-voice-wave i {
+  animation: wx-wave 0.9s ease-in-out infinite;
+}
+.wx-voice-bubble.playing .wx-voice-wave i:nth-child(2) { animation-delay: 0.1s; }
+.wx-voice-bubble.playing .wx-voice-wave i:nth-child(3) { animation-delay: 0.2s; }
+.wx-voice-bubble.playing .wx-voice-wave i:nth-child(4) { animation-delay: 0.15s; }
+.wx-voice-bubble.playing .wx-voice-wave i:nth-child(5) { animation-delay: 0.25s; }
+@keyframes wx-wave {
+  0%, 100% { transform: scaleY(0.7); }
+  50% { transform: scaleY(1.25); }
+}
+.wx-voice-label {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-deep);
+}
+.wx-voice-transcript {
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
   color: var(--text-3);
-  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+
 .wx-msg-tts {
   border: none;
   background: transparent;

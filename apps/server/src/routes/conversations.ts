@@ -3,7 +3,14 @@ import { v4 as uuid } from 'uuid';
 import { db } from '../db/index.js';
 import { buildSystemPrompt } from '../utils/characterCard.js';
 import { chatCompletion } from '../services/llm.js';
-import { synthesizeSpeech, transcribeAudio, ttsFilename } from '../services/audio.js';
+import {
+  isTtsCacheFileForMessage,
+  resolveCharacterVoiceKind,
+  synthesizeSpeech,
+  ttsFilename,
+  transcribeAudio,
+  voiceForKind,
+} from '../services/audio.js';
 import { getUploadsDir } from '../db/index.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -74,12 +81,20 @@ function isLlmFailureNotice(content: string) {
 
 function deleteTtsForMessageIds(ids: string[]) {
   const uploads = getUploadsDir();
+  let files: string[] = [];
+  try {
+    files = fs.readdirSync(uploads);
+  } catch {
+    return;
+  }
   for (const id of ids) {
-    const file = path.join(uploads, ttsFilename(id));
-    try {
-      if (fs.existsSync(file)) fs.unlinkSync(file);
-    } catch {
-      /* ignore */
+    for (const name of files) {
+      if (!isTtsCacheFileForMessage(name, id)) continue;
+      try {
+        fs.unlinkSync(path.join(uploads, name));
+      } catch {
+        /* ignore */
+      }
     }
   }
 }
@@ -527,17 +542,30 @@ export async function conversationRoutes(app: FastifyInstance) {
 
   app.get<{ Params: { id: string } }>('/api/messages/:id/tts', async (req, reply) => {
     const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(req.params.id) as
-      | { id: string; content: string; role: string }
+      | { id: string; content: string; role: string; character_id: string | null }
       | undefined;
     if (!msg) return reply.code(404).send({ error: '消息不存在' });
 
+    let voice: string;
+    if (msg.role === 'user') {
+      voice = voiceForKind('user');
+    } else if (msg.character_id) {
+      const ch = db
+        .prepare('SELECT name, raw_json FROM characters WHERE id = ?')
+        .get(msg.character_id) as { name: string; raw_json: string | null } | undefined;
+      const kind = resolveCharacterVoiceKind(ch?.name || '', ch?.raw_json);
+      voice = voiceForKind(kind);
+    } else {
+      voice = voiceForKind('female');
+    }
+
     const uploads = getUploadsDir();
-    const name = ttsFilename(msg.id);
+    const name = ttsFilename(msg.id, voice);
     const filePath = path.join(uploads, name);
 
     if (!fs.existsSync(filePath)) {
       try {
-        const audio = await synthesizeSpeech(msg.content);
+        const audio = await synthesizeSpeech(msg.content, voice);
         fs.writeFileSync(filePath, audio);
       } catch (e) {
         const errMsg = e instanceof Error ? e.message : String(e);

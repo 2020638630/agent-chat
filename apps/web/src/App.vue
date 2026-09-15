@@ -15,6 +15,9 @@ const draft = ref('');
 const sending = ref(false);
 const voice = useHoldToTalk();
 const voiceBusy = ref(false);
+const voiceCancelHint = ref(false);
+let voicePointerStartY = 0;
+let voiceWillCancel = false;
 const ttsPlayingId = ref<string | null>(null);
 const ttsLoadingId = ref<string | null>(null);
 let ttsAudio: HTMLAudioElement | null = null;
@@ -439,12 +442,30 @@ async function send() {
 async function onVoicePointerDown(e: PointerEvent) {
   e.preventDefault();
   if (sending.value || voiceBusy.value || !activeConversationId.value) return;
+  voicePointerStartY = e.clientY;
+  voiceWillCancel = false;
+  voiceCancelHint.value = false;
   (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
   await voice.start();
 }
 
+function onVoicePointerMove(e: PointerEvent) {
+  if (!voice.holding.value && !voice.recording.value) return;
+  const dy = e.clientY - voicePointerStartY;
+  voiceWillCancel = dy < -48;
+  voiceCancelHint.value = voiceWillCancel;
+}
+
 async function onVoicePointerUp() {
   if (!voice.holding.value && !voice.recording.value) return;
+  const cancel = voiceWillCancel;
+  voiceCancelHint.value = false;
+  voiceWillCancel = false;
+  if (cancel) {
+    voice.cancel();
+    status.value = '已取消发送';
+    return;
+  }
   const blob = await voice.stop();
   if (voice.error.value) {
     status.value = voice.error.value;
@@ -464,7 +485,7 @@ async function onVoicePointerUp() {
     await refreshConversations();
     await nextTick();
     if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight;
-    status.value = res.transcript ? `已识别：${res.transcript}` : '';
+    status.value = '';
   } catch (err) {
     status.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -474,7 +495,13 @@ async function onVoicePointerUp() {
 }
 
 function onVoicePointerCancel() {
+  voiceCancelHint.value = false;
+  voiceWillCancel = false;
   voice.cancel();
+}
+
+function isUserVoice(m: ChatMessage) {
+  return m.role === 'user' && m.source === 'voice';
 }
 
 async function playTts(m: ChatMessage) {
@@ -1124,9 +1151,24 @@ onMounted(async () => {
                         <span class="wx-msg-time">{{ formatTime(m.created_at) }}</span>
                       </div>
                       <div class="wx-bubble-row">
-                        <div class="wx-bubble" v-html="mentionHtml(m.content)"></div>
+                        <button
+                          v-if="isUserVoice(m)"
+                          type="button"
+                          class="wx-voice-bubble"
+                          :class="{ playing: ttsPlayingId === m.id, loading: ttsLoadingId === m.id }"
+                          @click="playTts(m)"
+                        >
+                          <span class="wx-voice-play">{{ ttsLoadingId === m.id ? '…' : ttsPlayingId === m.id ? '■' : '▶' }}</span>
+                          <span class="wx-voice-wave" aria-hidden="true">
+                            <i></i><i></i><i></i><i></i><i></i>
+                          </span>
+                          <span class="wx-voice-label">语音</span>
+                          <span class="wx-voice-transcript">{{ m.content }}</span>
+                        </button>
+                        <div v-else class="wx-bubble" v-html="mentionHtml(m.content)"></div>
                         <div class="wx-msg-actions" @click.stop>
                           <button
+                            v-if="!isUserVoice(m)"
                             class="wx-msg-tts"
                             type="button"
                             title="朗读"
@@ -1161,28 +1203,38 @@ onMounted(async () => {
                   </option>
                 </select>
               </div>
-              <div class="wx-input-bar">
+              <div
+                class="wx-input-bar"
+                :class="{ 'is-recording': voice.holding || voice.recording, 'is-cancel': voiceCancelHint }"
+              >
                 <button
                   type="button"
-                  class="wx-mic"
-                  :class="{ recording: voice.holding || voice.recording, busy: voiceBusy }"
+                  class="wx-mic-icon"
+                  :class="{ active: voice.holding || voice.recording, busy: voiceBusy }"
                   :disabled="sending || voiceBusy"
                   title="按住说话"
+                  aria-label="按住说话"
                   @pointerdown="onVoicePointerDown"
+                  @pointermove="onVoicePointerMove"
                   @pointerup="onVoicePointerUp"
                   @pointercancel="onVoicePointerCancel"
                   @contextmenu.prevent
                 >
-                  {{ voice.holding || voice.recording ? '松开' : '语音' }}
+                  <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                 </button>
-                <textarea
-                  v-model="draft"
-                  placeholder="发消息…"
-                  @keydown="onKeydown"
-                />
-                <button class="wx-send" :disabled="sending || !draft.trim()" @click="send">发送</button>
+                <template v-if="!(voice.holding || voice.recording)">
+                  <textarea
+                    v-model="draft"
+                    placeholder="发消息…"
+                    @keydown="onKeydown"
+                  />
+                  <button class="wx-send" :disabled="sending || !draft.trim()" @click="send">发送</button>
+                </template>
+                <div v-else class="wx-record-strip" aria-live="polite">
+                  <span class="wx-record-pulse" aria-hidden="true"></span>
+                  <span class="wx-record-text">{{ voiceCancelHint ? '松开取消' : '松开发送 · 上滑取消' }}</span>
+                </div>
               </div>
-              <div v-if="voice.holding || voice.recording" class="wx-voice-hint">按住说话中…松开结束</div>
             </div>
           </div>
 
