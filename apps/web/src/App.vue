@@ -1159,7 +1159,10 @@ onMounted(async () => {
       </div>
       <div v-else class="wx-list">
         <div v-for="ch in characters" :key="ch.id" class="wx-list-item" @click="letThemPost(ch.id)">
-          <div class="wx-avatar">{{ avatarText(ch.name) }}</div>
+          <div class="wx-avatar">
+            <img v-if="ch.avatar_path" :src="ch.avatar_path" alt="" />
+            <template v-else>{{ avatarText(ch.name) }}</template>
+          </div>
           <div class="wx-list-meta">
             <div class="wx-list-title">让 {{ ch.name }} 发一条</div>
             <div class="wx-list-sub">点击生成空间动态</div>
@@ -1271,31 +1274,33 @@ onMounted(async () => {
 
       <template v-else-if="tab === 'moments'">
         <div class="wx-moments">
-          <div
-            class="wx-moments-cover"
-            :style="meProfile?.space_bg_path ? { backgroundImage: 'url(' + meProfile.space_bg_path + ')' } : undefined"
-          >
-            <div class="wx-cover-actions">
-              <button type="button" class="wx-mini-btn" :disabled="mediaBusy" @click.stop="spaceBgFileInput?.click()">更换封面</button>
-              <button
-                v-if="meProfile?.space_bg_path"
-                type="button"
-                class="wx-mini-btn"
-                :disabled="mediaBusy"
-                @click.stop="clearSpaceBg"
-              >恢复默认</button>
+          <div class="wx-moments-hero">
+            <div
+              class="wx-moments-cover"
+              :style="meProfile?.space_bg_path ? { backgroundImage: 'url(' + meProfile.space_bg_path + ')' } : undefined"
+            >
+              <div class="wx-cover-actions">
+                <button type="button" class="wx-mini-btn" :disabled="mediaBusy" @click.stop="spaceBgFileInput?.click()">更换封面</button>
+                <button
+                  v-if="meProfile?.space_bg_path"
+                  type="button"
+                  class="wx-mini-btn"
+                  :disabled="mediaBusy"
+                  @click.stop="clearSpaceBg"
+                >恢复默认</button>
+              </div>
             </div>
-          </div>
-          <div class="wx-moments-profile">
-            <div class="wx-avatar" role="button" title="我的主页" @click.stop="openMyProfile">
-              <img v-if="meProfile?.avatar_path" :src="meProfile.avatar_path" alt="" />
-              <template v-else>{{ avatarText(meProfile?.name || '旅人') }}</template>
+            <div class="wx-moments-profile">
+              <div class="wx-avatar" role="button" title="我的主页" @click.stop="openMyProfile">
+                <img v-if="meProfile?.avatar_path" :src="meProfile.avatar_path" alt="" />
+                <template v-else>{{ avatarText(meProfile?.name || '旅人') }}</template>
+              </div>
+              <div>
+                <div class="nm" role="button" @click.stop="openMyProfile">{{ meProfile?.name || '旅人' }}</div>
+                <div class="sg">记录与角色的日常</div>
+              </div>
+              <span class="wx-hint" style="margin-left:auto;margin-bottom:8px">{{ status }}</span>
             </div>
-            <div>
-              <div class="nm" role="button" @click.stop="openMyProfile">{{ meProfile?.name || '旅人' }}</div>
-              <div class="sg">记录与角色的日常</div>
-            </div>
-            <span class="wx-hint" style="margin-left:auto;margin-bottom:8px">{{ status }}</span>
           </div>
           <div class="wx-moments-feed">
             <div v-for="m in moments" :key="m.id" class="wx-moment-card">
