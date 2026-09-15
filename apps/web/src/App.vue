@@ -13,7 +13,15 @@ const moments = ref<Moment[]>([]);
 const activeConversationId = ref<string | null>(null);
 const draft = ref('');
 const sending = ref(false);
-const voice = useHoldToTalk();
+const {
+  holding: voiceHolding,
+  recording: voiceRecording,
+  error: voiceError,
+  start: voiceStart,
+  stop: voiceStop,
+  cancel: voiceCancel,
+} = useHoldToTalk();
+const voiceActive = computed(() => voiceHolding.value || voiceRecording.value);
 const voiceBusy = ref(false);
 const voiceCancelHint = ref(false);
 let voicePointerStartY = 0;
@@ -446,29 +454,29 @@ async function onVoicePointerDown(e: PointerEvent) {
   voiceWillCancel = false;
   voiceCancelHint.value = false;
   (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-  await voice.start();
+  await voiceStart();
 }
 
 function onVoicePointerMove(e: PointerEvent) {
-  if (!voice.holding.value && !voice.recording.value) return;
+  if (!voiceHolding.value && !voiceRecording.value) return;
   const dy = e.clientY - voicePointerStartY;
   voiceWillCancel = dy < -48;
   voiceCancelHint.value = voiceWillCancel;
 }
 
 async function onVoicePointerUp() {
-  if (!voice.holding.value && !voice.recording.value) return;
+  if (!voiceHolding.value && !voiceRecording.value) return;
   const cancel = voiceWillCancel;
   voiceCancelHint.value = false;
   voiceWillCancel = false;
   if (cancel) {
-    voice.cancel();
+    voiceCancel();
     status.value = '已取消发送';
     return;
   }
-  const blob = await voice.stop();
-  if (voice.error.value) {
-    status.value = voice.error.value;
+  const blob = await voiceStop();
+  if (voiceError.value) {
+    status.value = voiceError.value;
     return;
   }
   if (!blob || !activeConversationId.value) {
@@ -497,7 +505,7 @@ async function onVoicePointerUp() {
 function onVoicePointerCancel() {
   voiceCancelHint.value = false;
   voiceWillCancel = false;
-  voice.cancel();
+  voiceCancel();
 }
 
 function isUserVoice(m: ChatMessage) {
@@ -1205,12 +1213,12 @@ onMounted(async () => {
               </div>
               <div
                 class="wx-input-bar"
-                :class="{ 'is-recording': voice.holding || voice.recording, 'is-cancel': voiceCancelHint }"
+                :class="{ 'is-recording': voiceActive, 'is-cancel': voiceCancelHint }"
               >
                 <button
                   type="button"
                   class="wx-mic-icon"
-                  :class="{ active: voice.holding || voice.recording, busy: voiceBusy }"
+                  :class="{ active: voiceActive, busy: voiceBusy }"
                   :disabled="sending || voiceBusy"
                   title="按住说话"
                   aria-label="按住说话"
@@ -1222,7 +1230,7 @@ onMounted(async () => {
                 >
                   <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
                 </button>
-                <template v-if="!(voice.holding || voice.recording)">
+                <template v-if="!(voiceActive)">
                   <textarea
                     v-model="draft"
                     placeholder="发消息…"
