@@ -1,5 +1,13 @@
 import type Database from 'better-sqlite3';
 
+
+export function ensureConversationReadColumns(db: Database.Database) {
+  const cols = db.prepare(`PRAGMA table_info(conversations)`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'last_read_at')) {
+    db.exec(`ALTER TABLE conversations ADD COLUMN last_read_at TEXT`);
+  }
+}
+
 export function mergeDuplicatePrivateConversations(db: Database.Database) {
   const privates = db
     .prepare(`SELECT id, created_at FROM conversations WHERE type = 'private'`)
@@ -131,5 +139,6 @@ export function migrate(db: Database.Database) {
     ).run(new Date().toISOString());
   }
 
+  ensureConversationReadColumns(db);
   mergeDuplicatePrivateConversations(db);
 }

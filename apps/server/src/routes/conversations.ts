@@ -62,6 +62,38 @@ function loadMembers(conversationId: string) {
     .all(conversationId);
 }
 
+
+function isLlmFailureNotice(content: string) {
+  return (content || '').includes('LLM 暂时不可用');
+}
+
+function markConversationRead(conversationId: string) {
+  const last = db
+    .prepare(
+      `SELECT created_at FROM messages
+       WHERE conversation_id = ?
+       ORDER BY created_at DESC, rowid DESC
+       LIMIT 1`
+    )
+    .get(conversationId) as { created_at: string } | undefined;
+  const at = last?.created_at || new Date().toISOString();
+  db.prepare(`UPDATE conversations SET last_read_at = ? WHERE id = ?`).run(at, conversationId);
+}
+
+function unreadCountFor(conversationId: string, lastReadAt: string | null | undefined) {
+  const cursor = lastReadAt || '';
+  const rows = db
+    .prepare(
+      `SELECT content FROM messages
+       WHERE conversation_id = ?
+         AND role = 'assistant'
+         AND created_at > ?
+       ORDER BY created_at ASC, rowid ASC`
+    )
+    .all(conversationId, cursor) as Array<{ content: string }>;
+  return rows.filter((r) => !isLlmFailureNotice(r.content)).length;
+}
+
 export async function conversationRoutes(app: FastifyInstance) {
   app.get('/api/conversations', async () => {
     const rows = db
@@ -79,6 +111,7 @@ export async function conversationRoutes(app: FastifyInstance) {
     const withMembers = rows.map((c: any) => ({
       ...c,
       members: loadMembers(c.id),
+      unread_count: unreadCountFor(c.id, c.last_read_at),
     }));
 
     return { conversations: withMembers };
@@ -207,6 +240,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       )
       .all(req.params.id);
 
+    markConversationRead(req.params.id);
     return { messages };
   });
 
@@ -385,6 +419,7 @@ export async function conversationRoutes(app: FastifyInstance) {
 
     const userMessage = db.prepare('SELECT * FROM messages WHERE id = ?').get(userMsgId);
 
+    markConversationRead(conversationId);
     return {
       userMessage,
       assistantMessages: [

@@ -14,6 +14,8 @@ export type Conversation = {
   last_message?: string | null;
   members?: Array<{ id: string; name: string; avatar_path?: string | null }>;
   updated_at?: string;
+  last_read_at?: string | null;
+  unread_count?: number;
 };
 
 export type ChatMessage = {

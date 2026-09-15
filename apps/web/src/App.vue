@@ -695,6 +695,7 @@ onMounted(async () => {
               </div>
               <div class="wx-list-sub">{{ c.last_message || (c.type === 'group' ? '群聊' : '私聊') }}</div>
             </div>
+            <span v-if="(c.unread_count || 0) > 0" class="wx-unread-badge">{{ c.unread_count > 99 ? '99+' : c.unread_count }}</span>
           </div>
         </div>
         <div
