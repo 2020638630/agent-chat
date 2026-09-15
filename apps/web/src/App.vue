@@ -95,7 +95,7 @@ function avatarText(name?: string) {
 function collageMembers(c: Conversation | null | undefined) {
   if (!c || c.type !== 'group') return [];
   const mems = c.members || [];
-  return mems.slice(0, 3);
+  return mems.slice(0, 4);
 }
 
 function speakerKey(m: ChatMessage) {
