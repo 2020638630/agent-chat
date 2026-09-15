@@ -26,6 +26,7 @@ export type ChatMessage = {
   character_name?: string | null;
   content: string;
   created_at: string;
+  source?: 'text' | 'voice';
 };
 
 export type MomentComment = {
@@ -142,6 +143,24 @@ export const api = {
     }).then((r) =>
       json<{ userMessage: ChatMessage; assistantMessages: ChatMessage[] }>(r)
     ),
+
+  sendVoiceMessage: async (id: string, blob: Blob, mentionCharacterId?: string) => {
+    const fd = new FormData();
+    const ext = blob.type.includes('wav') ? 'wav' : blob.type.includes('webm') ? 'webm' : 'wav';
+    fd.append('file', blob, `voice.${ext}`);
+    if (mentionCharacterId) fd.append('mentionCharacterId', mentionCharacterId);
+    const res = await fetch(`/api/conversations/${id}/messages/voice`, {
+      method: 'POST',
+      body: fd,
+    });
+    return json<{
+      userMessage: ChatMessage;
+      assistantMessages: ChatMessage[];
+      transcript?: string;
+    }>(res);
+  },
+
+  messageTtsUrl: (messageId: string) => `/api/messages/${messageId}/tts`,
 
   deleteMessage: (conversationId: string, messageId: string) =>
     fetch(`/api/conversations/${conversationId}/messages/${messageId}`, {

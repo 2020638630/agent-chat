@@ -1,6 +1,14 @@
 import type Database from 'better-sqlite3';
 
 
+
+export function ensureMessageSourceColumn(db: Database.Database) {
+  const cols = db.prepare(`PRAGMA table_info(messages)`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'source')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN source TEXT NOT NULL DEFAULT 'text'`);
+  }
+}
+
 export function ensureConversationReadColumns(db: Database.Database) {
   const cols = db.prepare(`PRAGMA table_info(conversations)`).all() as Array<{ name: string }>;
   if (!cols.some((c) => c.name === 'last_read_at')) {
@@ -140,5 +148,6 @@ export function migrate(db: Database.Database) {
   }
 
   ensureConversationReadColumns(db);
+  ensureMessageSourceColumn(db);
   mergeDuplicatePrivateConversations(db);
 }

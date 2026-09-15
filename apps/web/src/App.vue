@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { api, type Character, type ChatMessage, type Conversation, type Moment, type Profile } from './api/client';
+import { useHoldToTalk } from './composables/useHoldToTalk';
 
 type Tab = 'chat' | 'contacts' | 'moments';
 
@@ -12,6 +13,11 @@ const moments = ref<Moment[]>([]);
 const activeConversationId = ref<string | null>(null);
 const draft = ref('');
 const sending = ref(false);
+const voice = useHoldToTalk();
+const voiceBusy = ref(false);
+const ttsPlayingId = ref<string | null>(null);
+const ttsLoadingId = ref<string | null>(null);
+let ttsAudio: HTMLAudioElement | null = null;
 const status = ref('');
 const selectedForGroup = ref<string[]>([]);
 const creatingGroup = ref(false);
@@ -426,6 +432,85 @@ async function send() {
     status.value = err instanceof Error ? err.message : String(err);
   } finally {
     sending.value = false;
+  }
+}
+
+
+async function onVoicePointerDown(e: PointerEvent) {
+  e.preventDefault();
+  if (sending.value || voiceBusy.value || !activeConversationId.value) return;
+  (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+  await voice.start();
+}
+
+async function onVoicePointerUp() {
+  if (!voice.holding.value && !voice.recording.value) return;
+  const blob = await voice.stop();
+  if (voice.error.value) {
+    status.value = voice.error.value;
+    return;
+  }
+  if (!blob || !activeConversationId.value) {
+    status.value = blob ? '' : '说话时间太短，请按住再说';
+    return;
+  }
+  voiceBusy.value = true;
+  sending.value = true;
+  status.value = '识别中…';
+  try {
+    const mention = mentionId.value || undefined;
+    const res = await api.sendVoiceMessage(activeConversationId.value, blob, mention);
+    messages.value.push(res.userMessage, ...res.assistantMessages);
+    await refreshConversations();
+    await nextTick();
+    if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight;
+    status.value = res.transcript ? `已识别：${res.transcript}` : '';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    voiceBusy.value = false;
+    sending.value = false;
+  }
+}
+
+function onVoicePointerCancel() {
+  voice.cancel();
+}
+
+async function playTts(m: ChatMessage) {
+  if (ttsPlayingId.value === m.id && ttsAudio) {
+    ttsAudio.pause();
+    ttsAudio = null;
+    ttsPlayingId.value = null;
+    ttsLoadingId.value = null;
+    return;
+  }
+  if (ttsAudio) {
+    ttsAudio.pause();
+    ttsAudio = null;
+  }
+  ttsLoadingId.value = m.id;
+  ttsPlayingId.value = null;
+  try {
+    const url = api.messageTtsUrl(m.id) + '?t=' + Date.now();
+    const audio = new Audio(url);
+    ttsAudio = audio;
+    audio.onended = () => {
+      if (ttsPlayingId.value === m.id) ttsPlayingId.value = null;
+      ttsAudio = null;
+    };
+    audio.onerror = () => {
+      status.value = '朗读失败，请检查 TTS 配置';
+      ttsPlayingId.value = null;
+      ttsLoadingId.value = null;
+      ttsAudio = null;
+    };
+    await audio.play();
+    ttsLoadingId.value = null;
+    ttsPlayingId.value = m.id;
+  } catch (err) {
+    ttsLoadingId.value = null;
+    status.value = err instanceof Error ? err.message : '朗读失败';
   }
 }
 
@@ -1041,6 +1126,15 @@ onMounted(async () => {
                       <div class="wx-bubble-row">
                         <div class="wx-bubble" v-html="mentionHtml(m.content)"></div>
                         <div class="wx-msg-actions" @click.stop>
+                          <button
+                            class="wx-msg-tts"
+                            type="button"
+                            title="朗读"
+                            :disabled="ttsLoadingId === m.id"
+                            @click="playTts(m)"
+                          >
+                            {{ ttsLoadingId === m.id ? '…' : ttsPlayingId === m.id ? '■' : '♪' }}
+                          </button>
                           <button class="wx-msg-more" title="消息操作" @click="toggleMsgMenu(m.id)">⋯</button>
                           <div v-if="msgMenuId === m.id" class="wx-menu msg">
                             <button class="danger" @click="deleteOneMessage(m)">删除</button>
@@ -1068,6 +1162,19 @@ onMounted(async () => {
                 </select>
               </div>
               <div class="wx-input-bar">
+                <button
+                  type="button"
+                  class="wx-mic"
+                  :class="{ recording: voice.holding || voice.recording, busy: voiceBusy }"
+                  :disabled="sending || voiceBusy"
+                  title="按住说话"
+                  @pointerdown="onVoicePointerDown"
+                  @pointerup="onVoicePointerUp"
+                  @pointercancel="onVoicePointerCancel"
+                  @contextmenu.prevent
+                >
+                  {{ voice.holding || voice.recording ? '松开' : '语音' }}
+                </button>
                 <textarea
                   v-model="draft"
                   placeholder="发消息…"
@@ -1075,6 +1182,7 @@ onMounted(async () => {
                 />
                 <button class="wx-send" :disabled="sending || !draft.trim()" @click="send">发送</button>
               </div>
+              <div v-if="voice.holding || voice.recording" class="wx-voice-hint">按住说话中…松开结束</div>
             </div>
           </div>
 

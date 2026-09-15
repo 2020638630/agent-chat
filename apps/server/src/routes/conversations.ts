@@ -3,6 +3,10 @@ import { v4 as uuid } from 'uuid';
 import { db } from '../db/index.js';
 import { buildSystemPrompt } from '../utils/characterCard.js';
 import { chatCompletion } from '../services/llm.js';
+import { synthesizeSpeech, transcribeAudio, ttsFilename } from '../services/audio.js';
+import { getUploadsDir } from '../db/index.js';
+import fs from 'node:fs';
+import path from 'node:path';
 
 type CharacterRow = {
   id: string;
@@ -65,6 +69,19 @@ function loadMembers(conversationId: string) {
 
 function isLlmFailureNotice(content: string) {
   return (content || '').includes('LLM 暂时不可用');
+}
+
+
+function deleteTtsForMessageIds(ids: string[]) {
+  const uploads = getUploadsDir();
+  for (const id of ids) {
+    const file = path.join(uploads, ttsFilename(id));
+    try {
+      if (fs.existsSync(file)) fs.unlinkSync(file);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 function markConversationRead(conversationId: string) {
@@ -214,6 +231,9 @@ export async function conversationRoutes(app: FastifyInstance) {
       | undefined;
     if (!conv) return reply.code(404).send({ error: '会话不存在' });
 
+    const msgIds = (
+      db.prepare(`SELECT id FROM messages WHERE conversation_id = ?`).all(conv.id) as Array<{ id: string }>
+    ).map((r) => r.id);
     const delMessages = db.prepare(`DELETE FROM messages WHERE conversation_id = ?`);
     const delMembers = db.prepare(`DELETE FROM conversation_members WHERE conversation_id = ?`);
     const delConv = db.prepare(`DELETE FROM conversations WHERE id = ?`);
@@ -223,6 +243,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       delConv.run(conv.id);
     });
     tx();
+    deleteTtsForMessageIds(msgIds);
     return { ok: true };
   });
 
@@ -260,6 +281,7 @@ export async function conversationRoutes(app: FastifyInstance) {
         new Date().toISOString(),
         req.params.id
       );
+      deleteTtsForMessageIds([req.params.messageId]);
       return { ok: true };
     }
   );
@@ -268,24 +290,34 @@ export async function conversationRoutes(app: FastifyInstance) {
     const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(req.params.id);
     if (!conv) return reply.code(404).send({ error: '会话不存在' });
 
+    const msgIds = (
+      db.prepare(`SELECT id FROM messages WHERE conversation_id = ?`).all(req.params.id) as Array<{
+        id: string;
+      }>
+    ).map((r) => r.id);
     db.prepare(`DELETE FROM messages WHERE conversation_id = ?`).run(req.params.id);
     db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(
       new Date().toISOString(),
       req.params.id
     );
+    deleteTtsForMessageIds(msgIds);
     return { ok: true };
   });
 
-  app.post<{ Params: { id: string } }>('/api/conversations/:id/messages', async (req, reply) => {
-    const conversationId = req.params.id;
+  async function handleUserMessage(
+    reply: import('fastify').FastifyReply,
+    conversationId: string,
+    content: string,
+    mentionCharacterId: string | undefined,
+    source: 'text' | 'voice'
+  ) {
     const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(conversationId) as
       | { id: string; type: string }
       | undefined;
     if (!conv) return reply.code(404).send({ error: '会话不存在' });
 
-    const body = (req.body ?? {}) as { content?: string; mentionCharacterId?: string };
-    const content = body.content?.trim();
-    if (!content) return reply.code(400).send({ error: '消息不能为空' });
+    const trimmed = content.trim();
+    if (!trimmed) return reply.code(400).send({ error: '消息不能为空' });
 
     const members = db
       .prepare(
@@ -299,11 +331,10 @@ export async function conversationRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: '会话没有角色成员' });
     }
 
-    // Persist visible @Name in user bubble when a mention is selected
-    let storedContent = content;
+    let storedContent = trimmed;
     let mentioned: CharacterRow | undefined;
-    if (conv.type === 'group' && body.mentionCharacterId) {
-      mentioned = members.find((m) => m.id === body.mentionCharacterId);
+    if (conv.type === 'group' && mentionCharacterId) {
+      mentioned = members.find((m) => m.id === mentionCharacterId);
       if (mentioned) {
         const tag = `@${mentioned.name}`;
         const already =
@@ -320,15 +351,15 @@ export async function conversationRoutes(app: FastifyInstance) {
     const now = new Date().toISOString();
     const userMsgId = uuid();
     db.prepare(
-      `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at)
-       VALUES (?, ?, 'user', NULL, ?, ?)`
-    ).run(userMsgId, conversationId, storedContent, now);
+      `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at, source)
+       VALUES (?, ?, 'user', NULL, ?, ?, ?)`
+    ).run(userMsgId, conversationId, storedContent, now, source);
 
     let character: CharacterRow;
     if (conv.type === 'private') {
       character = members[0];
     } else {
-      character = pickGroupResponder(members, conversationId, body.mentionCharacterId);
+      character = pickGroupResponder(members, conversationId, mentionCharacterId);
     }
 
     const history = db
@@ -343,11 +374,11 @@ export async function conversationRoutes(app: FastifyInstance) {
     const nameById = new Map(members.map((m) => [m.id, m.name] as const));
     const otherNames = members.filter((m) => m.id !== character.id).map((m) => m.name);
 
-    function isNoticeBubble(content: string): boolean {
+    function isNoticeBubble(c: string): boolean {
       return (
-        content.startsWith('（LLM 暂时不可用') ||
-        content.startsWith('(LLM 暂时不可用') ||
-        content.includes('LLM 暂时不可用')
+        c.startsWith('（LLM 暂时不可用') ||
+        c.startsWith('(LLM 暂时不可用') ||
+        c.includes('LLM 暂时不可用')
       );
     }
 
@@ -365,7 +396,7 @@ export async function conversationRoutes(app: FastifyInstance) {
 3. 不要替其他角色说话，不要去叫其他角色的名字演戏；
 4. 可以知道群里还有谁（${otherNames.join('、') || '无'}），但默认把「你」理解成用户；
 5. 不必复读 @。`;
-      } else if (!body.mentionCharacterId) {
+      } else if (!mentionCharacterId) {
         system += `\n\n【轮询发言】你是${character.name}，这次轮到你简短发言。优先回应用户最后一句，而不是角色互聊；不要替别人说话。`;
       }
     }
@@ -374,14 +405,13 @@ export async function conversationRoutes(app: FastifyInstance) {
     const llmMessages: LlmMsg[] = [{ role: 'system', content: system }];
 
     for (const m of history) {
-      if (isNoticeBubble(m.content)) continue; // 系统失败提示不当剧情
+      if (isNoticeBubble(m.content)) continue;
 
       if (m.role === 'user') {
         llmMessages.push({ role: 'user', content: m.content });
         continue;
       }
 
-      // assistant / character lines
       if (conv.type === 'private') {
         llmMessages.push({ role: 'assistant', content: m.content });
         continue;
@@ -391,7 +421,6 @@ export async function conversationRoutes(app: FastifyInstance) {
       if (who && who === character.name) {
         llmMessages.push({ role: 'assistant', content: m.content });
       } else {
-        // 其他角色的话标成旁观上下文，避免模型当成自己的上一句
         const label = who || '某人';
         llmMessages.push({
           role: 'user',
@@ -411,8 +440,8 @@ export async function conversationRoutes(app: FastifyInstance) {
     const aid = uuid();
     const at = new Date().toISOString();
     db.prepare(
-      `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at)
-       VALUES (?, ?, 'assistant', ?, ?, ?)`
+      `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at, source)
+       VALUES (?, ?, 'assistant', ?, ?, ?, 'text')`
     ).run(aid, conversationId, character.id, replyText, at);
 
     db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(at, conversationId);
@@ -431,8 +460,94 @@ export async function conversationRoutes(app: FastifyInstance) {
           character_name: character.name,
           content: replyText,
           created_at: at,
+          source: 'text',
         },
       ],
+      transcript: source === 'voice' ? trimmed : undefined,
     };
+  }
+
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/messages', async (req, reply) => {
+    const body = (req.body ?? {}) as { content?: string; mentionCharacterId?: string };
+    return handleUserMessage(
+      reply,
+      req.params.id,
+      body.content || '',
+      body.mentionCharacterId,
+      'text'
+    );
   });
+
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/messages/voice', async (req, reply) => {
+    const conversationId = req.params.id;
+    const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(conversationId);
+    if (!conv) return reply.code(404).send({ error: '会话不存在' });
+
+    let audioBuf: Buffer | null = null;
+    let filename = 'audio.wav';
+    let mime = 'audio/wav';
+    let mentionCharacterId: string | undefined;
+
+    try {
+      const parts = req.parts();
+      for await (const part of parts) {
+        if (part.type === 'file' && (part.fieldname === 'file' || part.fieldname === 'audio')) {
+          const chunks: Buffer[] = [];
+          for await (const chunk of part.file) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          audioBuf = Buffer.concat(chunks);
+          filename = part.filename || filename;
+          mime = part.mimetype || mime;
+        } else if (part.type === 'field' && part.fieldname === 'mentionCharacterId') {
+          const v = String(part.value || '').trim();
+          if (v) mentionCharacterId = v;
+        }
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return reply.code(400).send({ error: `读取录音失败：${msg}` });
+    }
+
+    if (!audioBuf || audioBuf.length < 64) {
+      return reply.code(400).send({ error: '录音为空，请按住说话后再试' });
+    }
+
+    let text: string;
+    try {
+      text = await transcribeAudio(audioBuf, filename, mime);
+    } catch (e) {
+      // STT failure must NOT enter LLM history
+      const msg = e instanceof Error ? e.message : String(e);
+      return reply.code(502).send({ error: msg });
+    }
+
+    return handleUserMessage(reply, conversationId, text, mentionCharacterId, 'voice');
+  });
+
+  app.get<{ Params: { id: string } }>('/api/messages/:id/tts', async (req, reply) => {
+    const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(req.params.id) as
+      | { id: string; content: string; role: string }
+      | undefined;
+    if (!msg) return reply.code(404).send({ error: '消息不存在' });
+
+    const uploads = getUploadsDir();
+    const name = ttsFilename(msg.id);
+    const filePath = path.join(uploads, name);
+
+    if (!fs.existsSync(filePath)) {
+      try {
+        const audio = await synthesizeSpeech(msg.content);
+        fs.writeFileSync(filePath, audio);
+      } catch (e) {
+        const errMsg = e instanceof Error ? e.message : String(e);
+        return reply.code(502).send({ error: errMsg });
+      }
+    }
+
+    reply.header('Content-Type', 'audio/mpeg');
+    reply.header('Cache-Control', 'public, max-age=86400');
+    return reply.send(fs.createReadStream(filePath));
+  });
+
 }
