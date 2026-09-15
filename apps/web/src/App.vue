@@ -1527,7 +1527,10 @@ onMounted(async () => {
           <aside v-if="activeConversation?.type === 'group'" class="wx-members">
             <div class="wx-members-title">群成员</div>
             <div v-for="mem in activeConversation.members || []" :key="mem.id" class="wx-list-item">
-              <div class="wx-avatar sm">{{ avatarText(mem.name) }}</div>
+              <div class="wx-avatar sm">
+                <img v-if="mem.avatar_path" :src="mem.avatar_path" alt="" />
+                <template v-else>{{ avatarText(mem.name) }}</template>
+              </div>
               <div class="wx-list-title">{{ mem.name }}</div>
             </div>
           </aside>
