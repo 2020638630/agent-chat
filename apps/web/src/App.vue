@@ -1548,7 +1548,14 @@ onMounted(async () => {
 
           <aside v-if="activeConversation?.type === 'group'" class="wx-members">
             <div class="wx-members-title">群成员</div>
-            <div v-for="mem in activeConversation.members || []" :key="mem.id" class="wx-list-item">
+            <div
+              v-for="mem in activeConversation.members || []"
+              :key="mem.id"
+              class="wx-list-item"
+              role="button"
+              title="查看主页"
+              @click.stop="openCharacterProfile(mem.id)"
+            >
               <div class="wx-avatar sm">
                 <img v-if="mem.avatar_path" :src="mem.avatar_path" alt="" />
                 <template v-else>{{ avatarText(mem.name) }}</template>
