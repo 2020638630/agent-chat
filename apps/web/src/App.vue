@@ -43,6 +43,7 @@ const menuOpen = ref(false);
 const msgMenuId = ref<string | null>(null);
 const momentMenuId = ref<string | null>(null);
 const pendingDeleteMoment = ref<Moment | null>(null);
+const pendingDeleteMessage = ref<ChatMessage | null>(null);
 const pendingOverwriteImport = ref<{ file: File; name: string } | null>(null);
 const pendingDeleteCharacter = ref<{ id: string; name: string } | null>(null);
 const listCtxId = ref<string | null>(null);
@@ -708,15 +709,24 @@ async function clearChat() {
   }
 }
 
-async function deleteOneMessage(m: ChatMessage) {
+function deleteOneMessage(m: ChatMessage) {
   msgMenuId.value = null;
   if (!activeConversationId.value) return;
-  const ok = window.confirm('删除这条消息？');
-  if (!ok) return;
+  pendingDeleteMessage.value = m;
+}
+
+function cancelDeleteMessage() {
+  pendingDeleteMessage.value = null;
+}
+
+async function confirmDeleteMessage() {
+  const m = pendingDeleteMessage.value;
+  if (!m || !activeConversationId.value) return;
   try {
     await api.deleteMessage(activeConversationId.value, m.id);
     messages.value = messages.value.filter((x) => x.id !== m.id);
     await refreshConversations();
+    pendingDeleteMessage.value = null;
   } catch (err) {
     status.value = err instanceof Error ? err.message : String(err);
   }
@@ -1289,6 +1299,21 @@ onMounted(async () => {
         <div class="wx-confirm-actions">
           <button class="wx-mini-btn" @click="cancelDeleteMoment">取消</button>
           <button class="wx-confirm-ok" @click="confirmDeleteMoment">确定删除</button>
+        </div>
+      </div>
+    </div>
+
+    <div
+      v-if="pendingDeleteMessage"
+      class="wx-confirm-mask"
+      @click.self="cancelDeleteMessage"
+    >
+      <div class="wx-confirm-card" @click.stop>
+        <div class="wx-confirm-title">删除消息</div>
+        <div class="wx-confirm-body">确定删除这条消息？删除后不可恢复。</div>
+        <div class="wx-confirm-actions">
+          <button class="wx-mini-btn" @click="cancelDeleteMessage">取消</button>
+          <button class="wx-confirm-ok" @click="confirmDeleteMessage">确定删除</button>
         </div>
       </div>
     </div>
