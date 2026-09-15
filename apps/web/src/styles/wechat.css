@@ -739,11 +739,6 @@ select {
   overflow: hidden;
 }
 
-.wx-check {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
 /* ===== Moments / 空间 ===== */
 .wx-moments {

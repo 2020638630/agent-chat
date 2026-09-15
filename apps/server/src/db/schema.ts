@@ -1,3 +1,7 @@
+/**
+ * SQLite schema + lightweight ALTER migrations (last_read_at, message source, media paths).
+ * Called once from db/index.ts on process start.
+ */
 import type Database from 'better-sqlite3';
 
 

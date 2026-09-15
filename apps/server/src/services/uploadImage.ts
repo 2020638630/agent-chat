@@ -1,3 +1,7 @@
+/**
+ * Validate and store jpg/png/webp uploads under /uploads (max 5MB).
+ * Public paths look like /uploads/<file>; unlinkUploadPublicPath cleans them safely.
+ */
 import type { FastifyRequest } from 'fastify';
 import fs from 'node:fs';
 import path from 'node:path';

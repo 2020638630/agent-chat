@@ -1,3 +1,7 @@
+/**
+ * Chat completions against OpenAI-compatible APIs (Ollama / DeepSeek, etc.).
+ * When talking to Ollama, always send reasoning_effort: "none"; read message.content only.
+ */
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant';
   content: string;

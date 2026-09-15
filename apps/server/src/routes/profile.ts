@@ -1,3 +1,6 @@
+/**
+ * User & character profiles, homepage/space backgrounds, and avatar uploads (U-05).
+ */
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
 import {

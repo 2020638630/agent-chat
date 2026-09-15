@@ -1,3 +1,6 @@
+/**
+ * Thin fetch wrapper for apps/server REST APIs. Prefer this over ad-hoc fetch in App.vue.
+ */
 export type Character = {
   id: string;
   name: string;

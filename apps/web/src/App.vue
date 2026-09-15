@@ -1,4 +1,12 @@
 <script setup lang="ts">
+/**
+ * Agent-chat web shell (Vue 3 + Vite).
+ *
+ * Layout: left nav → mid list (chat / contacts / space tools) → main pane
+ * (profile | moments feed | conversation). Talks to apps/server via ./api/client.
+ * Voice hold-to-talk lives in ./composables/useHoldToTalk; styles in ./styles/wechat.css.
+ */
+
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
 import { api, type Character, type ChatMessage, type Conversation, type Moment, type Profile } from './api/client';
 import { useHoldToTalk } from './composables/useHoldToTalk';
@@ -1034,6 +1042,9 @@ watch(tab, (t) => {
     creatingGroup.value = false;
     contactMenuId.value = null;
   }
+  if (t !== 'moments') {
+    momentsFilterId.value = null;
+  }
   if (t === 'moments') void refreshMoments();
   if (t === 'contacts') void refreshCharacters();
   if (t === 'chat') void refreshConversations();
@@ -1092,11 +1103,6 @@ onMounted(async () => {
           </template>
         </div>
       </div>
-      <input
-        v-if="(tab === 'chat' || tab === 'contacts') && !(tab === 'contacts' && creatingGroup)"
-        class="wx-search"
-        placeholder="搜索"
-      />
       <input
         ref="fileInput"
         type="file"

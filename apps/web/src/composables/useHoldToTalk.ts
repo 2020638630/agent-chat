@@ -1,3 +1,7 @@
+/**
+ * Hold-to-talk: capture mic PCM via ScriptProcessor, resample to 16 kHz mono WAV.
+ * Returns Blob for POST /api/conversations/:id/messages/voice.
+ */
 import { ref } from 'vue';
 
 function writeString(view: DataView, offset: number, str: string) {

@@ -1,3 +1,7 @@
+/**
+ * SiliconFlow STT/TTS helpers + gendered CosyVoice voice selection and cache filenames.
+ * Keys come from STT_ and TTS_ env vars; never log secrets.
+ */
 function env(name: string, fallback = '') {
   return process.env[name]?.trim() || fallback;
 }

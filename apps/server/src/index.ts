@@ -1,3 +1,7 @@
+/**
+ * HTTP entry: Fastify + CORS + multipart, static /uploads, route plugins.
+ * Loads .env from repo root (and optional apps/server/.env). No secrets in code.
+ */
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';

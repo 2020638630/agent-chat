@@ -1,3 +1,7 @@
+/**
+ * Conversations & messages: private/group chat, unread cursor, voice STT path,
+ * TTS cache (/api/messages/:id/tts), and B-07 assistant voice-bubble sourcing.
+ */
 import type { FastifyInstance } from 'fastify';
 import { v4 as uuid } from 'uuid';
 import { db } from '../db/index.js';
