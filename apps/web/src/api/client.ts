@@ -40,6 +40,8 @@ export type MomentComment = {
   created_at: string;
 };
 
+export type ThemeId = 'mist' | 'paper' | 'lake' | 'dusk';
+
 export type Profile = {
   id: string;
   kind: 'user' | 'character';
@@ -49,6 +51,9 @@ export type Profile = {
   avatar_path?: string | null;
   bg_path?: string | null;
   space_bg_path?: string | null;
+  theme?: ThemeId;
+  bg_opacity?: number;
+  space_bg_opacity?: number;
 };
 
 export type ProfileResponse = {
@@ -192,7 +197,7 @@ export const api = {
 
   getMyProfile: () => fetch('/api/profiles/me').then((r) => json<ProfileResponse>(r)),
 
-  updateMyProfile: (body: { name?: string; mood?: string; bio?: string }) =>
+  updateMyProfile: (body: { name?: string; mood?: string; bio?: string; theme?: ThemeId; bg_opacity?: number; space_bg_opacity?: number }) =>
     fetch('/api/profiles/me', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

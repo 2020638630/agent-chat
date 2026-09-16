@@ -1,5 +1,7 @@
 /* V2 light glass Discord-inspired UI — maps existing wx-* class names */
-:root {
+/* U-05 themes: mist (default) / paper / lake / dusk — set data-theme on <html> */
+:root,
+[data-theme="mist"] {
   --accent: #8B8FA8;
   --accent-deep: #6B6F88;
   --bg-page: #eceef2;
@@ -15,6 +17,80 @@
   --red: #f23f43;
   --font: "PingFang SC", "Microsoft YaHei", -apple-system, "Segoe UI", sans-serif;
   --glass: blur(30px) saturate(160%);
+  --glow-a: rgba(190, 195, 210, 0.30);
+  --glow-b: rgba(200, 195, 210, 0.22);
+  --glow-c: rgba(190, 195, 215, 0.20);
+  --cover-fallback-a: #6B6F88;
+  --cover-fallback-b: #8B8FA8;
+  --cover-fallback-c: #c9ccd8;
+  --bubble-mine: rgba(255, 255, 255, 0.78);
+  --bubble-theirs: rgba(255, 255, 255, 0.55);
+}
+
+[data-theme="paper"] {
+  --accent: #c4a574;
+  --accent-deep: #a8845a;
+  --bg-page: #f3efe6;
+  --text: #2a241c;
+  --text-2: #8a7d6c;
+  --text-3: #b5a898;
+  --panel: rgba(255, 250, 242, 0.58);
+  --panel-light: rgba(255, 248, 238, 0.45);
+  --hover: rgba(90, 60, 20, 0.04);
+  --active: rgba(90, 60, 20, 0.07);
+  --line: rgba(90, 60, 20, 0.08);
+  --glow-a: rgba(230, 210, 170, 0.35);
+  --glow-b: rgba(220, 190, 150, 0.22);
+  --glow-c: rgba(210, 185, 150, 0.18);
+  --cover-fallback-a: #a8845a;
+  --cover-fallback-b: #c4a574;
+  --cover-fallback-c: #e6d5b8;
+  --bubble-mine: rgba(255, 250, 242, 0.88);
+  --bubble-theirs: rgba(255, 248, 238, 0.62);
+}
+
+[data-theme="lake"] {
+  --accent: #6a9e9a;
+  --accent-deep: #4f7f7b;
+  --bg-page: #e8eef0;
+  --text: #1c2426;
+  --text-2: #6a7a7c;
+  --text-3: #9aa8aa;
+  --panel: rgba(245, 250, 250, 0.55);
+  --panel-light: rgba(240, 248, 248, 0.42);
+  --hover: rgba(20, 60, 60, 0.035);
+  --active: rgba(20, 60, 60, 0.06);
+  --line: rgba(20, 60, 60, 0.07);
+  --glow-a: rgba(170, 210, 210, 0.32);
+  --glow-b: rgba(160, 200, 205, 0.22);
+  --glow-c: rgba(180, 210, 215, 0.18);
+  --cover-fallback-a: #4f7f7b;
+  --cover-fallback-b: #6a9e9a;
+  --cover-fallback-c: #b7d4d1;
+  --bubble-mine: rgba(245, 250, 250, 0.86);
+  --bubble-theirs: rgba(240, 248, 248, 0.60);
+}
+
+[data-theme="dusk"] {
+  --accent: #9a8fb0;
+  --accent-deep: #7a7190;
+  --bg-page: #ebe8ef;
+  --text: #221e28;
+  --text-2: #7a7388;
+  --text-3: #aea8b8;
+  --panel: rgba(250, 248, 252, 0.52);
+  --panel-light: rgba(245, 242, 250, 0.40);
+  --hover: rgba(40, 20, 60, 0.04);
+  --active: rgba(40, 20, 60, 0.07);
+  --line: rgba(40, 20, 60, 0.07);
+  --glow-a: rgba(200, 190, 220, 0.30);
+  --glow-b: rgba(190, 180, 210, 0.22);
+  --glow-c: rgba(185, 175, 205, 0.18);
+  --cover-fallback-a: #7a7190;
+  --cover-fallback-b: #9a8fb0;
+  --cover-fallback-c: #d0c8dc;
+  --bubble-mine: rgba(250, 248, 252, 0.86);
+  --bubble-theirs: rgba(245, 242, 250, 0.58);
 }
 
 * {
@@ -26,23 +102,14 @@
 html,
 body,
 #app {
-  height: 100%;
-  width: 100%;
-  overflow: hidden;
-  font-family: var(--font);
-  color: var(--text);
-}
-
-body,
-#app {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
   background:
-    radial-gradient(700px 500px at 15% 10%, rgba(190, 195, 210, 0.30) 0%, transparent 60%),
-    radial-gradient(600px 500px at 90% 20%, rgba(200, 195, 210, 0.22) 0%, transparent 55%),
-    radial-gradient(800px 600px at 50% 100%, rgba(190, 195, 215, 0.20) 0%, transparent 60%),
+    radial-gradient(700px 500px at 15% 10%, var(--glow-a) 0%, transparent 60%),
+    radial-gradient(600px 500px at 90% 20%, var(--glow-b) 0%, transparent 55%),
+    radial-gradient(800px 600px at 50% 100%, var(--glow-c) 0%, transparent 60%),
     var(--bg-page);
 }
 
@@ -554,8 +621,8 @@ select {
   margin-top: 2px;
   padding: 8px 14px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: var(--bubble-theirs);
+  border: 1px solid var(--line);
   display: inline-block;
   max-width: 80%;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
@@ -567,8 +634,8 @@ select {
 }
 
 .wx-msg.me .wx-bubble {
-  background: rgba(160, 164, 184, 0.25);
-  border-color: rgba(160, 164, 184, 0.2);
+  background: var(--bubble-mine);
+  border-color: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .wx-mention {
@@ -631,7 +698,7 @@ select {
   padding: 4px 8px;
   border-radius: 8px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--panel);
   outline: none;
   font-size: 13px;
   color: var(--text);
@@ -821,7 +888,7 @@ select {
 }
 
 .wx-moment-card {
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--panel);
   border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: 14px;
   padding: 16px;
@@ -1174,7 +1241,7 @@ select {
   margin: 16px 20px 8px;
   padding: 18px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--panel);
   border: 1px solid rgba(255, 255, 255, 0.45);
   -webkit-backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
@@ -1619,7 +1686,7 @@ select {
   margin: 10px 12px 8px;
   padding: 14px 14px 12px;
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--panel);
   border: 1px solid rgba(255, 255, 255, 0.5);
   -webkit-backdrop-filter: blur(16px);
   backdrop-filter: blur(16px);
@@ -1731,7 +1798,7 @@ button.wx-space-filter-item {
   border: 1px solid rgba(140, 130, 180, 0.25);
   border-radius: 14px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--panel);
   cursor: zoom-in;
   font: inherit;
   text-align: left;
@@ -1824,3 +1891,132 @@ button.wx-space-filter-item {
 .wx-emoji-cell:hover {
   background: rgba(120, 120, 140, 0.12);
 }
+
+
+/* ===== U-05 cover photo opacity + appearance ===== */
+.wx-profile-cover,
+.wx-moments-cover {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(180deg, rgba(30, 31, 34, 0.06) 0%, color-mix(in srgb, var(--bg-page) 55%, transparent) 100%),
+    radial-gradient(700px 220px at 50% 0%, color-mix(in srgb, var(--accent-deep) 45%, transparent), transparent 70%),
+    linear-gradient(135deg, var(--cover-fallback-a) 0%, var(--cover-fallback-b) 42%, var(--cover-fallback-c) 100%);
+  background-size: cover;
+  background-position: center;
+}
+.wx-cover-photo {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  pointer-events: none;
+  border-radius: inherit;
+}
+.wx-profile-cover > .wx-cover-actions,
+.wx-moments-cover > .wx-cover-actions {
+  position: relative;
+  z-index: 1;
+}
+.wx-profile-cover::after,
+.wx-moments-cover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    transparent 20%,
+    color-mix(in srgb, var(--bg-page) 55%, transparent) 100%
+  );
+  border-radius: inherit;
+}
+
+.wx-appearance {
+  margin: 12px 20px 8px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  -webkit-backdrop-filter: var(--glass);
+  backdrop-filter: var(--glass);
+}
+.wx-appearance-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+.wx-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.wx-theme-chip {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 6px 8px;
+  background: var(--panel-light);
+  cursor: pointer;
+  text-align: center;
+  color: var(--text);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.wx-theme-chip:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+.wx-theme-chip.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+.wx-theme-swatch {
+  height: 22px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+}
+.wx-theme-swatch.mist {
+  background: linear-gradient(135deg, #eceef2, #8B8FA8);
+}
+.wx-theme-swatch.paper {
+  background: linear-gradient(135deg, #f3efe6, #c4a574);
+}
+.wx-theme-swatch.lake {
+  background: linear-gradient(135deg, #e8eef0, #6a9e9a);
+}
+.wx-theme-swatch.dusk {
+  background: linear-gradient(135deg, #ebe8ef, #9a8fb0);
+}
+.wx-theme-chip-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+.wx-theme-chip-hint {
+  font-size: 10px;
+  color: var(--text-2);
+  margin-top: 2px;
+}
+.wx-opacity-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.wx-opacity-row label {
+  font-size: 12px;
+  color: var(--text-2);
+  display: flex;
+  justify-content: space-between;
+}
+.wx-opacity-row input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.wx-opacity-row.is-disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+

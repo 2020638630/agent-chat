@@ -22,6 +22,20 @@ export function ensureMediaPathColumns(db: Database.Database) {
 }
 
 
+
+export function ensureThemeAppearanceColumns(db: Database.Database) {
+  const userCols = db.prepare(`PRAGMA table_info(user_profile)`).all() as Array<{ name: string }>;
+  if (!userCols.some((c) => c.name === 'theme')) {
+    db.exec(`ALTER TABLE user_profile ADD COLUMN theme TEXT`);
+  }
+  if (!userCols.some((c) => c.name === 'bg_opacity')) {
+    db.exec(`ALTER TABLE user_profile ADD COLUMN bg_opacity REAL`);
+  }
+  if (!userCols.some((c) => c.name === 'space_bg_opacity')) {
+    db.exec(`ALTER TABLE user_profile ADD COLUMN space_bg_opacity REAL`);
+  }
+}
+
 export function ensureMessageImageColumn(db: Database.Database) {
   const cols = db.prepare(`PRAGMA table_info(messages)`).all() as Array<{ name: string }>;
   if (!cols.some((c) => c.name === 'image_path')) {
@@ -178,5 +192,6 @@ export function migrate(db: Database.Database) {
   ensureMessageSourceColumn(db);
   ensureMessageImageColumn(db);
   ensureMediaPathColumns(db);
+  ensureThemeAppearanceColumns(db);
   mergeDuplicatePrivateConversations(db);
 }

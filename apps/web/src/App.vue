@@ -11,6 +11,15 @@ import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from
 import { api, type Character, type ChatMessage, type Conversation, type Moment, type Profile } from './api/client';
 import { useHoldToTalk } from './composables/useHoldToTalk';
 import { EMOJI_WHITELIST } from './constants/emojiWhitelist';
+import {
+  THEME_PRESETS,
+  DEFAULT_THEME,
+  DEFAULT_BG_OPACITY,
+  DEFAULT_SPACE_BG_OPACITY,
+  normalizeThemeId,
+  clampBgOpacity,
+  type ThemeId,
+} from './constants/themes';
 
 type Tab = 'chat' | 'contacts' | 'moments';
 
@@ -72,6 +81,10 @@ const profileView = ref<ProfileView>(null);
 const profile = ref<Profile | null>(null);
 const meProfile = ref<Profile | null>(null);
 const mediaBusy = ref(false);
+const uiTheme = ref<ThemeId>(DEFAULT_THEME);
+const uiBgOpacity = ref(DEFAULT_BG_OPACITY);
+const uiSpaceBgOpacity = ref(DEFAULT_SPACE_BG_OPACITY);
+const appearanceBusy = ref(false);
 const avatarFileInput = ref<HTMLInputElement | null>(null);
 const bgFileInput = ref<HTMLInputElement | null>(null);
 const spaceBgFileInput = ref<HTMLInputElement | null>(null);
@@ -295,10 +308,70 @@ async function closeProfile() {
 }
 
 
+
+function applyAppearanceToDom() {
+  document.documentElement.setAttribute('data-theme', uiTheme.value);
+  document.documentElement.style.setProperty('--user-bg-opacity', String(uiBgOpacity.value));
+  document.documentElement.style.setProperty('--user-space-bg-opacity', String(uiSpaceBgOpacity.value));
+}
+
+function syncAppearanceFromProfile(p: Profile | null | undefined) {
+  if (!p || p.kind !== 'user') return;
+  uiTheme.value = normalizeThemeId(p.theme);
+  uiBgOpacity.value = clampBgOpacity(p.bg_opacity, DEFAULT_BG_OPACITY);
+  uiSpaceBgOpacity.value = clampBgOpacity(p.space_bg_opacity, DEFAULT_SPACE_BG_OPACITY);
+  applyAppearanceToDom();
+}
+
+async function persistAppearance(partial: {
+  theme?: ThemeId;
+  bg_opacity?: number;
+  space_bg_opacity?: number;
+}) {
+  appearanceBusy.value = true;
+  try {
+    const res = await api.updateMyProfile(partial);
+    meProfile.value = res.profile;
+    if (profileView.value?.kind === 'user') profile.value = res.profile;
+    syncAppearanceFromProfile(res.profile);
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    appearanceBusy.value = false;
+  }
+}
+
+async function selectTheme(id: ThemeId) {
+  uiTheme.value = id;
+  applyAppearanceToDom();
+  await persistAppearance({ theme: id });
+}
+
+async function onBgOpacityInput(ev: Event) {
+  const v = clampBgOpacity((ev.target as HTMLInputElement).valueAsNumber, DEFAULT_BG_OPACITY);
+  uiBgOpacity.value = v;
+  applyAppearanceToDom();
+}
+
+async function onBgOpacityCommit() {
+  await persistAppearance({ bg_opacity: uiBgOpacity.value });
+}
+
+async function onSpaceBgOpacityInput(ev: Event) {
+  const v = clampBgOpacity((ev.target as HTMLInputElement).valueAsNumber, DEFAULT_SPACE_BG_OPACITY);
+  uiSpaceBgOpacity.value = v;
+  applyAppearanceToDom();
+}
+
+async function onSpaceBgOpacityCommit() {
+  await persistAppearance({ space_bg_opacity: uiSpaceBgOpacity.value });
+}
+
 async function refreshMeProfile() {
   try {
     const res = await api.getMyProfile();
     meProfile.value = res.profile;
+    syncAppearanceFromProfile(res.profile);
   } catch {
     /* keep previous */
   }
@@ -308,6 +381,7 @@ async function applyProfileMedia(next: Profile) {
   profile.value = next;
   if (next.kind === 'user') {
     meProfile.value = next;
+    syncAppearanceFromProfile(next);
   } else {
     await refreshCharacters();
     await refreshConversations();
@@ -442,9 +516,11 @@ async function openMyProfile() {
   try {
     const res = await api.getMyProfile();
     profile.value = res.profile;
+    meProfile.value = res.profile;
     profileMoments.value = res.moments || [];
     editMood.value = res.profile.mood || '';
     editBio.value = res.profile.bio || '';
+    syncAppearanceFromProfile(res.profile);
     status.value = '';
   } catch (err) {
     status.value = err instanceof Error ? err.message : String(err);
@@ -1425,10 +1501,12 @@ onUnmounted(() => {
             <span class="wx-hint" style="margin-left:auto">{{ status }}</span>
           </div>
           <div class="wx-profile-card">
-            <div
-              class="wx-profile-cover"
-              :style="profile?.bg_path ? { backgroundImage: 'url(' + profile.bg_path + ')' } : undefined"
-            >
+            <div class="wx-profile-cover">
+              <div
+                v-if="profile?.bg_path"
+                class="wx-cover-photo"
+                :style="{ backgroundImage: 'url(' + profile.bg_path + ')', opacity: uiBgOpacity }"
+              ></div>
               <div class="wx-cover-actions">
                 <button type="button" class="wx-mini-btn" :disabled="mediaBusy" @click.stop="bgFileInput?.click()">更换背景</button>
                 <button
@@ -1485,6 +1563,59 @@ onUnmounted(() => {
                 @click="clearAvatar"
               >恢复默认头像</button>
             </div>
+
+            <div v-if="profileView.kind === 'user'" class="wx-appearance">
+              <div class="wx-appearance-title">外观</div>
+              <div class="wx-theme-grid">
+                <button
+                  v-for="t in THEME_PRESETS"
+                  :key="t.id"
+                  type="button"
+                  class="wx-theme-chip"
+                  :class="{ active: uiTheme === t.id }"
+                  :disabled="appearanceBusy"
+                  :title="t.hint"
+                  @click="selectTheme(t.id)"
+                >
+                  <div class="wx-theme-swatch" :class="t.id"></div>
+                  <div class="wx-theme-chip-label">{{ t.label }}</div>
+                  <div class="wx-theme-chip-hint">{{ t.id }}</div>
+                </button>
+              </div>
+              <div class="wx-opacity-row" :class="{ 'is-disabled': !profile?.bg_path }">
+                <label>
+                  <span>主页背景透明度</span>
+                  <span>{{ Math.round(uiBgOpacity * 100) }}%</span>
+                </label>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="1"
+                  step="0.05"
+                  :value="uiBgOpacity"
+                  :disabled="!profile?.bg_path || appearanceBusy"
+                  @input="onBgOpacityInput"
+                  @change="onBgOpacityCommit"
+                />
+              </div>
+              <div class="wx-opacity-row" :class="{ 'is-disabled': !meProfile?.space_bg_path }">
+                <label>
+                  <span>空间背景透明度</span>
+                  <span>{{ Math.round(uiSpaceBgOpacity * 100) }}%</span>
+                </label>
+                <input
+                  type="range"
+                  min="0.2"
+                  max="1"
+                  step="0.05"
+                  :value="uiSpaceBgOpacity"
+                  :disabled="!meProfile?.space_bg_path || appearanceBusy"
+                  @input="onSpaceBgOpacityInput"
+                  @change="onSpaceBgOpacityCommit"
+                />
+              </div>
+            </div>
+
             <div class="wx-profile-bio">
               <div class="wx-profile-label">简介</div>
               <template v-if="profileView.kind === 'user' && profileEditing">
@@ -1520,10 +1651,12 @@ onUnmounted(() => {
       <template v-else-if="tab === 'moments'">
         <div class="wx-moments">
           <div class="wx-moments-hero">
-            <div
-              class="wx-moments-cover"
-              :style="meProfile?.space_bg_path ? { backgroundImage: 'url(' + meProfile.space_bg_path + ')' } : undefined"
-            >
+            <div class="wx-moments-cover">
+              <div
+                v-if="meProfile?.space_bg_path"
+                class="wx-cover-photo"
+                :style="{ backgroundImage: 'url(' + meProfile.space_bg_path + ')', opacity: uiSpaceBgOpacity }"
+              ></div>
               <div class="wx-cover-actions">
                 <button type="button" class="wx-mini-btn" :disabled="mediaBusy" @click.stop="spaceBgFileInput?.click()">更换封面</button>
                 <button
