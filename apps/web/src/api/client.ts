@@ -29,7 +29,8 @@ export type ChatMessage = {
   character_name?: string | null;
   content: string;
   created_at: string;
-  source?: 'text' | 'voice';
+  source?: 'text' | 'voice' | 'image';
+  image_path?: string | null;
 };
 
 export type MomentComment = {
@@ -148,6 +149,16 @@ export const api = {
     }).then((r) =>
       json<{ userMessage: ChatMessage; assistantMessages: ChatMessage[] }>(r)
     ),
+
+  sendChatImage: async (id: string, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch(`/api/conversations/${id}/messages/image`, {
+      method: 'POST',
+      body: fd,
+    });
+    return json<{ userMessage: ChatMessage; assistantMessages: ChatMessage[] }>(res);
+  },
 
   sendVoiceMessage: async (id: string, blob: Blob, mentionCharacterId?: string) => {
     const fd = new FormData();

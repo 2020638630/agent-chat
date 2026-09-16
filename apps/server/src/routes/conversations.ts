@@ -17,6 +17,7 @@ import {
   voiceForKind,
 } from '../services/audio.js';
 import { getUploadsDir } from '../db/index.js';
+import { readImageFromRequest, saveImageBuffer, unlinkUploadPublicPath } from '../services/uploadImage.js';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -102,6 +103,19 @@ function deleteTtsForMessageIds(ids: string[]) {
       }
     }
   }
+}
+
+/** Collect image_path before rows are deleted, then wipe TTS caches + image files. */
+function deleteMediaForMessages(ids: string[]) {
+  if (!ids.length) return;
+  const getImg = db.prepare(`SELECT image_path FROM messages WHERE id = ?`);
+  const imagePaths: Array<string | null> = [];
+  for (const id of ids) {
+    const row = getImg.get(id) as { image_path: string | null } | undefined;
+    if (row?.image_path) imagePaths.push(row.image_path);
+  }
+  deleteTtsForMessageIds(ids);
+  for (const p of imagePaths) unlinkUploadPublicPath(p);
 }
 
 function markConversationRead(conversationId: string) {
@@ -254,6 +268,7 @@ export async function conversationRoutes(app: FastifyInstance) {
     const msgIds = (
       db.prepare(`SELECT id FROM messages WHERE conversation_id = ?`).all(conv.id) as Array<{ id: string }>
     ).map((r) => r.id);
+    deleteMediaForMessages(msgIds);
     const delMessages = db.prepare(`DELETE FROM messages WHERE conversation_id = ?`);
     const delMembers = db.prepare(`DELETE FROM conversation_members WHERE conversation_id = ?`);
     const delConv = db.prepare(`DELETE FROM conversations WHERE id = ?`);
@@ -263,7 +278,6 @@ export async function conversationRoutes(app: FastifyInstance) {
       delConv.run(conv.id);
     });
     tx();
-    deleteTtsForMessageIds(msgIds);
     return { ok: true };
   });
 
@@ -296,12 +310,12 @@ export async function conversationRoutes(app: FastifyInstance) {
         .get(req.params.messageId, req.params.id);
       if (!msg) return reply.code(404).send({ error: '消息不存在' });
 
+      deleteMediaForMessages([req.params.messageId]);
       db.prepare(`DELETE FROM messages WHERE id = ?`).run(req.params.messageId);
       db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(
         new Date().toISOString(),
         req.params.id
       );
-      deleteTtsForMessageIds([req.params.messageId]);
       return { ok: true };
     }
   );
@@ -315,12 +329,12 @@ export async function conversationRoutes(app: FastifyInstance) {
         id: string;
       }>
     ).map((r) => r.id);
+    deleteMediaForMessages(msgIds);
     db.prepare(`DELETE FROM messages WHERE conversation_id = ?`).run(req.params.id);
     db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(
       new Date().toISOString(),
       req.params.id
     );
-    deleteTtsForMessageIds(msgIds);
     return { ok: true };
   });
 
@@ -551,7 +565,38 @@ export async function conversationRoutes(app: FastifyInstance) {
     return handleUserMessage(reply, conversationId, text, mentionCharacterId, 'voice');
   });
 
-  app.get<{ Params: { id: string } }>('/api/messages/:id/tts', async (req, reply) => {
+  
+  // B-04 image: user sends one image; no LLM / VLM turn
+  app.post<{ Params: { id: string } }>('/api/conversations/:id/messages/image', async (req, reply) => {
+    const conversationId = req.params.id;
+    const convRow = db.prepare('SELECT * FROM conversations WHERE id = ?').get(conversationId);
+    if (!convRow) return reply.code(404).send({ error: '会话不存在' });
+
+    let saved;
+    try {
+      const { buffer, ext } = await readImageFromRequest(req);
+      saved = saveImageBuffer(buffer, ext, 'chat-img');
+    } catch (e) {
+      const status = (e as any)?.statusCode || 500;
+      const msg = e instanceof Error ? e.message : String(e);
+      return reply.code(status >= 400 && status < 600 ? status : 500).send({ error: msg });
+    }
+
+    const now = new Date().toISOString();
+    const userMsgId = uuid();
+    db.prepare(
+      `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at, source, image_path)
+       VALUES (?, ?, 'user', NULL, ?, ?, 'image', ?)`
+    ).run(userMsgId, conversationId, '[图片]', now, saved.publicPath);
+
+    db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(now, conversationId);
+    markConversationRead(conversationId);
+
+    const userMessage = db.prepare('SELECT * FROM messages WHERE id = ?').get(userMsgId);
+    return { userMessage, assistantMessages: [] as unknown[] };
+  });
+
+app.get<{ Params: { id: string } }>('/api/messages/:id/tts', async (req, reply) => {
     const msg = db.prepare('SELECT * FROM messages WHERE id = ?').get(req.params.id) as
       | { id: string; content: string; role: string; character_id: string | null }
       | undefined;

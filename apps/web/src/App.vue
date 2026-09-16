@@ -71,6 +71,9 @@ const mediaBusy = ref(false);
 const avatarFileInput = ref<HTMLInputElement | null>(null);
 const bgFileInput = ref<HTMLInputElement | null>(null);
 const spaceBgFileInput = ref<HTMLInputElement | null>(null);
+const chatImageInput = ref<HTMLInputElement | null>(null);
+const imageBusy = ref(false);
+const lightboxUrl = ref<string | null>(null);
 const profileMoments = ref<Moment[]>([]);
 const profileLoading = ref(false);
 const profileEditing = ref(false);
@@ -688,6 +691,46 @@ async function send() {
 }
 
 
+
+async function onChatImageChange(ev: Event) {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file || !activeConversationId.value || sending.value || imageBusy.value) return;
+  imageBusy.value = true;
+  sending.value = true;
+  status.value = '发送图片…';
+  try {
+    const res = await api.sendChatImage(activeConversationId.value, file);
+    messages.value.push(res.userMessage);
+    await refreshConversations();
+    await nextTick();
+    if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight;
+    status.value = '';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    imageBusy.value = false;
+    sending.value = false;
+  }
+}
+
+function openChatImagePicker() {
+  if (sending.value || imageBusy.value || voiceActive.value || !activeConversationId.value) {
+    status.value = !activeConversationId.value ? '请先打开会话' : '请稍候…';
+    return;
+  }
+  chatImageInput.value?.click();
+}
+
+function openLightbox(url: string) {
+  lightboxUrl.value = url;
+}
+
+function closeLightbox() {
+  lightboxUrl.value = null;
+}
+
 async function onVoicePointerDown(e: PointerEvent) {
   e.preventDefault();
   if (sending.value || voiceBusy.value || !activeConversationId.value) return;
@@ -1131,6 +1174,13 @@ onMounted(async () => {
         style="display: none"
         @change="onSpaceBgFileChange"
       />
+      <input
+        ref="chatImageInput"
+        type="file"
+        accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+        style="display: none"
+        @change="onChatImageChange"
+      />
 
       <div v-if="tab === 'chat'" class="wx-list">
         <div v-for="c in conversations" :key="c.id" class="wx-swipe-row">
@@ -1552,7 +1602,16 @@ onMounted(async () => {
                       </div>
                       <div class="wx-bubble-row">
                         <button
-                          v-if="isVoiceBubble(m)"
+                          v-if="m.image_path"
+                          type="button"
+                          class="wx-image-bubble"
+                          title="查看大图"
+                          @click="openLightbox(m.image_path)"
+                        >
+                          <img :src="m.image_path" alt="图片" />
+                        </button>
+                        <button
+                          v-else-if="isVoiceBubble(m)"
                           type="button"
                           class="wx-voice-bubble"
                           :class="{ playing: ttsPlayingId === m.id, loading: ttsLoadingId === m.id }"
@@ -1568,7 +1627,7 @@ onMounted(async () => {
                         <div v-else class="wx-bubble" v-html="mentionHtml(m.content)"></div>
                         <div class="wx-msg-actions" @click.stop>
                           <button
-                            v-if="!isVoiceBubble(m)"
+                            v-if="!isVoiceBubble(m) && !m.image_path"
                             class="wx-msg-tts"
                             type="button"
                             title="朗读"
@@ -1610,9 +1669,10 @@ onMounted(async () => {
                 <button
                   type="button"
                   class="wx-composer-btn wx-plus-btn"
-                  title="图片 / 表情（即将支持）"
-                  aria-label="添加（即将支持）"
-                  @click="status = '图片与表情稍后支持'"
+                  title="发送图片"
+                  aria-label="发送图片"
+                  :disabled="sending || imageBusy || voiceActive || !activeConversation"
+                  @click="openChatImagePicker"
                 >
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12h14"/></svg>
                 </button>
@@ -1744,6 +1804,18 @@ onMounted(async () => {
       </div>
     </div>
 
+
+  
+    <div
+      v-if="lightboxUrl"
+      class="wx-lightbox"
+      role="dialog"
+      aria-label="查看图片"
+      @click.self="closeLightbox"
+    >
+      <button type="button" class="wx-lightbox-close" title="关闭" @click="closeLightbox">×</button>
+      <img :src="lightboxUrl" alt="大图" @click.stop />
+    </div>
 
   </div>
 </template>

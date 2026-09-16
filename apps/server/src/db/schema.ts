@@ -21,6 +21,14 @@ export function ensureMediaPathColumns(db: Database.Database) {
   }
 }
 
+
+export function ensureMessageImageColumn(db: Database.Database) {
+  const cols = db.prepare(`PRAGMA table_info(messages)`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'image_path')) {
+    db.exec(`ALTER TABLE messages ADD COLUMN image_path TEXT`);
+  }
+}
+
 export function ensureMessageSourceColumn(db: Database.Database) {
   const cols = db.prepare(`PRAGMA table_info(messages)`).all() as Array<{ name: string }>;
   if (!cols.some((c) => c.name === 'source')) {
@@ -168,6 +176,7 @@ export function migrate(db: Database.Database) {
 
   ensureConversationReadColumns(db);
   ensureMessageSourceColumn(db);
+  ensureMessageImageColumn(db);
   ensureMediaPathColumns(db);
   mergeDuplicatePrivateConversations(db);
 }
