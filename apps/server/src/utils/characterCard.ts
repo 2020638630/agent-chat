@@ -106,6 +106,6 @@ export function buildSystemPrompt(card: {
   if (card.post_history_instructions?.trim()) {
     parts.push(`【额外指示】\n${card.post_history_instructions.trim()}`);
   }
-  parts.push('用中文回复。回复简洁自然，符合微信私聊语气，不要输出角色名的前缀。');
+  parts.push('用中文回复。说话像熟人私聊短讯：句子短，直接对着用户说。不要舞台旁白，不要第三人称描写用户，不要系统通知腔。不要输出角色名的前缀。');
   return parts.join('\n\n');
 }

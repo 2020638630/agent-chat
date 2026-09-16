@@ -2,7 +2,7 @@
   "name": "agent-chat",
   "private": true,
   "version": "0.1.0",
-  "description": "微信风格多角色社交聊天 MVP",
+  "description": "多角色 AI 社交客户端（私聊 / 群聊 / 空间 / 主页）",
   "scripts": {
     "dev": "concurrently -n server,web -c green,cyan \"npm run dev -w apps/server\" \"npm run dev -w apps/web\"",
     "dev:server": "npm run dev -w apps/server",

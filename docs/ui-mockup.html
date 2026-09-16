@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WeTavern · 酒馆社交 UI 效果图</title>
+  <title>Agent Chat · 归档 UI 效果图</title>
   <style>
     :root {
       --nav: #1e1e1e;
@@ -307,13 +307,13 @@
 <body>
   <div class="stage-caption">
     <div>
-      <h1>WeTavern · 酒馆社交</h1>
-      <p>SillyTavern 微信风增强方案 · 高保真前端效果图（可点击切换页面）</p>
+      <h1>Agent Chat · 归档 UI 效果图</h1>
+      <p>归档效果图，产品名 Agent Chat；不是 SillyTavern 插件。高保真前端效果图（可点击切换页面）</p>
     </div>
     <div class="pills">
       <button class="pill active" data-view="chat">01 单人私聊</button>
       <button class="pill" data-view="group">02 多智能体群聊</button>
-      <button class="pill" data-view="moments">03 朋友圈</button>
+      <button class="pill" data-view="moments">03 空间</button>
       <button class="pill" data-view="contacts">04 通讯录</button>
       <button class="pill" data-view="profile">05 角色主页</button>
     </div>
@@ -331,7 +331,7 @@
       <button id="nav-contacts" title="通讯录" onclick="showView('contacts')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="8" r="3"/><path d="M4 18c.6-2.8 2.6-4.2 5-4.2s4.4 1.4 5 4.2"/><circle cx="17" cy="9" r="2.4"/><path d="M16 18c.4-1.8 1.6-2.8 3.2-3"/></svg>
       </button>
-      <button id="nav-moments" title="朋友圈" onclick="showView('moments')">
+      <button id="nav-moments" title="空间" onclick="showView('moments')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8.2"/><path d="M12 4c2 3 2 13 0 16M4.8 9.2h14.4M4.8 14.8h14.4"/></svg>
       </button>
       <div class="spacer"></div>
@@ -415,7 +415,7 @@
 
     <section class="list hidden" id="left-moments">
       <div class="list-head">
-        <div style="font-size:15px;font-weight:600;padding-left:6px">朋友圈</div>
+        <div style="font-size:15px;font-weight:600;padding-left:6px">空间</div>
         <button class="add-btn" title="发动态">✎</button>
       </div>
       <div class="conv">
@@ -577,7 +577,7 @@
       <div class="moments" style="flex:1">
         <div class="cover">
           <div class="cover-user">
-            <strong>我的朋友圈</strong>
+            <strong>我的空间</strong>
             <div class="avatar" style="background:linear-gradient(145deg,#7ee0a5,#2f8f5b)">我</div>
           </div>
         </div>
@@ -686,8 +686,8 @@
   </div>
 
   <p class="hint">
-    效果图说明：左侧为微信 PC 式导航（聊天 / 通讯录 / 朋友圈）。顶部标签可切换 5 个核心界面。
-    单聊展示文字、图片、语音与已读状态；群聊展示多角色气泡、@ 与成员侧栏；朋友圈展示点赞评论链；主页展示角色卡驱动的简介与相册。
+    效果图说明：左侧为桌面三栏导航（消息 / 通讯录 / 空间）。顶部标签可切换 5 个核心界面。
+    单聊展示文字、图片、语音与已读状态；群聊展示多角色气泡、@ 与成员侧栏；空间展示点赞评论链；主页展示角色卡驱动的简介与相册。
     本文件为静态高保真原型，不含真实 LLM 调用。
   </p>
 

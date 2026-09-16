@@ -992,7 +992,7 @@ async function renameGroup() {
 }
 
 async function deleteConversationById(id: string, title: string) {
-  const ok = window.confirm(`确定删除会话「${title}」？\n会话与其中消息将删除，角色与朋友圈不受影响。`);
+  const ok = window.confirm(`确定删除会话「${title}」？\n会话与其中消息将删除，角色与空间不受影响。`);
   if (!ok) return false;
   try {
     await api.deleteConversation(id);
@@ -1020,7 +1020,7 @@ async function dissolveGroup() {
   const ok = window.confirm(
     conv.type === 'group'
       ? `确定${label}「${conv.title}」？\n群消息与成员关系将删除，角色与其它会话不受影响。`
-      : `确定删除会话「${conv.title}」？\n会话与其中消息将删除，角色与朋友圈不受影响。`
+      : `确定删除会话「${conv.title}」？\n会话与其中消息将删除，角色与空间不受影响。`
   );
   if (!ok) return;
   try {
