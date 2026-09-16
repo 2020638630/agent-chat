@@ -63,10 +63,12 @@ export type ProfileResponse = {
 
 export type Moment = {
   id: string;
-  character_id: string;
+  character_id?: string | null;
+  author_kind?: 'user' | 'character';
   character_name?: string;
   avatar_path?: string | null;
   content: string;
+  image_path?: string | null;
   created_at: string;
   liked?: boolean;
   like_count?: number;
@@ -262,6 +264,15 @@ export const api = {
     fetch(`/api/profiles/characters/${id}/bg`, { method: 'DELETE' }).then((r) =>
       json<{ profile: Profile }>(r)
     ),
+
+  createMyMoment: async (content: string, file?: File | null) => {
+    const fd = new FormData();
+    fd.append('content', content);
+    if (file) fd.append('file', file);
+    return fetch('/api/moments', { method: 'POST', body: fd }).then((r) =>
+      json<{ moment: Moment }>(r)
+    );
+  },
 
   generateMoment: (characterId: string) =>
     fetch('/api/moments/generate', {

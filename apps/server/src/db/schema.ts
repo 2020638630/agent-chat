@@ -23,6 +23,48 @@ export function ensureMediaPathColumns(db: Database.Database) {
 
 
 
+export function ensureMomentAuthorColumns(db: Database.Database) {
+  const cols = db.prepare(`PRAGMA table_info(moments)`).all() as Array<{
+    name: string;
+    notnull: number;
+  }>;
+  if (!cols.length) return;
+  const names = new Set(cols.map((c) => c.name));
+  const characterNotNull = cols.some((c) => c.name === 'character_id' && c.notnull === 1);
+  const needsMig = !names.has('author_kind') || !names.has('image_path') || characterNotNull;
+  if (!needsMig) return;
+
+  db.exec(`
+    CREATE TABLE moments__m06 (
+      id TEXT PRIMARY KEY,
+      character_id TEXT,
+      author_kind TEXT NOT NULL DEFAULT 'character',
+      content TEXT NOT NULL,
+      image_path TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+    );
+  `);
+
+  const rows = db
+    .prepare(`SELECT id, character_id, content, created_at FROM moments`)
+    .all() as Array<{ id: string; character_id: string; content: string; created_at: string }>;
+
+  const insert = db.prepare(
+    `INSERT INTO moments__m06 (id, character_id, author_kind, content, image_path, created_at)
+     VALUES (?, ?, 'character', ?, NULL, ?)`,
+  );
+  const tx = db.transaction(() => {
+    for (const r of rows) {
+      insert.run(r.id, r.character_id, r.content, r.created_at);
+    }
+  });
+  tx();
+
+  db.exec(`DROP TABLE moments`);
+  db.exec(`ALTER TABLE moments__m06 RENAME TO moments`);
+}
+
 export function ensureThemeAppearanceColumns(db: Database.Database) {
   const userCols = db.prepare(`PRAGMA table_info(user_profile)`).all() as Array<{ name: string }>;
   if (!userCols.some((c) => c.name === 'theme')) {
@@ -193,5 +235,6 @@ export function migrate(db: Database.Database) {
   ensureMessageImageColumn(db);
   ensureMediaPathColumns(db);
   ensureThemeAppearanceColumns(db);
+  ensureMomentAuthorColumns(db);
   mergeDuplicatePrivateConversations(db);
 }

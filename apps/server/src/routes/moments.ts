@@ -3,8 +3,25 @@ import { v4 as uuid } from 'uuid';
 import { db } from '../db/index.js';
 import { buildSystemPrompt } from '../utils/characterCard.js';
 import { chatCompletion } from '../services/llm.js';
+import { saveImageBuffer, unlinkUploadPublicPath } from '../services/uploadImage.js';
+
+const MOMENT_SELECT = `
+  SELECT m.*,
+    CASE
+      WHEN m.author_kind = 'user' THEN COALESCE(up.name, '旅人')
+      ELSE ch.name
+    END AS character_name,
+    CASE
+      WHEN m.author_kind = 'user' THEN up.avatar_path
+      ELSE ch.avatar_path
+    END AS avatar_path
+  FROM moments m
+  LEFT JOIN characters ch ON ch.id = m.character_id AND m.author_kind = 'character'
+  LEFT JOIN user_profile up ON up.id = 'me'
+`;
 
 function enrichMoment(row: any) {
+  if (!row) return row;
   const liked = !!db
     .prepare(`SELECT 1 FROM moment_likes WHERE moment_id = ? AND user_key = 'me'`)
     .get(row.id);
@@ -19,21 +36,106 @@ function enrichMoment(row: any) {
        WHERE moment_id = ? ORDER BY created_at ASC, rowid ASC`
     )
     .all(row.id);
-  return { ...row, liked, like_count, comments };
+  return {
+    ...row,
+    author_kind: row.author_kind === 'user' ? 'user' : 'character',
+    character_id: row.character_id ?? null,
+    image_path: row.image_path ?? null,
+    liked,
+    like_count,
+    comments,
+  };
+}
+
+function getMomentRow(id: string) {
+  return db.prepare(`${MOMENT_SELECT} WHERE m.id = ?`).get(id);
 }
 
 export async function momentRoutes(app: FastifyInstance) {
   app.get('/api/moments', async () => {
     const rows = db
       .prepare(
-        `SELECT m.*, ch.name AS character_name, ch.avatar_path
-         FROM moments m
-         JOIN characters ch ON ch.id = m.character_id
+        `${MOMENT_SELECT}
          ORDER BY m.created_at DESC
          LIMIT 100`
       )
       .all();
     return { moments: rows.map(enrichMoment) };
+  });
+
+  /** User posts one moment (text required, optional 1 image). No LLM. */
+  app.post('/api/moments', async (req, reply) => {
+    const ctype = String(req.headers['content-type'] || '');
+    let content = '';
+    let imagePath: string | null = null;
+
+    try {
+      if (ctype.includes('multipart/form-data')) {
+        const parts = (req as any).parts();
+        let fileBuf: Buffer | null = null;
+        let fileName = '';
+        let fileMime = '';
+        for await (const part of parts) {
+          if (part.type === 'file') {
+            if (part.fieldname === 'file' || part.fieldname === 'image') {
+              fileBuf = await part.toBuffer();
+              fileName = part.filename || '';
+              fileMime = part.mimetype || '';
+            } else {
+              await part.toBuffer();
+            }
+          } else if (part.fieldname === 'content') {
+            content = String(part.value ?? '');
+          }
+        }
+        content = content.trim();
+        if (!content) {
+          return reply.code(400).send({ error: '动态正文不能为空' });
+        }
+        if (fileBuf && fileBuf.length) {
+          const ALLOWED: Record<string, string> = {
+            'image/jpeg': '.jpg',
+            'image/jpg': '.jpg',
+            'image/png': '.png',
+            'image/webp': '.webp',
+          };
+          let ext = ALLOWED[fileMime];
+          if (!ext) {
+            const lower = fileName.toLowerCase();
+            if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) ext = '.jpg';
+            else if (lower.endsWith('.png')) ext = '.png';
+            else if (lower.endsWith('.webp')) ext = '.webp';
+          }
+          if (!ext) {
+            return reply.code(400).send({ error: '仅支持 jpg / png / webp 图片' });
+          }
+          if (fileBuf.length > 5 * 1024 * 1024) {
+            return reply.code(400).send({ error: '图片不能超过 5MB' });
+          }
+          const saved = saveImageBuffer(fileBuf, ext, 'moment');
+          imagePath = saved.publicPath;
+        }
+      } else {
+        const body = (req.body ?? {}) as { content?: string };
+        content = String(body.content ?? '').trim();
+        if (!content) {
+          return reply.code(400).send({ error: '动态正文不能为空' });
+        }
+      }
+    } catch (e) {
+      const status = (e as any)?.statusCode || 400;
+      const msg = e instanceof Error ? e.message : String(e);
+      return reply.code(status).send({ error: msg });
+    }
+
+    const id = uuid();
+    const created_at = new Date().toISOString();
+    db.prepare(
+      `INSERT INTO moments (id, character_id, author_kind, content, image_path, created_at)
+       VALUES (?, NULL, 'user', ?, ?, ?)`
+    ).run(id, content, imagePath, created_at);
+
+    return { moment: enrichMoment(getMomentRow(id)) };
   });
 
   app.post('/api/moments/generate', async (req, reply) => {
@@ -74,23 +176,16 @@ export async function momentRoutes(app: FastifyInstance) {
     const id = uuid();
     const created_at = new Date().toISOString();
     db.prepare(
-      `INSERT INTO moments (id, character_id, content, created_at) VALUES (?, ?, ?, ?)`
+      `INSERT INTO moments (id, character_id, author_kind, content, image_path, created_at)
+       VALUES (?, ?, 'character', ?, NULL, ?)`
     ).run(id, character.id, content, created_at);
 
-    return {
-      moment: enrichMoment({
-        id,
-        character_id: character.id,
-        character_name: character.name,
-        content,
-        created_at,
-      }),
-    };
+    return { moment: enrichMoment(getMomentRow(id)) };
   });
 
   app.delete<{ Params: { id: string } }>('/api/moments/:id', async (req, reply) => {
-    const moment = db.prepare('SELECT id FROM moments WHERE id = ?').get(req.params.id) as
-      | { id: string }
+    const moment = db.prepare('SELECT id, image_path FROM moments WHERE id = ?').get(req.params.id) as
+      | { id: string; image_path: string | null }
       | undefined;
     if (!moment) return reply.code(404).send({ error: '动态不存在' });
 
@@ -103,6 +198,7 @@ export async function momentRoutes(app: FastifyInstance) {
       delMoment.run(moment.id);
     });
     tx();
+    unlinkUploadPublicPath(moment.image_path);
     return { ok: true };
   });
 
@@ -124,14 +220,7 @@ export async function momentRoutes(app: FastifyInstance) {
       ).run(req.params.id, new Date().toISOString());
     }
 
-    const row = db
-      .prepare(
-        `SELECT m.*, ch.name AS character_name, ch.avatar_path
-         FROM moments m JOIN characters ch ON ch.id = m.character_id
-         WHERE m.id = ?`
-      )
-      .get(req.params.id);
-    return { moment: enrichMoment(row) };
+    return { moment: enrichMoment(getMomentRow(req.params.id)) };
   });
 
   app.post<{ Params: { id: string } }>('/api/moments/:id/comments', async (req, reply) => {
@@ -149,13 +238,9 @@ export async function momentRoutes(app: FastifyInstance) {
        VALUES (?, ?, '我', ?, ?)`
     ).run(id, req.params.id, content, created_at);
 
-    const row = db
-      .prepare(
-        `SELECT m.*, ch.name AS character_name, ch.avatar_path
-         FROM moments m JOIN characters ch ON ch.id = m.character_id
-         WHERE m.id = ?`
-      )
-      .get(req.params.id);
-    return { moment: enrichMoment(row), comment: { id, author: '我', content, created_at } };
+    return {
+      moment: enrichMoment(getMomentRow(req.params.id)),
+      comment: { id, author: '我', content, created_at },
+    };
   });
 }

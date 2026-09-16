@@ -65,6 +65,12 @@ const menuOpen = ref(false);
 const msgMenuId = ref<string | null>(null);
 const momentMenuId = ref<string | null>(null);
 const pendingDeleteMoment = ref<Moment | null>(null);
+const momentComposerOpen = ref(false);
+const momentDraft = ref('');
+const momentImageFile = ref<File | null>(null);
+const momentImagePreview = ref<string | null>(null);
+const momentPostBusy = ref(false);
+const momentImageInput = ref<HTMLInputElement | null>(null);
 const pendingDeleteMessage = ref<ChatMessage | null>(null);
 const pendingOverwriteImport = ref<{ file: File; name: string } | null>(null);
 const pendingDeleteCharacter = ref<{ id: string; name: string } | null>(null);
@@ -1144,6 +1150,75 @@ function toggleMsgMenu(id: string) {
   msgMenuId.value = msgMenuId.value === id ? null : id;
 }
 
+
+function openMomentComposer() {
+  momentComposerOpen.value = true;
+  momentDraft.value = '';
+  clearMomentImage();
+}
+
+function closeMomentComposer() {
+  momentComposerOpen.value = false;
+  momentDraft.value = '';
+  clearMomentImage();
+}
+
+function clearMomentImage() {
+  if (momentImagePreview.value) {
+    URL.revokeObjectURL(momentImagePreview.value);
+  }
+  momentImagePreview.value = null;
+  momentImageFile.value = null;
+  if (momentImageInput.value) momentImageInput.value.value = '';
+}
+
+function onMomentImagePick(ev: Event) {
+  const input = ev.target as HTMLInputElement;
+  const file = input.files?.[0] || null;
+  if (!file) return;
+  const okType = /image\/(jpeg|jpg|png|webp)/i.test(file.type) || /\.(jpe?g|png|webp)$/i.test(file.name);
+  if (!okType) {
+    status.value = '仅支持 jpg / png / webp';
+    input.value = '';
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    status.value = '图片不能超过 5MB';
+    input.value = '';
+    return;
+  }
+  clearMomentImage();
+  momentImageFile.value = file;
+  momentImagePreview.value = URL.createObjectURL(file);
+}
+
+async function submitMyMoment() {
+  const text = momentDraft.value.trim();
+  if (!text || momentPostBusy.value) return;
+  momentPostBusy.value = true;
+  try {
+    const res = await api.createMyMoment(text, momentImageFile.value);
+    moments.value = [res.moment, ...moments.value.filter((m) => m.id !== res.moment.id)];
+    if (profileView.value?.kind === 'user') {
+      profileMoments.value = [res.moment, ...profileMoments.value.filter((m) => m.id !== res.moment.id)];
+    }
+    closeMomentComposer();
+    status.value = '动态已发布';
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    momentPostBusy.value = false;
+  }
+}
+
+function openMomentAuthor(m: Moment) {
+  if (m.author_kind === 'user' || !m.character_id) {
+    openMyProfile();
+    return;
+  }
+  openCharacterProfile(m.character_id);
+}
+
 async function letThemPost(characterId: string) {
   status.value = '生成动态…';
   try {
@@ -1175,6 +1250,7 @@ async function confirmDeleteMoment() {
   try {
     await api.deleteMoment(m.id);
     moments.value = moments.value.filter((x) => x.id !== m.id);
+    profileMoments.value = profileMoments.value.filter((x) => x.id !== m.id);
     delete commentDrafts[m.id];
     status.value = '动态已删除';
     pendingDeleteMoment.value = null;
@@ -1627,7 +1703,15 @@ onUnmounted(() => {
             </div>
           </div>
           <div class="wx-profile-moments">
-            <div class="wx-profile-label">动态</div>
+            <div class="wx-profile-label-row">
+              <div class="wx-profile-label">动态</div>
+              <button
+                v-if="profileView.kind === 'user'"
+                type="button"
+                class="wx-mini-btn primary"
+                @click="openMomentComposer"
+              >发动态</button>
+            </div>
             <div v-for="m in profileMoments" :key="m.id" class="wx-moment-card">
               <div class="wx-moment-head">
                 <div class="wx-avatar">
@@ -1638,11 +1722,25 @@ onUnmounted(() => {
                   <span class="pn">{{ m.character_name || profile?.name }}</span>
                   <span class="wx-moment-time">{{ formatTime(m.created_at) }}</span>
                 </div>
+                <div v-if="profileView.kind === 'user'" class="wx-moment-more" @click.stop>
+                  <button class="wx-moment-more-btn" title="更多" @click="toggleMomentMenu(m.id)">⋯</button>
+                  <div v-if="momentMenuId === m.id" class="wx-menu moment">
+                    <button class="danger" @click="askDeleteMoment(m)">删除</button>
+                  </div>
+                </div>
               </div>
               <div class="wx-moment-content">{{ m.content }}</div>
+              <button
+                v-if="m.image_path"
+                type="button"
+                class="wx-moment-image"
+                @click="openLightbox(m.image_path)"
+              >
+                <img :src="m.image_path" alt="动态配图" />
+              </button>
             </div>
             <div v-if="!profileMoments.length" class="wx-empty">
-              {{ profileView.kind === 'user' ? '你还没有动态（动态目前由角色发布）' : '还没有动态' }}
+              {{ profileView.kind === 'user' ? '你还没有动态，点上方「发动态」写一条吧' : '还没有动态' }}
             </div>
           </div>
         </div>
@@ -1683,7 +1781,7 @@ onUnmounted(() => {
           <div class="wx-moments-feed">
             <div v-for="m in filteredMoments" :key="m.id" class="wx-moment-card">
               <div class="wx-moment-head">
-                <div class="wx-avatar" role="button" title="查看主页" @click.stop="openCharacterProfile(m.character_id)">
+                <div class="wx-avatar" role="button" title="查看主页" @click.stop="openMomentAuthor(m)">
                   <img v-if="m.avatar_path" :src="m.avatar_path" alt="" />
                   <template v-else>{{ avatarText(m.character_name) }}</template>
                 </div>
@@ -1699,6 +1797,14 @@ onUnmounted(() => {
                 </div>
               </div>
               <div class="wx-moment-content">{{ m.content }}</div>
+              <button
+                v-if="m.image_path"
+                type="button"
+                class="wx-moment-image"
+                @click="openLightbox(m.image_path)"
+              >
+                <img :src="m.image_path" alt="动态配图" />
+              </button>
               <div class="wx-moment-actions">
                 <button class="wx-mini-btn" :class="{ liked: m.liked }" @click="toggleLike(m)">
                   {{ m.liked ? '♥ 已赞' : '♡ 点赞' }}{{ m.like_count ? ` · ${m.like_count}` : '' }}
@@ -1721,7 +1827,7 @@ onUnmounted(() => {
             </div>
             <div v-if="!filteredMoments.length" class="wx-empty">
               {{ momentsFilterId ? '该角色还没有动态' : '还没有动态' }}。<br />
-              去通讯录点角色「⋯ → 让 TA 发动态」。
+              可以点上方「发动态」，或去通讯录「⋯ → 让 TA 发动态」。
               <div v-if="momentsFilterId" style="margin-top:12px">
                 <button type="button" class="wx-mini-btn" @click="setMomentsFilter(null)">查看全部</button>
               </div>
@@ -1968,7 +2074,7 @@ onUnmounted(() => {
       <div class="wx-confirm-card" @click.stop>
         <div class="wx-confirm-title">删除动态</div>
         <div class="wx-confirm-body">
-          确定删除「{{ pendingDeleteMoment.character_name || '角色' }}」的这条动态？点赞与评论也会一起删除。
+          确定删除「{{ pendingDeleteMoment.character_name || (pendingDeleteMoment.author_kind === 'user' ? '我' : '角色') }}」的这条动态？点赞与评论也会一起删除。
         </div>
         <div class="wx-confirm-actions">
           <button class="wx-mini-btn" @click="cancelDeleteMoment">取消</button>
@@ -2028,7 +2134,47 @@ onUnmounted(() => {
 
 
   
+    
     <div
+      v-if="momentComposerOpen"
+      class="wx-confirm-mask"
+      @click.self="closeMomentComposer"
+    >
+      <div class="wx-confirm-card wx-moment-composer" @click.stop>
+        <div class="wx-confirm-title">发动态</div>
+        <textarea
+          v-model="momentDraft"
+          class="wx-moment-composer-input"
+          rows="4"
+          maxlength="500"
+          placeholder="写点什么…"
+        ></textarea>
+        <div v-if="momentImagePreview" class="wx-moment-composer-preview">
+          <img :src="momentImagePreview" alt="预览" />
+          <button type="button" class="wx-mini-btn" @click="clearMomentImage">去掉图片</button>
+        </div>
+        <div class="wx-confirm-actions" style="justify-content:space-between;width:100%">
+          <button type="button" class="wx-mini-btn" :disabled="momentPostBusy" @click="momentImageInput?.click()">配图</button>
+          <div style="display:flex;gap:8px">
+            <button class="wx-mini-btn" :disabled="momentPostBusy" @click="closeMomentComposer">取消</button>
+            <button
+              class="wx-confirm-ok"
+              :disabled="momentPostBusy || !momentDraft.trim()"
+              @click="submitMyMoment"
+            >发布</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <input
+      ref="momentImageInput"
+      type="file"
+      accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+      style="display: none"
+      @change="onMomentImagePick"
+    />
+
+<div
       v-if="lightboxUrl"
       class="wx-lightbox"
       role="dialog"

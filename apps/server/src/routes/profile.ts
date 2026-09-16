@@ -48,7 +48,15 @@ function enrichMoment(row: any) {
        WHERE moment_id = ? ORDER BY created_at ASC, rowid ASC`
     )
     .all(row.id);
-  return { ...row, liked, like_count, comments };
+  return {
+    ...row,
+    author_kind: row.author_kind === 'user' ? 'user' : 'character',
+    character_id: row.character_id ?? null,
+    image_path: row.image_path ?? null,
+    liked,
+    like_count,
+    comments,
+  };
 }
 
 function ensureMeProfile(): UserProfileRow {
@@ -88,17 +96,42 @@ function assembleMood(first_mes?: string | null, personality?: string | null, ma
   return line.slice(0, maxLen - 1) + '…';
 }
 
+const PROFILE_MOMENT_SELECT = `
+  SELECT m.*,
+    CASE
+      WHEN m.author_kind = 'user' THEN COALESCE(up.name, '旅人')
+      ELSE ch.name
+    END AS character_name,
+    CASE
+      WHEN m.author_kind = 'user' THEN up.avatar_path
+      ELSE ch.avatar_path
+    END AS avatar_path
+  FROM moments m
+  LEFT JOIN characters ch ON ch.id = m.character_id AND m.author_kind = 'character'
+  LEFT JOIN user_profile up ON up.id = 'me'
+`;
+
 function momentsForCharacter(characterId: string) {
   const rows = db
     .prepare(
-      `SELECT m.*, ch.name AS character_name, ch.avatar_path
-       FROM moments m
-       JOIN characters ch ON ch.id = m.character_id
-       WHERE m.character_id = ?
+      `${PROFILE_MOMENT_SELECT}
+       WHERE m.author_kind = 'character' AND m.character_id = ?
        ORDER BY m.created_at DESC
        LIMIT 100`
     )
     .all(characterId);
+  return rows.map(enrichMoment);
+}
+
+function momentsForUser() {
+  const rows = db
+    .prepare(
+      `${PROFILE_MOMENT_SELECT}
+       WHERE m.author_kind = 'user'
+       ORDER BY m.created_at DESC
+       LIMIT 100`
+    )
+    .all();
   return rows.map(enrichMoment);
 }
 
@@ -154,7 +187,7 @@ export async function profileRoutes(app: FastifyInstance) {
     const row = ensureMeProfile();
     return {
       profile: userProfileDto(row),
-      moments: [] as unknown[],
+      moments: momentsForUser(),
     };
   });
 

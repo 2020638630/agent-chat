@@ -2031,3 +2031,63 @@ button.wx-space-filter-item {
   pointer-events: none;
 }
 
+
+
+/* ===== M-06 user moment image + composer ===== */
+.wx-profile-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.wx-profile-label-row .wx-profile-label {
+  margin-bottom: 0;
+}
+.wx-moment-image {
+  display: block;
+  margin: 10px 0 4px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--panel-light);
+  cursor: zoom-in;
+  max-width: min(320px, 100%);
+}
+.wx-moment-image img {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  object-fit: cover;
+}
+.wx-moment-composer {
+  width: min(420px, 92vw);
+  text-align: left;
+}
+.wx-moment-composer-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 96px;
+  margin: 8px 0 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-light);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.5;
+}
+.wx-moment-composer-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.wx-moment-composer-preview img {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
