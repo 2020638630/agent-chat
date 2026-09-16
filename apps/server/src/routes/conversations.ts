@@ -6,7 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { v4 as uuid } from 'uuid';
 import { db } from '../db/index.js';
 import { buildSystemPrompt } from '../utils/characterCard.js';
-import { emojiConstraintForPrompt } from '../constants/emojiWhitelist.js';
+import { emojiConstraintForPrompt, hasEmojiToken, sanitizeAssistantEmoji } from '../constants/emojiWhitelist.js';
 import { shouldAssistantUseVoice } from '../utils/voiceRequest.js';
 import { chatCompletion } from '../services/llm.js';
 import {
@@ -481,6 +481,17 @@ export async function conversationRoutes(app: FastifyInstance) {
       replyText.includes('LLM 暂时不可用') || replyText.startsWith('（LLM');
     const assistantSource: 'text' | 'voice' =
       !llmFailed && shouldAssistantUseVoice(source, trimmed) ? 'voice' : 'text';
+
+    const recentAssistants = db
+      .prepare(
+        `SELECT content FROM messages
+         WHERE conversation_id = ? AND role = 'assistant'
+         ORDER BY created_at DESC, rowid DESC
+         LIMIT 2`,
+      )
+      .all(conversationId) as Array<{ content: string }>;
+    const recentAssistantHadEmoji = recentAssistants.some((m) => hasEmojiToken(m.content || ''));
+    replyText = sanitizeAssistantEmoji(replyText, { recentAssistantHadEmoji });
 
     db.prepare(
       `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at, source)
