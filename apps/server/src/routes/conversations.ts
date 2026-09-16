@@ -6,6 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { v4 as uuid } from 'uuid';
 import { db } from '../db/index.js';
 import { buildSystemPrompt } from '../utils/characterCard.js';
+import { emojiConstraintForPrompt } from '../constants/emojiWhitelist.js';
 import { shouldAssistantUseVoice } from '../utils/voiceRequest.js';
 import { chatCompletion } from '../services/llm.js';
 import {
@@ -417,6 +418,8 @@ export async function conversationRoutes(app: FastifyInstance) {
     }
 
     let system = buildSystemPrompt(character);
+
+    system += `\n\n${emojiConstraintForPrompt()}`;
 
     if (conv.type === 'group') {
       const roster = members.map((m) => m.name).join('、');

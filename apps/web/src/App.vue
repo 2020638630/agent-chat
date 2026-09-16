@@ -7,9 +7,10 @@
  * Voice hold-to-talk lives in ./composables/useHoldToTalk; styles in ./styles/wechat.css.
  */
 
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { api, type Character, type ChatMessage, type Conversation, type Moment, type Profile } from './api/client';
 import { useHoldToTalk } from './composables/useHoldToTalk';
+import { EMOJI_WHITELIST } from './constants/emojiWhitelist';
 
 type Tab = 'chat' | 'contacts' | 'moments';
 
@@ -21,6 +22,9 @@ const moments = ref<Moment[]>([]);
 const momentsFilterId = ref<string | null>(null);
 const activeConversationId = ref<string | null>(null);
 const draft = ref('');
+const draftInput = ref<HTMLTextAreaElement | null>(null);
+const emojiOpen = ref(false);
+const emojiPopover = ref<HTMLElement | null>(null);
 const sending = ref(false);
 const {
   holding: voiceHolding,
@@ -669,7 +673,52 @@ async function confirmOverwriteImport() {
   }
 }
 
+
+function toggleEmojiPicker() {
+  emojiOpen.value = !emojiOpen.value;
+}
+
+function closeEmojiPicker() {
+  emojiOpen.value = false;
+}
+
+function insertEmoji(emoji: string) {
+  const el = draftInput.value;
+  const cur = draft.value;
+  if (!el) {
+    draft.value = cur + emoji;
+    return;
+  }
+  const start = el.selectionStart ?? cur.length;
+  const end = el.selectionEnd ?? cur.length;
+  draft.value = cur.slice(0, start) + emoji + cur.slice(end);
+  void nextTick(() => {
+    const pos = start + emoji.length;
+    el.focus();
+    el.setSelectionRange(pos, pos);
+  });
+}
+
+function onEmojiDocPointerDown(e: PointerEvent) {
+  if (!emojiOpen.value) return;
+  const target = e.target as Node | null;
+  if (!target) return;
+  if (emojiPopover.value?.contains(target)) return;
+  const btn = (target as HTMLElement).closest?.('.wx-emoji-btn');
+  if (btn) return;
+  closeEmojiPicker();
+}
+
+function onEmojiKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && emojiOpen.value) {
+    e.preventDefault();
+    closeEmojiPicker();
+  }
+}
+
 async function send() {
+  closeEmojiPicker();
+
   const text = draft.value.trim();
   if (!text || !activeConversationId.value || sending.value) return;
   sending.value = true;
@@ -1094,6 +1143,8 @@ watch(tab, (t) => {
 });
 
 onMounted(async () => {
+  document.addEventListener('pointerdown', onEmojiDocPointerDown);
+  document.addEventListener('keydown', onEmojiKeydown);
   await refreshMeProfile();
   try {
     const h = await api.health();
@@ -1102,6 +1153,11 @@ onMounted(async () => {
     status.value = '无法连接后端（请先启动 apps/server）';
   }
   await Promise.all([refreshCharacters(), refreshConversations(), refreshMoments()]);
+});
+
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', onEmojiDocPointerDown);
+  document.removeEventListener('keydown', onEmojiKeydown);
 });
 </script>
 
@@ -1678,6 +1734,7 @@ onMounted(async () => {
                 </button>
                 <template v-if="!voiceActive">
                   <textarea
+                    ref="draftInput"
                     v-model="draft"
                     rows="1"
                     placeholder="发消息…"
@@ -1688,6 +1745,18 @@ onMounted(async () => {
                   <span class="wx-record-pulse" aria-hidden="true"></span>
                   <span class="wx-record-text">{{ voiceCancelHint ? '松开取消' : '松开发送 · 上滑取消' }}</span>
                 </div>
+                                <button
+                  v-if="!voiceActive"
+                  type="button"
+                  class="wx-composer-btn wx-emoji-btn"
+                  :class="{ active: emojiOpen }"
+                  title="表情"
+                  aria-label="表情"
+                  :aria-expanded="emojiOpen"
+                  @click.stop="toggleEmojiPicker"
+                >
+                  <span class="wx-emoji-btn-face" aria-hidden="true">😀</span>
+                </button>
                 <button
                   type="button"
                   class="wx-composer-btn wx-mic-icon"
@@ -1715,6 +1784,26 @@ onMounted(async () => {
                   <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
                 </button>
               </div>
+
+              <div
+                v-if="emojiOpen"
+                ref="emojiPopover"
+                class="wx-emoji-popover"
+                role="dialog"
+                aria-label="表情选择"
+              >
+                <div class="wx-emoji-grid">
+                  <button
+                    v-for="em in EMOJI_WHITELIST"
+                    :key="em"
+                    type="button"
+                    class="wx-emoji-cell"
+                    :title="em"
+                    @click="insertEmoji(em)"
+                  >{{ em }}</button>
+                </div>
+              </div>
+
             </div>
           </div>
 
