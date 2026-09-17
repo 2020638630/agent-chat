@@ -109,6 +109,10 @@ const activeConversation = computed(() =>
   conversations.value.find((c) => c.id === activeConversationId.value) ?? null
 );
 
+const totalUnread = computed(() =>
+  conversations.value.reduce((sum, c) => sum + (Number(c.unread_count) || 0), 0)
+);
+
 const midTitle = computed(() => {
   if (tab.value === 'chat') return '消息';
   if (tab.value === 'contacts') return creatingGroup.value ? '创建群聊' : '通讯录';
@@ -1338,9 +1342,8 @@ function startConversationsPoll() {
   stopConversationsPoll();
   conversationsPollTimer = setInterval(() => {
     if (document.visibilityState !== "visible") return;
-    if (tab.value === "chat") {
-      void refreshConversations();
-    }
+    // Keep sidebar unread dot fresh even when not on the chat tab.
+    void refreshConversations();
   }, 20_000);
 }
 function stopConversationsPoll() {
@@ -1379,6 +1382,8 @@ onUnmounted(() => {
       </div>
       <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" title="消息" aria-label="消息" @click="switchTab('chat')">
         <svg class="wx-nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      
+        <span v-if="totalUnread > 0" class="wx-nav-dot" aria-hidden="true"></span>
       </button>
       <button class="wx-nav-btn" :class="{ active: tab === 'contacts' }" title="通讯录" aria-label="通讯录" @click="switchTab('contacts')">
         <svg class="wx-nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>

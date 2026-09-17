@@ -217,6 +217,18 @@ select {
   background: var(--accent-deep);
 }
 
+.wx-nav-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  box-shadow: 0 0 0 2px var(--nav-bg, #f3f4f8);
+  pointer-events: none;
+}
+
 /* ===== Mid list ===== */
 .wx-mid {
   background: var(--panel);
