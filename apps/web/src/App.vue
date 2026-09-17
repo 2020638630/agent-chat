@@ -315,6 +315,12 @@ async function closeProfile() {
   profileEditing.value = false;
 }
 
+/** Leave profile overlay when switching side nav tabs. */
+async function switchTab(next: 'chat' | 'contacts' | 'moments') {
+  if (profileView.value) await closeProfile();
+  tab.value = next;
+}
+
 
 
 function applyAppearanceToDom() {
@@ -1371,13 +1377,13 @@ onUnmounted(() => {
         <img v-if="meProfile?.avatar_path" :src="meProfile.avatar_path" alt="" />
         <template v-else>{{ avatarText(meProfile?.name || '旅人') }}</template>
       </div>
-      <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" title="消息" aria-label="消息" @click="tab = 'chat'">
+      <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" title="消息" aria-label="消息" @click="switchTab('chat')">
         <svg class="wx-nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       </button>
-      <button class="wx-nav-btn" :class="{ active: tab === 'contacts' }" title="通讯录" aria-label="通讯录" @click="tab = 'contacts'">
+      <button class="wx-nav-btn" :class="{ active: tab === 'contacts' }" title="通讯录" aria-label="通讯录" @click="switchTab('contacts')">
         <svg class="wx-nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
       </button>
-      <button class="wx-nav-btn" :class="{ active: tab === 'moments' }" title="空间" aria-label="空间" @click="tab = 'moments'">
+      <button class="wx-nav-btn" :class="{ active: tab === 'moments' }" title="空间" aria-label="空间" @click="switchTab('moments')">
         <svg class="wx-nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       </button>
     </aside>
@@ -1581,7 +1587,7 @@ onUnmounted(() => {
             </button>
           </div>
           <div v-else class="wx-hint">今天还没有新动态</div>
-          <button type="button" class="wx-mini-btn" style="margin-top:10px" @click="tab = 'contacts'">
+          <button type="button" class="wx-mini-btn" style="margin-top:10px" @click="switchTab('contacts')">
             去通讯录发动态
           </button>
         </div>
