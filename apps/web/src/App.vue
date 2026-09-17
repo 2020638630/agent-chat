@@ -630,6 +630,14 @@ async function openConversation(id: string) {
   msgMenuId.value = null;
   const res = await api.listMessages(id);
   messages.value = res.messages;
+  // C-03: server marks read on GET messages; clear badge immediately without waiting for list refresh
+  const row = conversations.value.find((c) => c.id === id);
+  if (row) row.unread_count = 0;
+  void api.listConversations().then((listRes) => {
+    const synced = listRes.conversations.find((c) => c.id === id);
+    const live = conversations.value.find((c) => c.id === id);
+    if (live && synced) live.unread_count = synced.unread_count ?? 0;
+  }).catch(() => {});
   await nextTick();
   if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight;
 }
