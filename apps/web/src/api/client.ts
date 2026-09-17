@@ -42,6 +42,14 @@ export type MomentComment = {
 
 export type ThemeId = 'mist' | 'paper' | 'lake' | 'dusk';
 
+export type ProactiveSettings = {
+  enabled: boolean;
+  quiet_start: string;
+  quiet_end: string;
+  daily_cap: number;
+  sent_today: number;
+};
+
 export type Profile = {
   id: string;
   kind: 'user' | 'character';
@@ -299,4 +307,36 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content }),
     }).then((r) => json<{ moment: Moment }>(r)),
+
+  getProactiveSettings: () =>
+    fetch("/api/proactive").then((r) => json<{ settings: ProactiveSettings }>(r)),
+
+  updateProactiveSettings: (body: {
+    enabled?: boolean;
+    quiet_start?: string;
+    quiet_end?: string;
+    daily_cap?: number;
+  }) =>
+    fetch("/api/proactive", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }).then((r) => json<{ settings: ProactiveSettings }>(r)),
+
+  tickProactive: () =>
+    fetch("/api/proactive/tick", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    }).then((r) =>
+      json<{
+        ran: boolean;
+        sent: boolean;
+        reason?: string;
+        character_id?: string;
+        conversation_id?: string;
+        message_id?: string;
+        content?: string;
+      }>(r)
+    ),
 };

@@ -1,3 +1,4 @@
+import { defaultInitiativeTier } from '../db/schema.js';
 import type { FastifyInstance } from 'fastify';
 import { unlinkUploadPublicPath } from '../services/uploadImage.js';
 import { v4 as uuid } from 'uuid';
@@ -113,7 +114,8 @@ export async function characterRoutes(app: FastifyInstance) {
           system_prompt = ?,
           post_history_instructions = ?,
           avatar_path = COALESCE(?, avatar_path),
-          raw_json = ?
+          raw_json = ?,
+          initiative_tier = ?
          WHERE id = ?`
       ).run(
         card.name.trim() || existing.name,
@@ -126,6 +128,7 @@ export async function characterRoutes(app: FastifyInstance) {
         card.post_history_instructions ?? '',
         parsedAvatar,
         JSON.stringify(card.raw),
+        defaultInitiativeTier(card.name.trim() || existing.name),
         existing.id
       );
       const row = db.prepare('SELECT * FROM characters WHERE id = ?').get(existing.id);
@@ -136,8 +139,8 @@ export async function characterRoutes(app: FastifyInstance) {
     db.prepare(
       `INSERT INTO characters
        (id, name, description, personality, scenario, first_mes, mes_example,
-        system_prompt, post_history_instructions, avatar_path, raw_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        system_prompt, post_history_instructions, avatar_path, raw_json, initiative_tier)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       card.name.trim() || card.name,
@@ -149,7 +152,8 @@ export async function characterRoutes(app: FastifyInstance) {
       card.system_prompt ?? '',
       card.post_history_instructions ?? '',
       parsedAvatar,
-      JSON.stringify(card.raw)
+      JSON.stringify(card.raw),
+      defaultInitiativeTier(card.name.trim() || card.name)
     );
 
     const row = db.prepare('SELECT * FROM characters WHERE id = ?').get(id);

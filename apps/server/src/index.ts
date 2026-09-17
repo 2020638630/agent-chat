@@ -14,6 +14,8 @@ import { characterRoutes } from './routes/characters.js';
 import { conversationRoutes } from './routes/conversations.js';
 import { momentRoutes } from './routes/moments.js';
 import { profileRoutes } from './routes/profile.js';
+import { proactiveRoutes } from './routes/proactive.js';
+import { runProactiveTick } from './services/proactive.js';
 import { getUploadsDir } from './db/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -45,10 +47,19 @@ await app.register(characterRoutes);
 await app.register(conversationRoutes);
 await app.register(momentRoutes);
 await app.register(profileRoutes);
+await app.register(proactiveRoutes);
 
 try {
   await app.listen({ port, host });
   console.log(`[agent-chat] server http://${host}:${port}`);
+
+  const proactiveMs = Number(process.env.PROACTIVE_INTERVAL_MS || 60_000);
+  if (Number.isFinite(proactiveMs) && proactiveMs >= 5_000) {
+    setInterval(() => {
+      void runProactiveTick().catch((err) => app.log.error(err, 'proactive tick'));
+    }, proactiveMs);
+    console.log(`[agent-chat] proactive sampler every ${proactiveMs}ms`);
+  }
 } catch (err) {
   app.log.error(err);
   process.exit(1);

@@ -9,6 +9,7 @@ import { buildSystemPrompt } from '../utils/characterCard.js';
 import { emojiConstraintForPrompt, hasEmojiToken, sanitizeAssistantEmoji } from '../constants/emojiWhitelist.js';
 import { shouldAssistantUseVoice } from '../utils/voiceRequest.js';
 import { chatCompletion } from '../services/llm.js';
+import { onPrivateUserMessage } from '../services/proactive.js';
 import {
   isTtsCacheFileForMessage,
   resolveCharacterVoiceKind,
@@ -395,6 +396,10 @@ export async function conversationRoutes(app: FastifyInstance) {
       character = members[0];
     } else {
       character = pickGroupResponder(members, conversationId, mentionCharacterId);
+    }
+
+    if (conv.type === 'private' && character?.id && (source === 'text' || source === 'voice')) {
+      onPrivateUserMessage(character.id);
     }
 
     const history = db

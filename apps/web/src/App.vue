@@ -91,6 +91,8 @@ const uiTheme = ref<ThemeId>(DEFAULT_THEME);
 const uiBgOpacity = ref(DEFAULT_BG_OPACITY);
 const uiSpaceBgOpacity = ref(DEFAULT_SPACE_BG_OPACITY);
 const appearanceBusy = ref(false);
+const proactiveEnabled = ref(false);
+const proactiveBusy = ref(false);
 const avatarFileInput = ref<HTMLInputElement | null>(null);
 const bgFileInput = ref<HTMLInputElement | null>(null);
 const spaceBgFileInput = ref<HTMLInputElement | null>(null);
@@ -344,6 +346,28 @@ async function persistAppearance(partial: {
     status.value = err instanceof Error ? err.message : String(err);
   } finally {
     appearanceBusy.value = false;
+  }
+}
+
+
+async function loadProactiveSettings() {
+  try {
+    const res = await api.getProactiveSettings();
+    proactiveEnabled.value = !!res.settings.enabled;
+  } catch {
+    /* ignore */
+  }
+}
+
+async function toggleProactiveEnabled(next: boolean) {
+  proactiveBusy.value = true;
+  try {
+    const res = await api.updateProactiveSettings({ enabled: next });
+    proactiveEnabled.value = !!res.settings.enabled;
+  } catch (err) {
+    status.value = err instanceof Error ? err.message : String(err);
+  } finally {
+    proactiveBusy.value = false;
   }
 }
 
@@ -1294,6 +1318,24 @@ watch(tab, (t) => {
   if (t === 'chat') void refreshConversations();
 });
 
+
+let conversationsPollTimer: ReturnType<typeof setInterval> | null = null;
+function startConversationsPoll() {
+  stopConversationsPoll();
+  conversationsPollTimer = setInterval(() => {
+    if (document.visibilityState !== "visible") return;
+    if (tab.value === "chat") {
+      void refreshConversations();
+    }
+  }, 20_000);
+}
+function stopConversationsPoll() {
+  if (conversationsPollTimer) {
+    clearInterval(conversationsPollTimer);
+    conversationsPollTimer = null;
+  }
+}
+
 onMounted(async () => {
   document.addEventListener('pointerdown', onEmojiDocPointerDown);
   document.addEventListener('keydown', onEmojiKeydown);
@@ -1308,6 +1350,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+  stopConversationsPoll();
   document.removeEventListener('pointerdown', onEmojiDocPointerDown);
   document.removeEventListener('keydown', onEmojiKeydown);
 });
@@ -1689,6 +1732,20 @@ onUnmounted(() => {
                   @input="onSpaceBgOpacityInput"
                   @change="onSpaceBgOpacityCommit"
                 />
+              </div>
+            
+
+              <div class="wx-proactive-row">
+                <label class="wx-proactive-label">
+                  <input
+                    type="checkbox"
+                    :checked="proactiveEnabled"
+                    :disabled="proactiveBusy"
+                    @change="toggleProactiveEnabled(($event.target as HTMLInputElement).checked)"
+                  />
+                  <span>允许角色主动找你</span>
+                </label>
+                <p class="wx-proactive-hint">关闭时角色不会先开口。打开后偶尔会在私聊里主动发一句。</p>
               </div>
             </div>
 

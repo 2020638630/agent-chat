@@ -78,6 +78,69 @@ export function ensureThemeAppearanceColumns(db: Database.Database) {
   }
 }
 
+
+export function defaultInitiativeTier(name: string): 'restrained' | 'calm' | 'outgoing' {
+  const n = String(name || '');
+  if (n.includes('夜见')) return 'restrained';
+  if (n.includes('小春')) return 'outgoing';
+  return 'calm';
+}
+
+export function ensureProactiveColumns(db: Database.Database) {
+  const userCols = db.prepare(`PRAGMA table_info(user_profile)`).all() as Array<{ name: string }>;
+  if (!userCols.some((c) => c.name === 'proactive_enabled')) {
+    db.exec(`ALTER TABLE user_profile ADD COLUMN proactive_enabled INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!userCols.some((c) => c.name === 'proactive_quiet_start')) {
+    db.exec(`ALTER TABLE user_profile ADD COLUMN proactive_quiet_start TEXT NOT NULL DEFAULT '23:00'`);
+  }
+  if (!userCols.some((c) => c.name === 'proactive_quiet_end')) {
+    db.exec(`ALTER TABLE user_profile ADD COLUMN proactive_quiet_end TEXT NOT NULL DEFAULT '08:00'`);
+  }
+  if (!userCols.some((c) => c.name === 'proactive_daily_cap')) {
+    db.exec(`ALTER TABLE user_profile ADD COLUMN proactive_daily_cap INTEGER NOT NULL DEFAULT 3`);
+  }
+
+  const charCols = db.prepare(`PRAGMA table_info(characters)`).all() as Array<{ name: string }>;
+  if (!charCols.some((c) => c.name === 'initiative_tier')) {
+    db.exec(`ALTER TABLE characters ADD COLUMN initiative_tier TEXT NOT NULL DEFAULT 'calm'`);
+  }
+
+  // backfill tiers by name rule
+  const chars = db.prepare(`SELECT id, name, initiative_tier FROM characters`).all() as Array<{
+    id: string;
+    name: string;
+    initiative_tier: string;
+  }>;
+  const upd = db.prepare(`UPDATE characters SET initiative_tier = ? WHERE id = ?`);
+  for (const c of chars) {
+    const want = defaultInitiativeTier(c.name);
+    // only fill if missing/invalid
+    if (!['restrained', 'calm', 'outgoing'].includes(String(c.initiative_tier || ''))) {
+      upd.run(want, c.id);
+    } else if (!c.initiative_tier) {
+      upd.run(want, c.id);
+    }
+  }
+  // apply name-based defaults for rows still at calm that match special names
+  for (const c of chars) {
+    const want = defaultInitiativeTier(c.name);
+    if (want !== 'calm') upd.run(want, c.id);
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS proactive_state (
+      character_id TEXT PRIMARY KEY,
+      urge REAL NOT NULL DEFAULT 0,
+      last_user_at TEXT,
+      last_proactive_at TEXT,
+      unanswered INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+    );
+  `);
+}
+
 export function ensureMessageImageColumn(db: Database.Database) {
   const cols = db.prepare(`PRAGMA table_info(messages)`).all() as Array<{ name: string }>;
   if (!cols.some((c) => c.name === 'image_path')) {
@@ -236,5 +299,6 @@ export function migrate(db: Database.Database) {
   ensureMediaPathColumns(db);
   ensureThemeAppearanceColumns(db);
   ensureMomentAuthorColumns(db);
+  ensureProactiveColumns(db);
   mergeDuplicatePrivateConversations(db);
 }
