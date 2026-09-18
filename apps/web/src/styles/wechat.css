@@ -543,17 +543,21 @@ select {
 
 .wx-memory-whisper {
   flex-shrink: 0;
-  font-size: 11px;
-  font-weight: 400;
-  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent, #6b8cff);
+  background: rgba(107, 140, 255, 0.12);
+  border-radius: 999px;
+  padding: 1px 8px;
   opacity: 0;
-  transition: opacity 2.1s ease;
+  transition: opacity 2.2s ease;
   pointer-events: none;
+  white-space: nowrap;
 }
 
 .wx-memory-whisper.show {
   opacity: 1;
-  transition: opacity 0.15s ease;
+  transition: opacity 0.18s ease;
 }
 
 .wx-header-meta .cstatus {

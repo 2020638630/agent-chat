@@ -619,8 +619,8 @@ function showMemoryWhisper() {
     whisperHideTimer = setTimeout(() => {
       memoryWhisperVisible.value = false;
       whisperHideTimer = null;
-    }, 2200);
-  }, 2000);
+    }, 2300);
+  }, 3000);
 }
 
 function flashMemoryHighlights(ids: string[]) {
@@ -653,7 +653,8 @@ function scheduleMemoryWhisper(characterId: string) {
     whisperDelayTimer = null;
   }
   const gen = ++whisperPollGen;
-  const offsetsMs = [1800, 3500, 5500, 8000, 11000, 15000];
+  // Extract can take ~30–70s on slow turns; keep probing without blocking the chat API.
+  const offsetsMs = [2000, 4000, 7000, 10000, 15000, 22000, 30000, 45000, 60000, 90000];
   for (const ms of offsetsMs) {
     const t = setTimeout(async () => {
       if (gen !== whisperPollGen) return;
