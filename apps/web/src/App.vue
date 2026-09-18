@@ -110,6 +110,8 @@ let whisperDelayTimer: ReturnType<typeof setTimeout> | null = null;
 let whisperHideTimer: ReturnType<typeof setTimeout> | null = null;
 let whisperFadeTimer: ReturnType<typeof setTimeout> | null = null;
 let memoryHighlightTimer: ReturnType<typeof setTimeout> | null = null;
+let whisperPollTimers: ReturnType<typeof setTimeout>[] = [];
+let whisperPollGen = 0;
 const profileLoading = ref(false);
 const profileEditing = ref(false);
 const editMood = ref('');
@@ -591,6 +593,8 @@ function clearWhisperTimers() {
     clearTimeout(whisperFadeTimer);
     whisperFadeTimer = null;
   }
+  for (const t of whisperPollTimers) clearTimeout(t);
+  whisperPollTimers = [];
 }
 
 function showMemoryWhisper() {
@@ -629,35 +633,55 @@ function flashMemoryHighlights(ids: string[]) {
   }, 2500);
 }
 
+async function seedMemorySnapshot(characterId: string) {
+  if (!characterId) return;
+  try {
+    const res = await api.listCharacterMemories(characterId);
+    memorySnapshots[characterId] = fingerprintMemories(res.memories || []);
+  } catch {
+    // best-effort
+  }
+}
+
+/** Extract often finishes ~5–15s after the assistant bubble; poll instead of one early GET. */
 function scheduleMemoryWhisper(characterId: string) {
   if (!characterId) return;
+  for (const t of whisperPollTimers) clearTimeout(t);
+  whisperPollTimers = [];
   if (whisperDelayTimer) {
     clearTimeout(whisperDelayTimer);
     whisperDelayTimer = null;
   }
-  const delay = 1500 + Math.random() * 1000;
-  whisperDelayTimer = setTimeout(async () => {
-    whisperDelayTimer = null;
-    try {
-      const res = await api.listCharacterMemories(characterId);
-      const mems = res.memories || [];
-      const prev = memorySnapshots[characterId];
-      if (prev === undefined) {
+  const gen = ++whisperPollGen;
+  const offsetsMs = [1800, 3500, 5500, 8000, 11000, 15000];
+  for (const ms of offsetsMs) {
+    const t = setTimeout(async () => {
+      if (gen !== whisperPollGen) return;
+      try {
+        const res = await api.listCharacterMemories(characterId);
+        const mems = res.memories || [];
+        const prev = memorySnapshots[characterId];
+        if (prev === undefined) {
+          memorySnapshots[characterId] = fingerprintMemories(mems);
+          return;
+        }
+        const { changed, newIds } = diffMemorySnapshot(prev, mems);
+        if (!changed) return;
         memorySnapshots[characterId] = fingerprintMemories(mems);
-        return;
+        whisperPollGen++;
+        for (const x of whisperPollTimers) clearTimeout(x);
+        whisperPollTimers = [];
+        showMemoryWhisper();
+        if (profileView.value?.kind === 'character' && profileView.value.id === characterId) {
+          profileMemories.value = mems.slice(0, 6);
+          flashMemoryHighlights(newIds);
+        }
+      } catch {
+        // silent — whisper is best-effort
       }
-      const { changed, newIds } = diffMemorySnapshot(prev, mems);
-      if (!changed) return;
-      memorySnapshots[characterId] = fingerprintMemories(mems);
-      showMemoryWhisper();
-      if (profileView.value?.kind === 'character' && profileView.value.id === characterId) {
-        profileMemories.value = mems.slice(0, 6);
-        flashMemoryHighlights(newIds);
-      }
-    } catch {
-      // silent — whisper is best-effort
-    }
-  }, delay);
+    }, ms);
+    whisperPollTimers.push(t);
+  }
 }
 
 function headerAvatar(c: Conversation | null | undefined) {
@@ -762,6 +786,9 @@ async function openConversation(id: string) {
   mentionId.value = '';
   menuOpen.value = false;
   msgMenuId.value = null;
+  const conv = conversations.value.find((c) => c.id === id) ?? null;
+  const peer = privatePeer(conv);
+  if (peer?.id) void seedMemorySnapshot(peer.id);
   const res = await api.listMessages(id);
   messages.value = res.messages;
   // C-03: server marks read on GET messages; clear badge immediately without waiting for list refresh
