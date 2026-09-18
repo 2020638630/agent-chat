@@ -57,6 +57,7 @@ export type MemoryNote = {
   content: string;
   confidence: number;
   status: string;
+  supersedes?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -349,5 +350,10 @@ export const api = {
         message_id?: string;
         content?: string;
       }>(r)
+    ),
+
+  listCharacterMemories: (id: string, status?: string) =>
+    fetch(`/api/characters/${id}/memories${status ? `?status=${encodeURIComponent(status)}` : ''}`).then((r) =>
+      json<{ memories: MemoryNote[] }>(r)
     ),
 };

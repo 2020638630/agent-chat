@@ -8,7 +8,7 @@
  */
 
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import { api, type Character, type ChatMessage, type Conversation, type Moment, type Profile } from './api/client';
+import { api, type Character, type ChatMessage, type Conversation, type MemoryNote, type Moment, type Profile } from './api/client';
 import { useHoldToTalk } from './composables/useHoldToTalk';
 import { EMOJI_WHITELIST } from './constants/emojiWhitelist';
 import {
@@ -100,7 +100,16 @@ const chatImageInput = ref<HTMLInputElement | null>(null);
 const imageBusy = ref(false);
 const lightboxUrl = ref<string | null>(null);
 const profileMoments = ref<Moment[]>([]);
-const profileMemories = ref<import('./api/client').MemoryNote[]>([]);
+const profileMemories = ref<MemoryNote[]>([]);
+const memorySnapshots = reactive<Record<string, string>>({});
+const memoryWhisperText = ref('记下了');
+const memoryWhisperVisible = ref(false);
+const memoryWhisperOpaque = ref(false);
+const memoryHighlightIds = ref<string[]>([]);
+let whisperDelayTimer: ReturnType<typeof setTimeout> | null = null;
+let whisperHideTimer: ReturnType<typeof setTimeout> | null = null;
+let whisperFadeTimer: ReturnType<typeof setTimeout> | null = null;
+let memoryHighlightTimer: ReturnType<typeof setTimeout> | null = null;
 const profileLoading = ref(false);
 const profileEditing = ref(false);
 const editMood = ref('');
@@ -545,6 +554,112 @@ function privatePeer(c: Conversation | null | undefined) {
   return (c.members && c.members[0]) || null;
 }
 
+function fingerprintMemories(mems: MemoryNote[]): string {
+  const active = mems.filter((m) => !m.status || m.status === 'active');
+  return active
+    .map((m) => `${m.id}:${m.updated_at}:${m.supersedes ?? ''}:${m.status}`)
+    .sort()
+    .join('|');
+}
+
+function diffMemorySnapshot(prevFp: string | undefined, nextMems: MemoryNote[]): { changed: boolean; newIds: string[] } {
+  const nextFp = fingerprintMemories(nextMems);
+  if (!prevFp) return { changed: false, newIds: [] };
+  if (prevFp === nextFp) return { changed: false, newIds: [] };
+  const prevIds = new Set(
+    prevFp
+      .split('|')
+      .filter(Boolean)
+      .map((part) => part.split(':')[0])
+  );
+  const newIds = nextMems
+    .filter((m) => (!m.status || m.status === 'active') && !prevIds.has(m.id))
+    .map((m) => m.id);
+  return { changed: true, newIds };
+}
+
+function clearWhisperTimers() {
+  if (whisperDelayTimer) {
+    clearTimeout(whisperDelayTimer);
+    whisperDelayTimer = null;
+  }
+  if (whisperHideTimer) {
+    clearTimeout(whisperHideTimer);
+    whisperHideTimer = null;
+  }
+  if (whisperFadeTimer) {
+    clearTimeout(whisperFadeTimer);
+    whisperFadeTimer = null;
+  }
+}
+
+function showMemoryWhisper() {
+  memoryWhisperText.value = '记下了';
+  memoryWhisperVisible.value = true;
+  memoryWhisperOpaque.value = false;
+  if (whisperHideTimer) {
+    clearTimeout(whisperHideTimer);
+    whisperHideTimer = null;
+  }
+  if (whisperFadeTimer) {
+    clearTimeout(whisperFadeTimer);
+    whisperFadeTimer = null;
+  }
+  // snap in
+  whisperFadeTimer = setTimeout(() => {
+    memoryWhisperOpaque.value = true;
+  }, 30);
+  // hold briefly, then fade out (~2.1s CSS), then hide
+  whisperHideTimer = setTimeout(() => {
+    memoryWhisperOpaque.value = false;
+    whisperHideTimer = setTimeout(() => {
+      memoryWhisperVisible.value = false;
+      whisperHideTimer = null;
+    }, 2200);
+  }, 2000);
+}
+
+function flashMemoryHighlights(ids: string[]) {
+  if (!ids.length) return;
+  memoryHighlightIds.value = [...ids];
+  if (memoryHighlightTimer) clearTimeout(memoryHighlightTimer);
+  memoryHighlightTimer = setTimeout(() => {
+    memoryHighlightIds.value = [];
+    memoryHighlightTimer = null;
+  }, 2500);
+}
+
+function scheduleMemoryWhisper(characterId: string) {
+  if (!characterId) return;
+  if (whisperDelayTimer) {
+    clearTimeout(whisperDelayTimer);
+    whisperDelayTimer = null;
+  }
+  const delay = 1500 + Math.random() * 1000;
+  whisperDelayTimer = setTimeout(async () => {
+    whisperDelayTimer = null;
+    try {
+      const res = await api.listCharacterMemories(characterId);
+      const mems = res.memories || [];
+      const prev = memorySnapshots[characterId];
+      if (prev === undefined) {
+        memorySnapshots[characterId] = fingerprintMemories(mems);
+        return;
+      }
+      const { changed, newIds } = diffMemorySnapshot(prev, mems);
+      if (!changed) return;
+      memorySnapshots[characterId] = fingerprintMemories(mems);
+      showMemoryWhisper();
+      if (profileView.value?.kind === 'character' && profileView.value.id === characterId) {
+        profileMemories.value = mems.slice(0, 6);
+        flashMemoryHighlights(newIds);
+      }
+    } catch {
+      // silent — whisper is best-effort
+    }
+  }, delay);
+}
+
 function headerAvatar(c: Conversation | null | undefined) {
   const peer = privatePeer(c);
   if (peer?.avatar_path) return peer.avatar_path;
@@ -861,6 +976,10 @@ async function send() {
     const res = await api.sendMessage(activeConversationId.value, text, mention);
     draft.value = '';
     messages.value.push(res.userMessage, ...res.assistantMessages);
+    const peer = privatePeer(activeConversation.value);
+    if (peer?.id && (res.assistantMessages?.length ?? 0) > 0) {
+      scheduleMemoryWhisper(peer.id);
+    }
     await refreshConversations();
     await nextTick();
     if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight;
@@ -956,6 +1075,10 @@ async function onVoicePointerUp() {
     const mention = mentionId.value || undefined;
     const res = await api.sendVoiceMessage(activeConversationId.value, blob, mention);
     messages.value.push(res.userMessage, ...res.assistantMessages);
+    const peer = privatePeer(activeConversation.value);
+    if (peer?.id && (res.assistantMessages?.length ?? 0) > 0) {
+      scheduleMemoryWhisper(peer.id);
+    }
     await refreshConversations();
     await nextTick();
     if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight;
@@ -1379,6 +1502,11 @@ onUnmounted(() => {
   stopConversationsPoll();
   document.removeEventListener('pointerdown', onEmojiDocPointerDown);
   document.removeEventListener('keydown', onEmojiKeydown);
+  clearWhisperTimers();
+  if (memoryHighlightTimer) {
+    clearTimeout(memoryHighlightTimer);
+    memoryHighlightTimer = null;
+  }
 });
 </script>
 
@@ -1790,7 +1918,11 @@ onUnmounted(() => {
           <div v-if="profileView?.kind === 'character' && profileMemories.length" class="wx-profile-memories">
             <div class="wx-profile-label">记得的事</div>
             <ul class="wx-memory-list">
-              <li v-for="m in profileMemories" :key="m.id">{{ m.content }}</li>
+              <li
+                v-for="m in profileMemories"
+                :key="m.id"
+                :class="{ 'wx-memory-new': memoryHighlightIds.includes(m.id) }"
+              >{{ m.content }}</li>
             </ul>
           </div>
           <div class="wx-profile-moments">
@@ -1945,7 +2077,14 @@ onUnmounted(() => {
               <template v-else>{{ avatarText(activeConversation?.title) }}</template>
             </div>
             <div class="wx-header-meta">
-              <div class="cname">{{ activeConversation?.title || '未选择会话' }}</div>
+              <div class="cname-row">
+                <div class="cname">{{ activeConversation?.title || '未选择会话' }}</div>
+                <span
+                  v-if="memoryWhisperVisible"
+                  class="wx-memory-whisper"
+                  :class="{ show: memoryWhisperOpaque }"
+                >{{ memoryWhisperText }}</span>
+              </div>
               <div class="cstatus">{{ headerStatus(activeConversation) }}</div>
             </div>
             <div v-if="activeConversation" class="wx-menu-wrap" @click.stop>
