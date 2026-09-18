@@ -62,6 +62,14 @@ export type MemoryNote = {
   updated_at: string;
 };
 
+export type MemoryNotice = {
+  id: string;
+  character_id: string;
+  conversation_id: string | null;
+  created_at: string;
+  read_at: string | null;
+};
+
 export type Profile = {
   id: string;
   kind: 'user' | 'character';
@@ -356,4 +364,23 @@ export const api = {
     fetch(`/api/characters/${id}/memories${status ? `?status=${encodeURIComponent(status)}` : ''}`).then((r) =>
       json<{ memories: MemoryNote[] }>(r)
     ),
+
+  listCharacterMemoryNotices: (id: string, opts?: { conversationId?: string }) => {
+    const q = new URLSearchParams();
+    if (opts?.conversationId) q.set('conversation_id', opts.conversationId);
+    const qs = q.toString();
+    return fetch(`/api/characters/${id}/memory-notices${qs ? `?${qs}` : ''}`).then((r) =>
+      json<{ notices: MemoryNotice[] }>(r)
+    );
+  },
+
+  markCharacterMemoryNoticesRead: (
+    id: string,
+    body: { ids?: string[]; all?: boolean; conversation_id?: string },
+  ) =>
+    fetch(`/api/characters/${id}/memory-notices/read`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((r) => json<{ ok: boolean; marked: number }>(r)),
 };

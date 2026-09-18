@@ -6,7 +6,12 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { db, getUploadsDir } from '../db/index.js';
 import { extractPngCharacterCard, parseCharacterJson } from '../utils/characterCard.js';
-import { listMemoriesForApi } from '../services/memory.js';
+import {
+  listMemoriesForApi,
+  listUnreadMemoryNotices,
+  markAllMemoryNoticesRead,
+  markMemoryNoticesRead,
+} from '../services/memory.js';
 
 function normalizeName(name: string) {
   return (name || '').trim().toLowerCase();
@@ -62,6 +67,35 @@ export async function characterRoutes(app: FastifyInstance) {
       return { memories };
     },
   );
+
+
+  app.get<{ Params: { id: string }; Querystring: { conversation_id?: string } }>(
+    '/api/characters/:id/memory-notices',
+    async (req, reply) => {
+      const character = db.prepare('SELECT id FROM characters WHERE id = ?').get(req.params.id) as
+        | { id: string }
+        | undefined;
+      if (!character) return reply.code(404).send({ error: '角色不存在' });
+      const conversationId = req.query?.conversation_id ? String(req.query.conversation_id) : null;
+      return { notices: listUnreadMemoryNotices(character.id, conversationId) };
+    },
+  );
+
+  app.post<{
+    Params: { id: string };
+    Body: { ids?: string[]; all?: boolean; conversation_id?: string };
+  }>('/api/characters/:id/memory-notices/read', async (req, reply) => {
+    const character = db.prepare('SELECT id FROM characters WHERE id = ?').get(req.params.id) as
+      | { id: string }
+      | undefined;
+    if (!character) return reply.code(404).send({ error: '角色不存在' });
+    const body = (req.body || {}) as { ids?: string[]; all?: boolean; conversation_id?: string };
+    const conversationId = body.conversation_id ? String(body.conversation_id) : null;
+    if (body.all) {
+      return { ok: true, marked: markAllMemoryNoticesRead(character.id, conversationId) };
+    }
+    return { ok: true, marked: markMemoryNoticesRead(Array.isArray(body.ids) ? body.ids : []) };
+  });
 
 app.post('/api/characters/import', async (req, reply) => {
     const mp = await req.file();

@@ -170,8 +170,8 @@ function parseOps(raw: string): ExtractOp[] {
   return out;
 }
 
-function applyOps(characterId: string, ops: ExtractOp[]) {
-  if (!ops.length) return;
+function applyOps(characterId: string, ops: ExtractOp[]): number {
+  if (!ops.length) return 0;
   const at = nowIso();
   const getActiveSame = db.prepare(
     `SELECT id FROM memories WHERE character_id = ? AND status = 'active' AND trim(content) = ? LIMIT 1`,
@@ -185,6 +185,7 @@ function applyOps(characterId: string, ops: ExtractOp[]) {
      VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
   );
 
+  let inserted = 0;
   const tx = db.transaction(() => {
     for (const op of ops) {
       const same = getActiveSame.get(characterId, op.content) as { id: string } | undefined;
@@ -211,6 +212,7 @@ function applyOps(characterId: string, ops: ExtractOp[]) {
         at,
         at,
       );
+      inserted += 1;
       if (op.type === 'preference') {
         autoSupersedeDrinkConflicts(characterId, newId, op.content, at);
       }
@@ -218,6 +220,7 @@ function applyOps(characterId: string, ops: ExtractOp[]) {
     enforceActiveCap(characterId);
   });
   tx();
+  return inserted;
 }
 
 export async function extractMemoriesAfterTurn(opts: {
@@ -276,11 +279,89 @@ export async function extractMemoriesAfterTurn(opts: {
   }
 
   try {
-    applyOps(characterId, ops);
+    const inserted = applyOps(characterId, ops);
+    if (inserted > 0) enqueueMemoryNotice(characterId, conversationId);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[memory] apply failed:', msg);
   }
+}
+
+
+/** One unread whisper notice per extract that actually wrote memories. */
+export function enqueueMemoryNotice(characterId: string, conversationId: string | null) {
+  const id = randomUUID();
+  const at = nowIso();
+  db.prepare(
+    `INSERT INTO memory_notices (id, character_id, conversation_id, created_at, read_at)
+     VALUES (?, ?, ?, ?, NULL)`,
+  ).run(id, characterId, conversationId, at);
+  return id;
+}
+
+export type MemoryNoticeRow = {
+  id: string;
+  character_id: string;
+  conversation_id: string | null;
+  created_at: string;
+  read_at: string | null;
+};
+
+export function listUnreadMemoryNotices(
+  characterId: string,
+  conversationId?: string | null,
+): MemoryNoticeRow[] {
+  if (conversationId) {
+    return db
+      .prepare(
+        `SELECT id, character_id, conversation_id, created_at, read_at
+         FROM memory_notices
+         WHERE character_id = ? AND conversation_id = ? AND read_at IS NULL
+         ORDER BY created_at ASC`,
+      )
+      .all(characterId, conversationId) as MemoryNoticeRow[];
+  }
+  return db
+    .prepare(
+      `SELECT id, character_id, conversation_id, created_at, read_at
+       FROM memory_notices
+       WHERE character_id = ? AND read_at IS NULL
+       ORDER BY created_at ASC`,
+    )
+    .all(characterId) as MemoryNoticeRow[];
+}
+
+export function markMemoryNoticesRead(ids: string[]): number {
+  const uniq = [...new Set(ids.map((x) => String(x || '').trim()).filter(Boolean))];
+  if (!uniq.length) return 0;
+  const at = nowIso();
+  const stmt = db.prepare(
+    `UPDATE memory_notices SET read_at = ? WHERE id = ? AND read_at IS NULL`,
+  );
+  const tx = db.transaction(() => {
+    let n = 0;
+    for (const id of uniq) n += stmt.run(at, id).changes;
+    return n;
+  });
+  return tx();
+}
+
+export function markAllMemoryNoticesRead(characterId: string, conversationId?: string | null): number {
+  const at = nowIso();
+  if (conversationId) {
+    return db
+      .prepare(
+        `UPDATE memory_notices SET read_at = ?
+         WHERE character_id = ? AND conversation_id = ? AND read_at IS NULL`,
+      )
+      .run(at, characterId, conversationId).changes;
+  }
+  return db
+    .prepare(
+      `UPDATE memory_notices SET read_at = ?
+       WHERE character_id = ? AND read_at IS NULL`,
+    )
+    .run(at, characterId).changes;
 }
 
 /** Fire-and-forget after private assistant reply is persisted. */

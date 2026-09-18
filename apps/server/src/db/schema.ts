@@ -207,6 +207,24 @@ export function mergeDuplicatePrivateConversations(db: Database.Database) {
 }
 
 
+
+export function ensureMemoryNoticesTable(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS memory_notices (
+      id TEXT PRIMARY KEY,
+      character_id TEXT NOT NULL,
+      conversation_id TEXT,
+      created_at TEXT NOT NULL,
+      read_at TEXT,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_memory_notices_unread
+      ON memory_notices(character_id, read_at, created_at);
+    CREATE INDEX IF NOT EXISTS idx_memory_notices_conv
+      ON memory_notices(conversation_id, read_at);
+  `);
+}
+
 export function ensureMemoriesTable(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS memories (
@@ -322,5 +340,6 @@ export function migrate(db: Database.Database) {
   ensureMomentAuthorColumns(db);
   ensureProactiveColumns(db);
   ensureMemoriesTable(db);
+  ensureMemoryNoticesTable(db);
   mergeDuplicatePrivateConversations(db);
 }

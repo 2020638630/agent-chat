@@ -101,7 +101,6 @@ const imageBusy = ref(false);
 const lightboxUrl = ref<string | null>(null);
 const profileMoments = ref<Moment[]>([]);
 const profileMemories = ref<MemoryNote[]>([]);
-const memorySnapshots = reactive<Record<string, string>>({});
 const memoryWhisperText = ref('记下了');
 const memoryWhisperVisible = ref(false);
 const memoryWhisperOpaque = ref(false);
@@ -556,47 +555,6 @@ function privatePeer(c: Conversation | null | undefined) {
   return (c.members && c.members[0]) || null;
 }
 
-function fingerprintMemories(mems: MemoryNote[]): string {
-  const active = mems.filter((m) => !m.status || m.status === 'active');
-  return active
-    .map((m) => `${m.id}:${m.updated_at}:${m.supersedes ?? ''}:${m.status}`)
-    .sort()
-    .join('|');
-}
-
-function diffMemorySnapshot(prevFp: string | undefined, nextMems: MemoryNote[]): { changed: boolean; newIds: string[] } {
-  const nextFp = fingerprintMemories(nextMems);
-  if (!prevFp) return { changed: false, newIds: [] };
-  if (prevFp === nextFp) return { changed: false, newIds: [] };
-  const prevIds = new Set(
-    prevFp
-      .split('|')
-      .filter(Boolean)
-      .map((part) => part.split(':')[0])
-  );
-  const newIds = nextMems
-    .filter((m) => (!m.status || m.status === 'active') && !prevIds.has(m.id))
-    .map((m) => m.id);
-  return { changed: true, newIds };
-}
-
-function clearWhisperTimers() {
-  if (whisperDelayTimer) {
-    clearTimeout(whisperDelayTimer);
-    whisperDelayTimer = null;
-  }
-  if (whisperHideTimer) {
-    clearTimeout(whisperHideTimer);
-    whisperHideTimer = null;
-  }
-  if (whisperFadeTimer) {
-    clearTimeout(whisperFadeTimer);
-    whisperFadeTimer = null;
-  }
-  for (const t of whisperPollTimers) clearTimeout(t);
-  whisperPollTimers = [];
-}
-
 function showMemoryWhisper() {
   memoryWhisperText.value = '记下了';
   memoryWhisperVisible.value = true;
@@ -633,18 +591,20 @@ function flashMemoryHighlights(ids: string[]) {
   }, 2500);
 }
 
-async function seedMemorySnapshot(characterId: string) {
+/** Swallow stale unread whispers when opening a private chat (no UI). */
+async function clearUnreadMemoryNotices(characterId: string, conversationId?: string) {
   if (!characterId) return;
   try {
-    const res = await api.listCharacterMemories(characterId);
-    memorySnapshots[characterId] = fingerprintMemories(res.memories || []);
+    await api.markCharacterMemoryNoticesRead(characterId, {
+      all: true,
+      conversation_id: conversationId,
+    });
   } catch {
     // best-effort
   }
 }
 
-/** Extract often finishes ~5–15s after the assistant bubble; poll instead of one early GET. */
-function scheduleMemoryWhisper(characterId: string) {
+function scheduleMemoryWhisper(characterId: string, conversationId?: string) {
   if (!characterId) return;
   for (const t of whisperPollTimers) clearTimeout(t);
   whisperPollTimers = [];
@@ -653,29 +613,34 @@ function scheduleMemoryWhisper(characterId: string) {
     whisperDelayTimer = null;
   }
   const gen = ++whisperPollGen;
-  // Extract can take ~30–70s on slow turns; keep probing without blocking the chat API.
-  const offsetsMs = [2000, 4000, 7000, 10000, 15000, 22000, 30000, 45000, 60000, 90000];
+  const convId = conversationId || activeConversationId.value || undefined;
+  // Poll unread notices (written when extract commits) — not the full memory list.
+  const offsetsMs = [3000, 7000, 12000, 18000, 25000, 35000, 50000, 70000, 90000];
   for (const ms of offsetsMs) {
     const t = setTimeout(async () => {
       if (gen !== whisperPollGen) return;
       try {
-        const res = await api.listCharacterMemories(characterId);
-        const mems = res.memories || [];
-        const prev = memorySnapshots[characterId];
-        if (prev === undefined) {
-          memorySnapshots[characterId] = fingerprintMemories(mems);
-          return;
-        }
-        const { changed, newIds } = diffMemorySnapshot(prev, mems);
-        if (!changed) return;
-        memorySnapshots[characterId] = fingerprintMemories(mems);
+        const res = await api.listCharacterMemoryNotices(characterId, {
+          conversationId: convId,
+        });
+        const notices = res.notices || [];
+        if (!notices.length) return;
+        const ids = notices.map((n) => n.id);
         whisperPollGen++;
         for (const x of whisperPollTimers) clearTimeout(x);
         whisperPollTimers = [];
         showMemoryWhisper();
+        void api.markCharacterMemoryNoticesRead(characterId, { ids }).catch(() => {});
         if (profileView.value?.kind === 'character' && profileView.value.id === characterId) {
-          profileMemories.value = mems.slice(0, 6);
-          flashMemoryHighlights(newIds);
+          try {
+            const mem = await api.listCharacterMemories(characterId);
+            const prevIds = new Set(profileMemories.value.map((m) => m.id));
+            profileMemories.value = (mem.memories || []).slice(0, 6);
+            const newIds = profileMemories.value.map((m) => m.id).filter((id) => !prevIds.has(id));
+            flashMemoryHighlights(newIds);
+          } catch {
+            // ignore
+          }
         }
       } catch {
         // silent — whisper is best-effort
@@ -789,7 +754,7 @@ async function openConversation(id: string) {
   msgMenuId.value = null;
   const conv = conversations.value.find((c) => c.id === id) ?? null;
   const peer = privatePeer(conv);
-  if (peer?.id) void seedMemorySnapshot(peer.id);
+  if (peer?.id) void clearUnreadMemoryNotices(peer.id, id);
   const res = await api.listMessages(id);
   messages.value = res.messages;
   // C-03: server marks read on GET messages; clear badge immediately without waiting for list refresh
@@ -1006,7 +971,7 @@ async function send() {
     messages.value.push(res.userMessage, ...res.assistantMessages);
     const peer = privatePeer(activeConversation.value);
     if (peer?.id && (res.assistantMessages?.length ?? 0) > 0) {
-      scheduleMemoryWhisper(peer.id);
+      scheduleMemoryWhisper(peer.id, activeConversationId.value || undefined);
     }
     await refreshConversations();
     await nextTick();
@@ -1105,7 +1070,7 @@ async function onVoicePointerUp() {
     messages.value.push(res.userMessage, ...res.assistantMessages);
     const peer = privatePeer(activeConversation.value);
     if (peer?.id && (res.assistantMessages?.length ?? 0) > 0) {
-      scheduleMemoryWhisper(peer.id);
+      scheduleMemoryWhisper(peer.id, activeConversationId.value || undefined);
     }
     await refreshConversations();
     await nextTick();
