@@ -403,14 +403,16 @@ export async function conversationRoutes(app: FastifyInstance) {
       onPrivateUserMessage(character.id);
     }
 
-    const history = db
-      .prepare(
-        `SELECT role, character_id, content FROM messages
+    const history = (
+      db
+        .prepare(
+          `SELECT role, character_id, content FROM messages
          WHERE conversation_id = ?
-         ORDER BY created_at ASC, rowid ASC
+         ORDER BY created_at DESC, rowid DESC
          LIMIT 40`
-      )
-      .all(conversationId) as MessageRow[];
+        )
+        .all(conversationId) as MessageRow[]
+    ).reverse();
 
     const nameById = new Map(members.map((m) => [m.id, m.name] as const));
     const otherNames = members.filter((m) => m.id !== character.id).map((m) => m.name);
@@ -476,9 +478,16 @@ export async function conversationRoutes(app: FastifyInstance) {
     }
 
     let replyText: string;
+    const chatStarted = Date.now();
     try {
       replyText = await chatCompletion(llmMessages);
+      console.log(
+        `[chat] conv=${conversationId} char=${character.id} history=${history.length} ms=${Date.now() - chatStarted}`,
+      );
     } catch (e) {
+      console.log(
+        `[chat] conv=${conversationId} char=${character.id} history=${history.length} ms=${Date.now() - chatStarted}`,
+      );
       const msg = e instanceof Error ? e.message : String(e);
       replyText = `（LLM 暂时不可用：${msg}。请确认 Ollama 已启动或 .env 里 DeepSeek 配置正确。）`;
     }

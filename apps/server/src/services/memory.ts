@@ -75,13 +75,50 @@ export function appendMemoryBlock(system: string, characterId: string): string {
     limit: INJECT_MAX,
   });
   if (!rows.length) return system;
-  const lines = rows.map((r) => `- (${r.type}) ${r.content}`);
-  return `${system}\n\n【你记得的事】\n${lines.join('\n')}`;
+  const lines = rows.map((r) => `- (${r.type}) ${r.type === 'preference' ? normalizeDrinkContent(r.content) : r.content}`);
+  const honor =
+    '下面这些是你已经记住的事。用户问到其中任何一件（喝什么、怎么称呼、约定），必须先用一句短讯答这一件，再写风景或其他。不要用日头、竹影、出门、留步来代替回答。不要把互相冲突的旧偏好并成一句。';
+  return `${system}\n\n【你记得的事】\n${honor}\n${lines.join('\n')}`;
 }
-
 
 function looksLikeDrinkPreference(content: string): boolean {
   return /喝|茶|温水|开水|咖啡|饮料/.test(content);
+}
+
+function looksLikeAddressPreference(content: string): boolean {
+  return /称呼|叫我|喊我|称呼我|名字叫|叫作|叫做/.test(content);
+}
+
+function normalizeDrinkContent(content: string): string {
+  const t = content.trim();
+  if (/温水|温开水/.test(t) && /茶|咖啡/.test(t) && /(改|换成|改为|只要|只喝)/.test(t)) {
+    if (/只喝/.test(t)) return '用户只喝温水';
+    return '用户改喝温水';
+  }
+  return content;
+}
+
+function autoSupersedeAddressConflicts(
+  characterId: string,
+  newId: string,
+  content: string,
+  at: string,
+) {
+  if (!looksLikeAddressPreference(content)) return;
+  const others = db
+    .prepare(
+      `SELECT id, content FROM memories
+       WHERE character_id = ? AND status = 'active' AND type = 'preference' AND id != ?`,
+    )
+    .all(characterId, newId) as Array<{ id: string; content: string }>;
+  const mark = db.prepare(
+    `UPDATE memories SET status = 'superseded', updated_at = ? WHERE id = ? AND character_id = ?`,
+  );
+  for (const o of others) {
+    if (looksLikeAddressPreference(o.content) && o.content.trim() !== content.trim()) {
+      mark.run(at, o.id, characterId);
+    }
+  }
 }
 
 /** If a new drink preference arrives, retire other active drink preferences for this character. */
@@ -201,20 +238,23 @@ function applyOps(characterId: string, ops: ExtractOp[]): string[] {
       }
 
       const newId = randomUUID();
+      const content =
+        op.type === 'preference' ? normalizeDrinkContent(op.content) : op.content;
       insert.run(
         newId,
         characterId,
         op.type,
-        op.content,
+        content,
         JSON.stringify({ message_ids: op.evidence_message_ids || [] }),
         op.confidence ?? 0.7,
         validSupersedes.length ? validSupersedes.join(',') : null,
         at,
         at,
       );
-      insertedContents.push(op.content);
+      insertedContents.push(content);
       if (op.type === 'preference') {
-        autoSupersedeDrinkConflicts(characterId, newId, op.content, at);
+        autoSupersedeDrinkConflicts(characterId, newId, content, at);
+        autoSupersedeAddressConflicts(characterId, newId, content, at);
       }
     }
     enforceActiveCap(characterId);
@@ -228,6 +268,7 @@ export async function extractMemoriesAfterTurn(opts: {
   conversationId: string;
 }): Promise<void> {
   const { characterId, conversationId } = opts;
+  console.log(`[memory] extract start conv=${conversationId} char=${characterId}`);
   const history = db
     .prepare(
       `SELECT id, role, content FROM messages
@@ -244,8 +285,8 @@ export async function extractMemoriesAfterTurn(opts: {
 
   const system = [
     '你是私聊记忆整理器。只输出一个 JSON 对象，不要解释，不要 Markdown。',
-    '从对话里提炼对该角色长期有用、可替代的稳定私档：fact / preference / promise / habit。',
-    '规则：一条一事；只记稳定事实/偏好/约定/习惯；若新偏好与旧 active 私档冲突（例如把晚上喝茶改成喝温水），必须在 supersedes 写入旧 id，禁止相反偏好同时 active；冲突用 supersedes 指向旧 id；没什么可记则 {"ops":[]}；不要发明；不要把人设/性格设定写进 memories。',
+    '只根据用户说的话提炼对该角色长期有用的稳定私档：fact / preference / promise / habit。不要记角色自己的台词、心情或人设。',
+    '规则：一条一事；只记用户侧稳定事实/偏好/约定/习惯；喝茶改成温水时写成「用户改喝温水」或「用户只喝温水」，禁止「晚上喝茶时喝温水」这类把新旧偏好揉在一起的句子；称呼变化写成「用户希望被叫…」；若新偏好与旧 active 冲突（喝什么、怎么称呼），必须在 supersedes 写入旧 id，禁止相反偏好同时 active；没什么可记则 {"ops":[]}；不要发明。',
     '格式：{"ops":[{"op":"upsert","type":"preference","content":"…","evidence_message_ids":["消息id"],"confidence":0.86,"supersedes":["旧id或空"]}]}',
   ].join('\n');
 
@@ -265,7 +306,7 @@ export async function extractMemoriesAfterTurn(opts: {
     ]);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error('[memory] extract llm failed:', msg);
+    console.error('[memory] extract fail llm:', msg);
     return;
   }
 
@@ -274,7 +315,7 @@ export async function extractMemoriesAfterTurn(opts: {
     ops = parseOps(raw);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error('[memory] extract parse failed:', msg, raw.slice(0, 240));
+    console.error('[memory] extract fail parse:', msg);
     return;
   }
 
@@ -282,10 +323,13 @@ export async function extractMemoriesAfterTurn(opts: {
     const insertedContents = applyOps(characterId, ops);
     if (insertedContents.length > 0) {
       enqueueMemoryNotice(characterId, conversationId, insertedContents);
+      console.log(`[memory] extract ok conv=${conversationId} char=${characterId} n=${insertedContents.length}`);
+    } else {
+      console.log(`[memory] extract empty conv=${conversationId} char=${characterId}`);
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error('[memory] apply failed:', msg);
+    console.error('[memory] extract fail apply:', msg);
   }
 }
 
