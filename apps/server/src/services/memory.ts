@@ -82,7 +82,7 @@ export function appendMemoryBlock(system: string, characterId: string): string {
 }
 
 function looksLikeDrinkPreference(content: string): boolean {
-  return /喝|茶|温水|开水|咖啡|饮料/.test(content);
+  return /喝|茶|温水|温汤|开水|咖啡|饮料|山泉|饮水/.test(content);
 }
 
 function looksLikeAddressPreference(content: string): boolean {
@@ -207,6 +207,30 @@ function parseOps(raw: string): ExtractOp[] {
   return out;
 }
 
+
+/** Drop quiz/negation noise that would erase a stable drink preference. */
+function filterExtractOps(characterId: string, ops: ExtractOp[]): ExtractOp[] {
+  const actives = listActiveMemories(characterId, { limit: EXTRACT_ACTIVE_CAP });
+  const hasPositiveDrink = actives.some(
+    (m) =>
+      m.status === 'active' &&
+      looksLikeDrinkPreference(m.content) &&
+      !/不喜欢|不爱|别再|不要/.test(m.content),
+  );
+  return ops.filter((op) => {
+    const c = String(op.content || '').trim();
+    if (!c) return false;
+    // Rhetorical / quiz turns must not invent dislikes.
+    if (/不喜欢喝水|不爱喝水|不喜欢水(?!果)|不喜欢喝水和/.test(c)) return false;
+    if (hasPositiveDrink && looksLikeDrinkPreference(c) && /不喜欢|不爱喝|讨厌喝/.test(c) && !/(改|换成|改为|只喝).*(温水|茶|咖啡)/.test(c)) {
+      return false;
+    }
+    // Assistant-flavored spring-water guesses without clear user claim.
+    if (/山泉/.test(c) && !/用户.*(山泉|只要|只喝|喜欢喝山泉)/.test(c)) return false;
+    return true;
+  });
+}
+
 function applyOps(characterId: string, ops: ExtractOp[]): string[] {
   if (!ops.length) return [];
   const at = nowIso();
@@ -285,8 +309,11 @@ export async function extractMemoriesAfterTurn(opts: {
 
   const system = [
     '你是私聊记忆整理器。只输出一个 JSON 对象，不要解释，不要 Markdown。',
-    '只根据用户说的话提炼对该角色长期有用的稳定私档：fact / preference / promise / habit。不要记角色自己的台词、心情或人设。',
-    '规则：一条一事；只记用户侧稳定事实/偏好/约定/习惯；喝茶改成温水时写成「用户改喝温水」或「用户只喝温水」，禁止「晚上喝茶时喝温水」这类把新旧偏好揉在一起的句子；称呼变化写成「用户希望被叫…」；若新偏好与旧 active 冲突（喝什么、怎么称呼），必须在 supersedes 写入旧 id，禁止相反偏好同时 active；没什么可记则 {"ops":[]}；不要发明。',
+    '只根据【用户】明确说的话提炼稳定私档：fact / preference / promise / habit。不要记角色台词、猜测、风景，也不要把角色提议当成用户偏好。',
+    '规则：一条一事；只记用户侧稳定事实/偏好/约定/习惯。',
+    '饮品：用户明确说改喝/只喝温水时写成「用户改喝温水」或「用户只喝温水」。用户说不喜欢茶/温汤，不要扩写成不喜欢水。用户在追问「还记得我喜欢喝什么吗」「我喜欢什么水」时，若没有新的肯定偏好，输出 {"ops":[]}，不要发明厌恶或新口味。',
+    '称呼：写成「用户希望被叫…」。',
+    '冲突：新偏好与旧 active 冲突（喝什么、怎么称呼）必须在 supersedes 写旧 id。没什么可记则 {"ops":[]}；不要发明。',
     '格式：{"ops":[{"op":"upsert","type":"preference","content":"…","evidence_message_ids":["消息id"],"confidence":0.86,"supersedes":["旧id或空"]}]}',
   ].join('\n');
 
@@ -320,7 +347,7 @@ export async function extractMemoriesAfterTurn(opts: {
   }
 
   try {
-    const insertedContents = applyOps(characterId, ops);
+    const insertedContents = applyOps(characterId, filterExtractOps(characterId, ops));
     if (insertedContents.length > 0) {
       enqueueMemoryNotice(characterId, conversationId, insertedContents);
       console.log(`[memory] extract ok conv=${conversationId} char=${characterId} n=${insertedContents.length}`);
