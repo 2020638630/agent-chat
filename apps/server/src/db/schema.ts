@@ -214,6 +214,7 @@ export function ensureMemoryNoticesTable(db: Database.Database) {
       id TEXT PRIMARY KEY,
       character_id TEXT NOT NULL,
       conversation_id TEXT,
+      summary TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL,
       read_at TEXT,
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
@@ -223,6 +224,13 @@ export function ensureMemoryNoticesTable(db: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_memory_notices_conv
       ON memory_notices(conversation_id, read_at);
   `);
+  const noticeCols = new Set(
+    (db.prepare(`PRAGMA table_info(memory_notices)`).all() as Array<{ name: string }>).map((r) => r.name),
+  );
+  if (!noticeCols.has('summary')) {
+    db.exec(`ALTER TABLE memory_notices ADD COLUMN summary TEXT NOT NULL DEFAULT ''`);
+  }
+
 }
 
 export function ensureMemoriesTable(db: Database.Database) {

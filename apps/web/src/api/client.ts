@@ -66,6 +66,7 @@ export type MemoryNotice = {
   id: string;
   character_id: string;
   conversation_id: string | null;
+  summary: string;
   created_at: string;
   read_at: string | null;
 };

@@ -555,8 +555,9 @@ function privatePeer(c: Conversation | null | undefined) {
   return (c.members && c.members[0]) || null;
 }
 
-function showMemoryWhisper() {
-  memoryWhisperText.value = '记下了';
+function showMemoryWhisper(summary?: string) {
+  const body = String(summary || '').trim() || '新的记忆';
+  memoryWhisperText.value = body;
   memoryWhisperVisible.value = true;
   memoryWhisperOpaque.value = false;
   if (whisperHideTimer) {
@@ -567,18 +568,17 @@ function showMemoryWhisper() {
     clearTimeout(whisperFadeTimer);
     whisperFadeTimer = null;
   }
-  // snap in
+  // Slow fade-in (~1.5s), hold, slow fade-out (~3.5s) — total ~10s.
   whisperFadeTimer = setTimeout(() => {
     memoryWhisperOpaque.value = true;
-  }, 30);
-  // hold briefly, then fade out (~2.1s CSS), then hide
+  }, 40);
   whisperHideTimer = setTimeout(() => {
     memoryWhisperOpaque.value = false;
     whisperHideTimer = setTimeout(() => {
       memoryWhisperVisible.value = false;
       whisperHideTimer = null;
-    }, 2300);
-  }, 3000);
+    }, 3500);
+  }, 6500);
 }
 
 function flashMemoryHighlights(ids: string[]) {
@@ -626,10 +626,14 @@ function scheduleMemoryWhisper(characterId: string, conversationId?: string) {
         const notices = res.notices || [];
         if (!notices.length) return;
         const ids = notices.map((n) => n.id);
+        const summary = notices
+          .map((n) => String(n.summary || '').trim())
+          .filter(Boolean)
+          .join('；');
         whisperPollGen++;
         for (const x of whisperPollTimers) clearTimeout(x);
         whisperPollTimers = [];
-        showMemoryWhisper();
+        showMemoryWhisper(summary);
         void api.markCharacterMemoryNoticesRead(characterId, { ids }).catch(() => {});
         if (profileView.value?.kind === 'character' && profileView.value.id === characterId) {
           try {
@@ -2072,11 +2076,6 @@ onUnmounted(() => {
             <div class="wx-header-meta">
               <div class="cname-row">
                 <div class="cname">{{ activeConversation?.title || '未选择会话' }}</div>
-                <span
-                  v-if="memoryWhisperVisible"
-                  class="wx-memory-whisper"
-                  :class="{ show: memoryWhisperOpaque }"
-                >{{ memoryWhisperText }}</span>
               </div>
               <div class="cstatus">{{ headerStatus(activeConversation) }}</div>
             </div>
@@ -2096,6 +2095,14 @@ onUnmounted(() => {
 
         <div class="wx-main-row">
           <div class="wx-chat-pane">
+            <div
+              v-if="memoryWhisperVisible"
+              class="wx-memory-toast"
+              :class="{ show: memoryWhisperOpaque }"
+            >
+              <div class="wx-memory-toast-label">记下了</div>
+              <div class="wx-memory-toast-body">{{ memoryWhisperText }}</div>
+            </div>
             <div ref="chatBody" class="wx-chat-body">
               <template v-if="activeConversation">
                 <template v-for="(m, i) in messages" :key="m.id">
