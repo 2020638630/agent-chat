@@ -1,6 +1,7 @@
 import { db } from '../db/index.js';
 import { chatCompletion } from './llm.js';
 import { buildSystemPrompt } from '../utils/characterCard.js';
+import { appendMemoryBlock } from './memory.js';
 import { defaultInitiativeTier } from '../db/schema.js';
 import { randomUUID } from 'node:crypto';
 
@@ -265,7 +266,7 @@ export async function runProactiveTick(): Promise<TickResult> {
     .all(pick.conversation_id) as Array<{ role: string; content: string }>;
   history.reverse();
 
-  let system = buildSystemPrompt(character);
+  let system = appendMemoryBlock(buildSystemPrompt(character), character.id);
   system +=
     '\n\n【主动开口】这是你主动找用户的一条短讯，不是回复上一句。像熟人发消息，1～2 句。不要道歉，不要问「在吗」，不要舞台旁白，不要角色名前缀。若此时开口会显得突兀，只输出 SILENCE。';
 

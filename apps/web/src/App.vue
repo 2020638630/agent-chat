@@ -100,6 +100,7 @@ const chatImageInput = ref<HTMLInputElement | null>(null);
 const imageBusy = ref(false);
 const lightboxUrl = ref<string | null>(null);
 const profileMoments = ref<Moment[]>([]);
+const profileMemories = ref<import('./api/client').MemoryNote[]>([]);
 const profileLoading = ref(false);
 const profileEditing = ref(false);
 const editMood = ref('');
@@ -316,6 +317,7 @@ async function closeProfile() {
   profileView.value = null;
   profile.value = null;
   profileMoments.value = [];
+  profileMemories.value = [];
   profileEditing.value = false;
 }
 
@@ -573,6 +575,13 @@ async function openCharacterProfile(id: string) {
   if (!id) return;
   profileLoading.value = true;
   profileView.value = { kind: 'character', id };
+  profileMemories.value = [];
+  try {
+    const mem = await api.listCharacterMemories(id);
+    profileMemories.value = (mem.memories || []).slice(0, 6);
+  } catch {
+    profileMemories.value = [];
+  }
   profileEditing.value = false;
   try {
     const res = await api.getCharacterProfile(id);
@@ -1777,6 +1786,12 @@ onUnmounted(() => {
                 <p>{{ profile?.bio || '暂无简介' }}</p>
               </template>
             </div>
+          </div>
+          <div v-if="profileView?.kind === 'character' && profileMemories.length" class="wx-profile-memories">
+            <div class="wx-profile-label">记得的事</div>
+            <ul class="wx-memory-list">
+              <li v-for="m in profileMemories" :key="m.id">{{ m.content }}</li>
+            </ul>
           </div>
           <div class="wx-profile-moments">
             <div class="wx-profile-label-row">

@@ -6,6 +6,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { db, getUploadsDir } from '../db/index.js';
 import { extractPngCharacterCard, parseCharacterJson } from '../utils/characterCard.js';
+import { listMemoriesForApi } from '../services/memory.js';
 
 function normalizeName(name: string) {
   return (name || '').trim().toLowerCase();
@@ -44,7 +45,25 @@ export async function characterRoutes(app: FastifyInstance) {
     return { characters: rows };
   });
 
-  app.post('/api/characters/import', async (req, reply) => {
+  
+  app.get<{ Params: { id: string }; Querystring: { status?: string } }>(
+    '/api/characters/:id/memories',
+    async (req, reply) => {
+      const character = db.prepare('SELECT id FROM characters WHERE id = ?').get(req.params.id) as
+        | { id: string }
+        | undefined;
+      if (!character) return reply.code(404).send({ error: '角色不存在' });
+      const raw = String(req.query?.status || 'active');
+      const status =
+        raw === 'all' || raw === 'superseded' || raw === 'user_hidden' || raw === 'active'
+          ? (raw as 'all' | 'active' | 'superseded' | 'user_hidden')
+          : 'active';
+      const memories = listMemoriesForApi(character.id, status);
+      return { memories };
+    },
+  );
+
+app.post('/api/characters/import', async (req, reply) => {
     const mp = await req.file();
     if (!mp) {
       return reply.code(400).send({ error: '请上传角色卡文件（JSON 或 PNG）' });

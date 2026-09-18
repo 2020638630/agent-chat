@@ -50,6 +50,17 @@ export type ProactiveSettings = {
   sent_today: number;
 };
 
+export type MemoryNote = {
+  id: string;
+  character_id: string;
+  type: string;
+  content: string;
+  confidence: number;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Profile = {
   id: string;
   kind: 'user' | 'character';

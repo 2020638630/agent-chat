@@ -2123,3 +2123,17 @@ button.wx-space-filter-item {
   color: var(--text-2);
   line-height: 1.45;
 }
+
+.wx-profile-memories {
+  margin: 12px 16px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.55);
+}
+.wx-memory-list {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  color: var(--text-2);
+  font-size: 13px;
+  line-height: 1.5;
+}

@@ -206,6 +206,27 @@ export function mergeDuplicatePrivateConversations(db: Database.Database) {
   tx();
 }
 
+
+export function ensureMemoriesTable(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS memories (
+      id TEXT PRIMARY KEY,
+      character_id TEXT NOT NULL,
+      type TEXT NOT NULL,
+      content TEXT NOT NULL,
+      evidence_json TEXT,
+      confidence REAL NOT NULL DEFAULT 0.7,
+      status TEXT NOT NULL DEFAULT 'active',
+      supersedes TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_memories_character_status
+      ON memories(character_id, status);
+  `);
+}
+
 export function migrate(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS characters (
@@ -300,5 +321,6 @@ export function migrate(db: Database.Database) {
   ensureThemeAppearanceColumns(db);
   ensureMomentAuthorColumns(db);
   ensureProactiveColumns(db);
+  ensureMemoriesTable(db);
   mergeDuplicatePrivateConversations(db);
 }

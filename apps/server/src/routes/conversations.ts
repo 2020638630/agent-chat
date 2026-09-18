@@ -9,6 +9,7 @@ import { buildSystemPrompt } from '../utils/characterCard.js';
 import { emojiConstraintForPrompt, hasEmojiToken, sanitizeAssistantEmoji } from '../constants/emojiWhitelist.js';
 import { shouldAssistantUseVoice } from '../utils/voiceRequest.js';
 import { chatCompletion } from '../services/llm.js';
+import { appendMemoryBlock, scheduleMemoryExtractAfterTurn } from '../services/memory.js';
 import { onPrivateUserMessage } from '../services/proactive.js';
 import {
   isTtsCacheFileForMessage,
@@ -423,6 +424,9 @@ export async function conversationRoutes(app: FastifyInstance) {
     }
 
     let system = buildSystemPrompt(character);
+    if (conv.type === 'private') {
+      system = appendMemoryBlock(system, character.id);
+    }
 
     system += `\n\n${emojiConstraintForPrompt()}`;
 
@@ -504,6 +508,10 @@ export async function conversationRoutes(app: FastifyInstance) {
     ).run(aid, conversationId, character.id, replyText, at, assistantSource);
 
     db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(at, conversationId);
+
+    if (conv.type === 'private' && character?.id && !llmFailed) {
+      scheduleMemoryExtractAfterTurn(character.id, conversationId);
+    }
 
     const userMessage = db.prepare('SELECT * FROM messages WHERE id = ?').get(userMsgId);
 
