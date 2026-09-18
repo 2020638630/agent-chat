@@ -478,7 +478,12 @@ export async function conversationRoutes(app: FastifyInstance) {
     }
 
     if (conv.type === 'private' && character?.id) {
-      const sticky = memoryStickyReminder(character.id);
+      const lastUserText = [...history].reverse().find((m) => m.role === 'user')?.content ?? '';
+      const recentAssistantTexts = history
+        .filter((m) => m.role === 'assistant')
+        .slice(-8)
+        .map((m) => m.content);
+      const sticky = memoryStickyReminder(character.id, { lastUserText, recentAssistantTexts });
       if (sticky) {
         llmMessages.push({ role: 'system', content: sticky });
       }

@@ -82,41 +82,84 @@ export function appendMemoryBlock(system: string, characterId: string): string {
       const m = text.match(/被叫([^，。；\s]+)|叫我([^，。；\s]+)|称呼我为([^，。；\s]+)|称呼我([^，。；\s]+)/);
       const name = (m && (m[1] || m[2] || m[3] || m[4])) || '';
       if (name && !/公子|深/.test(name)) {
-        text = `对用户的称呼是「${name}」（用户问叫什么时必须答这个）`;
+        text = `对用户的称呼是「${name}」`;
       }
     }
     return `- (${r.type}) ${text}`;
   });
   const honor =
-    '下面这些是你已经记住的事。用户问到其中任何一件（喝什么、怎么称呼、约定），必须先用一句短讯答这一件，再写风景或其他。若记忆写明称呼（如小林），被问「叫我什么」时必须答该称呼，禁止说「未记/不知/你自己定」，也不要用「公子」等默认称呼顶替。不要用日头、竹影、出门、留步来代替回答。不要把互相冲突的旧偏好并成一句。';
+    '下面这些是你已经记住的事，当作背景，不要每轮念一遍。用户这轮明确问到其中一件（喝什么、怎么称呼、记不记得某约定）时，先用一句短讯答那一件，再写其他。若用户只发短讯、数字、表情，或说走／好／嗯等未点名记忆的话：禁止提起称呼或饮品，禁止用「唤君××。饮温水。风动竹摇。」排比起句，可写风景或简短回应。称呼可以在句子里自然带过（如「小林」），但不要为了证明自己记得而单列饮品或约定。被问「叫我什么」时必须答记忆里的称呼，禁止说未记／不知／你自己定，也不要用公子顶替。不要用日头、竹影代替被问到的那一件。';
   return `${system}\n\n【你记得的事】\n${honor}\n${lines.join('\n')}`;
 }
 
 
-/** Trailing nudge after chat history so long threads cannot bury address/drink facts. */
-export function memoryStickyReminder(characterId: string): string | null {
+function userAsksAboutMemory(text: string): boolean {
+  const t = (text || '').trim();
+  if (!t) return false;
+  return /叫我什么|怎么称呼|称呼我|记得我|还记得|记不记得|喝什么|喜欢喝|爱喝|约定/.test(t);
+}
+
+function assistantConflictsAddress(texts: string[]): boolean {
+  const blob = (texts || []).join('\n');
+  if (!blob) return false;
+  return /公子|未记|不知|不记|唤我深|君名未记/.test(blob);
+}
+
+/** Trailing nudge after history — gated on this-turn ask or recent address conflict. */
+export function memoryStickyReminder(
+  characterId: string,
+  opts?: { lastUserText?: string; recentAssistantTexts?: string[] },
+): string | null {
   const rows = listActiveMemories(characterId, {
     minConfidence: INJECT_MIN_CONF,
     limit: INJECT_MAX,
   });
   if (!rows.length) return null;
-  const bits: string[] = [];
+
+  let addressName = '';
+  const drinkBits: string[] = [];
+  const promiseBits: string[] = [];
   for (const r of rows) {
     let text = r.type === 'preference' ? normalizeDrinkContent(r.content) : r.content;
     if (looksLikeAddressPreference(text)) {
-      const m = text.match(/被叫([^，。；\s]+)|叫我([^，。；\s]+)|称呼我为([^，。；\s]+)|称呼我([^，。；\s]+)|「([^」]+)」/);
+      const m = text.match(
+        /被叫([^，。；\s]+)|叫我([^，。；\s]+)|称呼我为([^，。；\s]+)|称呼我([^，。；\s]+)|「([^」]+)」/,
+      );
       const name = (m && (m[1] || m[2] || m[3] || m[4] || m[5])) || '';
-      if (name && !/公子|深/.test(name)) {
-        bits.push(`称呼用户为「${name}」；被问叫什么/记不记得时必须答「${name}」，禁止说未记、不知、公子或让用户自定`);
-      }
+      if (name && !/公子|深/.test(name)) addressName = name;
     } else if (looksLikeDrinkPreference(text)) {
-      bits.push(text);
+      drinkBits.push(text);
     } else if (r.type === 'promise') {
-      bits.push(text);
+      promiseBits.push(text);
     }
   }
-  if (!bits.length) return null;
-  return `【记忆核对·优先于上文】${bits.join('；')}。若上文角色曾说未记/公子，以本条为准。先短答记忆点，再写其他。`;
+  if (!addressName && !drinkBits.length && !promiseBits.length) return null;
+
+  const lastUser = opts?.lastUserText ?? '';
+  const recentAsst = opts?.recentAssistantTexts ?? [];
+  const ask = userAsksAboutMemory(lastUser);
+  const conflict = !!addressName && assistantConflictsAddress(recentAsst);
+  if (!ask && !conflict) {
+    const recentBlob = recentAsst.join('\n');
+    const overRecite = /唤君/.test(recentBlob) && /(温水|饮温)/.test(recentBlob);
+    if (overRecite) {
+      return '【记忆核对·优先于上文】本轮用户未问称呼／饮品／约定。禁止复读「唤君××／温水」清单或排比起句；可自然写风景或短应一句。';
+    }
+    return null;
+  }
+
+  const parts: string[] = [];
+  if (addressName) parts.push(`称呼用户为「${addressName}」`);
+  if (drinkBits.length) {
+    const d = drinkBits[0];
+    parts.push(/温水/.test(d) ? '用户只喝温水' : d);
+  }
+  if (promiseBits.length) parts.push(promiseBits[0]);
+
+  return (
+    `【记忆核对·优先于上文】本轮若在问称呼／饮品／约定：${parts.join('；')}。` +
+    `若上文曾说未记／公子，以本条为准。先短答被问到的那一件。未被问到不要复读本条。`
+  );
 }
 
 function looksLikeDrinkPreference(content: string): boolean {
