@@ -9,7 +9,7 @@ import { buildSystemPrompt } from '../utils/characterCard.js';
 import { emojiConstraintForPrompt, hasEmojiToken, sanitizeAssistantEmoji } from '../constants/emojiWhitelist.js';
 import { shouldAssistantUseVoice } from '../utils/voiceRequest.js';
 import { chatCompletion } from '../services/llm.js';
-import { appendMemoryBlock, scheduleMemoryExtractAfterTurn } from '../services/memory.js';
+import { appendMemoryBlock, memoryStickyReminder, scheduleMemoryExtractAfterTurn } from '../services/memory.js';
 import { onPrivateUserMessage } from '../services/proactive.js';
 import {
   isTtsCacheFileForMessage,
@@ -474,6 +474,13 @@ export async function conversationRoutes(app: FastifyInstance) {
           role: 'user',
           content: `【群聊记录·${label}说】${m.content}`,
         });
+      }
+    }
+
+    if (conv.type === 'private' && character?.id) {
+      const sticky = memoryStickyReminder(character.id);
+      if (sticky) {
+        llmMessages.push({ role: 'system', content: sticky });
       }
     }
 

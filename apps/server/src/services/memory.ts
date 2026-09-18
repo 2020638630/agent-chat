@@ -75,10 +75,48 @@ export function appendMemoryBlock(system: string, characterId: string): string {
     limit: INJECT_MAX,
   });
   if (!rows.length) return system;
-  const lines = rows.map((r) => `- (${r.type}) ${r.type === 'preference' ? normalizeDrinkContent(r.content) : r.content}`);
+  const lines = rows.map((r) => {
+    let text = r.content;
+    if (r.type === 'preference') text = normalizeDrinkContent(text);
+    if (looksLikeAddressPreference(text)) {
+      const m = text.match(/被叫([^，。；\s]+)|叫我([^，。；\s]+)|称呼我为([^，。；\s]+)|称呼我([^，。；\s]+)/);
+      const name = (m && (m[1] || m[2] || m[3] || m[4])) || '';
+      if (name && !/公子|深/.test(name)) {
+        text = `对用户的称呼是「${name}」（用户问叫什么时必须答这个）`;
+      }
+    }
+    return `- (${r.type}) ${text}`;
+  });
   const honor =
-    '下面这些是你已经记住的事。用户问到其中任何一件（喝什么、怎么称呼、约定），必须先用一句短讯答这一件，再写风景或其他。不要用日头、竹影、出门、留步来代替回答。不要把互相冲突的旧偏好并成一句。';
+    '下面这些是你已经记住的事。用户问到其中任何一件（喝什么、怎么称呼、约定），必须先用一句短讯答这一件，再写风景或其他。若记忆写明称呼（如小林），被问「叫我什么」时必须答该称呼，禁止说「未记/不知/你自己定」，也不要用「公子」等默认称呼顶替。不要用日头、竹影、出门、留步来代替回答。不要把互相冲突的旧偏好并成一句。';
   return `${system}\n\n【你记得的事】\n${honor}\n${lines.join('\n')}`;
+}
+
+
+/** Trailing nudge after chat history so long threads cannot bury address/drink facts. */
+export function memoryStickyReminder(characterId: string): string | null {
+  const rows = listActiveMemories(characterId, {
+    minConfidence: INJECT_MIN_CONF,
+    limit: INJECT_MAX,
+  });
+  if (!rows.length) return null;
+  const bits: string[] = [];
+  for (const r of rows) {
+    let text = r.type === 'preference' ? normalizeDrinkContent(r.content) : r.content;
+    if (looksLikeAddressPreference(text)) {
+      const m = text.match(/被叫([^，。；\s]+)|叫我([^，。；\s]+)|称呼我为([^，。；\s]+)|称呼我([^，。；\s]+)|「([^」]+)」/);
+      const name = (m && (m[1] || m[2] || m[3] || m[4] || m[5])) || '';
+      if (name && !/公子|深/.test(name)) {
+        bits.push(`称呼用户为「${name}」；被问叫什么/记不记得时必须答「${name}」，禁止说未记、不知、公子或让用户自定`);
+      }
+    } else if (looksLikeDrinkPreference(text)) {
+      bits.push(text);
+    } else if (r.type === 'promise') {
+      bits.push(text);
+    }
+  }
+  if (!bits.length) return null;
+  return `【记忆核对·优先于上文】${bits.join('；')}。若上文角色曾说未记/公子，以本条为准。先短答记忆点，再写其他。`;
 }
 
 function looksLikeDrinkPreference(content: string): boolean {
@@ -86,7 +124,7 @@ function looksLikeDrinkPreference(content: string): boolean {
 }
 
 function looksLikeAddressPreference(content: string): boolean {
-  return /称呼|叫我|喊我|称呼我|名字叫|叫作|叫做/.test(content);
+  return /称呼|叫我|喊我|称呼我|名字叫|叫作|叫做|被叫|希望被叫|对用户的称呼/.test(content);
 }
 
 function normalizeDrinkContent(content: string): string {
@@ -213,20 +251,35 @@ function filterExtractOps(characterId: string, ops: ExtractOp[]): ExtractOp[] {
   const actives = listActiveMemories(characterId, { limit: EXTRACT_ACTIVE_CAP });
   const hasPositiveDrink = actives.some(
     (m) =>
-      m.status === 'active' &&
       looksLikeDrinkPreference(m.content) &&
       !/不喜欢|不爱|别再|不要/.test(m.content),
   );
+  const hasAddress = actives.some((m) => looksLikeAddressPreference(m.content));
   return ops.filter((op) => {
     const c = String(op.content || '').trim();
     if (!c) return false;
-    // Rhetorical / quiz turns must not invent dislikes.
+    // Meta / self-referential extract junk
+    if (/无需新增|故无需|助理记忆|见消息|已更新为|当前助理/.test(c)) return false;
+    // Drink quiz / over-expanded dislike
     if (/不喜欢喝水|不爱喝水|不喜欢水(?!果)|不喜欢喝水和/.test(c)) return false;
-    if (hasPositiveDrink && looksLikeDrinkPreference(c) && /不喜欢|不爱喝|讨厌喝/.test(c) && !/(改|换成|改为|只喝).*(温水|茶|咖啡)/.test(c)) {
+    if (
+      hasPositiveDrink &&
+      looksLikeDrinkPreference(c) &&
+      /不喜欢|不爱喝|讨厌喝/.test(c) &&
+      !/(改|换成|改为|只喝).*(温水|茶|咖啡)/.test(c)
+    ) {
       return false;
     }
-    // Assistant-flavored spring-water guesses without clear user claim.
     if (/山泉/.test(c) && !/用户.*(山泉|只要|只喝|喜欢喝山泉)/.test(c)) return false;
+    // Address: do not learn 公子 from character habit; do not invent "call me 深"
+    if (/希望被叫深|叫我深|唤我深|被叫深/.test(c)) return false;
+    if (/被叫公子|叫公子|称呼.*公子|希望被叫公子/.test(c) && !/用户明确|只要叫公子|就叫我公子/.test(c)) {
+      return false;
+    }
+    // Quiz about existing address should not overwrite 小林
+    if (hasAddress && looksLikeAddressPreference(c) && /公子/.test(c) && !/小林/.test(c)) {
+      return false;
+    }
     return true;
   });
 }
@@ -309,10 +362,10 @@ export async function extractMemoriesAfterTurn(opts: {
 
   const system = [
     '你是私聊记忆整理器。只输出一个 JSON 对象，不要解释，不要 Markdown。',
-    '只根据【用户】明确说的话提炼稳定私档：fact / preference / promise / habit。不要记角色台词、猜测、风景，也不要把角色提议当成用户偏好。',
+    '只根据【用户】明确说的话提炼稳定私档：fact / preference / promise / habit。不要记角色台词、猜测、风景；不要把角色默认称呼（如公子）写成用户偏好；不要输出「无需新增/见消息/助理记忆已更新」这类元话语。',
     '规则：一条一事；只记用户侧稳定事实/偏好/约定/习惯。',
-    '饮品：用户明确说改喝/只喝温水时写成「用户改喝温水」或「用户只喝温水」。用户说不喜欢茶/温汤，不要扩写成不喜欢水。用户在追问「还记得我喜欢喝什么吗」「我喜欢什么水」时，若没有新的肯定偏好，输出 {"ops":[]}，不要发明厌恶或新口味。',
-    '称呼：写成「用户希望被叫…」。',
+    '饮品：用户明确说改喝/只喝温水时写成「用户改喝温水」或「用户只喝温水」。用户说不喜欢茶/温汤，不要扩写成不喜欢水。用户追问「还记得我喜欢喝什么吗」且没有新的肯定偏好时，输出 {"ops":[]}。',
+    '称呼：仅当用户明确要求「叫我X / 喊我X / 称呼我为X」时写成「用户希望被叫X」。用户问「你记得叫我什么吗」「你叫我什么」属于追问，不要改称呼、不要写成公子或角色自称。',
     '冲突：新偏好与旧 active 冲突（喝什么、怎么称呼）必须在 supersedes 写旧 id。没什么可记则 {"ops":[]}；不要发明。',
     '格式：{"ops":[{"op":"upsert","type":"preference","content":"…","evidence_message_ids":["消息id"],"confidence":0.86,"supersedes":["旧id或空"]}]}',
   ].join('\n');
