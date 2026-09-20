@@ -673,6 +673,7 @@ async function openMyProfile() {
     editBio.value = res.profile.bio || '';
     syncAppearanceFromProfile(res.profile);
     status.value = '';
+    await loadProactiveSettings();
   } catch (err) {
     status.value = err instanceof Error ? err.message : String(err);
   } finally {
@@ -1493,6 +1494,7 @@ onMounted(async () => {
     status.value = '无法连接后端（请先启动 apps/server）';
   }
   await Promise.all([refreshCharacters(), refreshConversations(), refreshMoments()]);
+  await loadProactiveSettings();
 });
 
 onUnmounted(() => {
@@ -1898,7 +1900,7 @@ onUnmounted(() => {
                   />
                   <span>允许角色主动找你</span>
                 </label>
-                <p class="wx-proactive-hint">关闭时角色不会先开口。打开后偶尔会在私聊里主动发一句。</p>
+                <p class="wx-proactive-hint">关闭时角色不会先开口，也不会在空间里赞评。打开后偶尔会在私聊里主动发一句。</p>
               </div>
             </div>
 
