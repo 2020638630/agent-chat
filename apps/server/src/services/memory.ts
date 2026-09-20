@@ -300,7 +300,79 @@ function parseOps(raw: string): ExtractOp[] {
 
 
 /** Drop quiz/negation noise that would erase a stable drink preference. */
-function filterExtractOps(characterId: string, ops: ExtractOp[]): ExtractOp[] {
+type HistoryMsg = { id: string; role: string; content: string };
+
+function userClaimedAddress(userTexts: string[]): boolean {
+  return userTexts.some((t) =>
+    /叫我\S{1,12}|喊我\S{1,12}|称呼我为\S{1,12}|称呼我[叫为]?\S{1,12}|我希望你叫我\S{1,12}/.test(t),
+  );
+}
+
+function userClaimedDrink(userTexts: string[]): boolean {
+  return userTexts.some((t) =>
+    /我只喝|我改喝|我以后喝|以后都喝|以后喝|给我喝|别再给我茶|别再给我.{0,6}茶/.test(t),
+  );
+}
+
+
+/** Deterministic claims from clear user sentences — covers LLM over-refusal after assistant suggested first. */
+function collectExplicitClaimOps(history: HistoryMsg[]): ExtractOp[] {
+  const ops: ExtractOp[] = [];
+  for (const m of history) {
+    if (m.role !== 'user') continue;
+    const t = String(m.content || '').trim();
+    const drink = t.match(/我(?:只|改)?喝s*([^s，。！？]{1,12})|以后(?:都)?喝s*([^s，。！？]{1,12})/);
+    if (drink) {
+      const bev = (drink[1] || drink[2] || '').trim();
+      if (bev && !/口水|汤药/.test(bev)) {
+        const kind = /只喝/.test(t) ? '只喝' : '改喝';
+        ops.push({
+          op: 'upsert',
+          type: 'preference',
+          content: `用户${kind}${bev}`,
+          evidence_message_ids: [m.id],
+          confidence: 0.95,
+          supersedes: [],
+        });
+      }
+    }
+    const addr = t.match(/(?:叫我|喊我|称呼我为|以后叫我)s*([^s，。！？]{1,12})/);
+    if (addr) {
+      const name = (addr[1] || '').trim();
+      if (name && !/什么|啥|谁/.test(name)) {
+        ops.push({
+          op: 'upsert',
+          type: 'preference',
+          content: `用户希望被叫${name}`,
+          evidence_message_ids: [m.id],
+          confidence: 0.95,
+          supersedes: [],
+        });
+      }
+    }
+  }
+  // keep last claim per kind
+  const out: ExtractOp[] = [];
+  let sawDrink = false;
+  let sawAddr = false;
+  for (let i = ops.length - 1; i >= 0; i--) {
+    const o = ops[i];
+    if (looksLikeDrinkPreference(o.content) && !sawDrink) {
+      out.push(o);
+      sawDrink = true;
+    } else if (looksLikeAddressPreference(o.content) && !sawAddr) {
+      out.push(o);
+      sawAddr = true;
+    }
+  }
+  return out.reverse();
+}
+
+export function filterExtractOps(
+  characterId: string,
+  ops: ExtractOp[],
+  history: HistoryMsg[] = [],
+): ExtractOp[] {
   const actives = listActiveMemories(characterId, { limit: EXTRACT_ACTIVE_CAP });
   const hasPositiveDrink = actives.some(
     (m) =>
@@ -308,29 +380,42 @@ function filterExtractOps(characterId: string, ops: ExtractOp[]): ExtractOp[] {
       !/不喜欢|不爱|别再|不要/.test(m.content),
   );
   const hasAddress = actives.some((m) => looksLikeAddressPreference(m.content));
+  const byId = new Map(history.map((m) => [m.id, m]));
+  const userTexts = history.filter((m) => m.role === 'user').map((m) => String(m.content || ''));
+
   return ops.filter((op) => {
     const c = String(op.content || '').trim();
     if (!c) return false;
-    // Meta / self-referential extract junk
     if (/无需新增|故无需|助理记忆|见消息|已更新为|当前助理/.test(c)) return false;
-    // Drink quiz / over-expanded dislike
-    if (/不喜欢喝水|不爱喝水|不喜欢水(?!果)|不喜欢喝水和/.test(c)) return false;
-    if (
-      hasPositiveDrink &&
-      looksLikeDrinkPreference(c) &&
-      /不喜欢|不爱喝|讨厌喝/.test(c) &&
-      !/(改|换成|改为|只喝).*(温水|茶|咖啡)/.test(c)
-    ) {
-      return false;
+
+    const evid = Array.isArray(op.evidence_message_ids)
+      ? op.evidence_message_ids.map(String).filter(Boolean)
+      : [];
+    if (evid.length) {
+      const resolved = evid.map((id) => byId.get(id)).filter(Boolean) as HistoryMsg[];
+      if (resolved.length && resolved.every((m) => m.role === 'assistant')) return false;
     }
-    if (/山泉/.test(c) && !/用户.*(山泉|只要|只喝|喜欢喝山泉)/.test(c)) return false;
-    // Address: do not learn 公子 from character habit; do not invent "call me 深"
+
+    if (looksLikeAddressPreference(c)) {
+      if (!userClaimedAddress(userTexts)) return false;
+      if (hasAddress && /公子/.test(c) && !/小林/.test(c)) return false;
+    }
+
+    if (looksLikeDrinkPreference(c)) {
+      if (!userClaimedDrink(userTexts)) return false;
+      if (/不喜欢喝水|不爱喝水|不喜欢水(?!果)|不喜欢喝水和/.test(c)) return false;
+      if (
+        hasPositiveDrink &&
+        /不喜欢|不爱喝|讨厌喝/.test(c) &&
+        !/(改|换成|改为|只喝).*(温水|茶|咖啡)/.test(c)
+      ) {
+        return false;
+      }
+      if (/山泉/.test(c) && !/用户.*(山泉|只要|只喝|喜欢喝山泉)/.test(c)) return false;
+    }
+
     if (/希望被叫深|叫我深|唤我深|被叫深/.test(c)) return false;
     if (/被叫公子|叫公子|称呼.*公子|希望被叫公子/.test(c) && !/用户明确|只要叫公子|就叫我公子/.test(c)) {
-      return false;
-    }
-    // Quiz about existing address should not overwrite 小林
-    if (hasAddress && looksLikeAddressPreference(c) && /公子/.test(c) && !/小林/.test(c)) {
       return false;
     }
     return true;
@@ -417,6 +502,10 @@ export async function extractMemoriesAfterTurn(opts: {
     '你是私聊记忆整理器。只输出一个 JSON 对象，不要解释，不要 Markdown。',
     '只根据【用户】明确说的话提炼稳定私档：fact / preference / promise / habit。不要记角色台词、猜测、风景；不要把角色默认称呼（如公子）写成用户偏好；不要输出「无需新增/见消息/助理记忆已更新」这类元话语。',
     '规则：一条一事；只记用户侧稳定事实/偏好/约定/习惯。',
+    '只记用户自己用陈述句认领的事实。',
+    '角色先提议的称呼或饮品（如「喝点温水吧」「我称你公子」），即使用户只回「嗯」「好」「喝了」「口渴」或一段动作，也不要写成用户偏好。但用户随后明确说「我改喝X／我只喝X／叫我X」时必须记。',
+    '用户必须明确出现「叫我X / 喊我X / 称呼我为X」才记称呼；明确出现「我只喝 / 我改喝 / 以后喝X」才记饮品。',
+    '「你叫我什么」「还记得我喝什么吗」「你不喝吗」是追问或闲聊，输出 {"ops":[]}。用户明确说「我改喝／我只喝／以后叫我X」时必须写入对应偏好，不要因上文已出现温水就输出空。',
     '饮品：用户明确说改喝/只喝温水时写成「用户改喝温水」或「用户只喝温水」。用户说不喜欢茶/温汤，不要扩写成不喜欢水。用户追问「还记得我喜欢喝什么吗」且没有新的肯定偏好时，输出 {"ops":[]}。',
     '称呼：仅当用户明确要求「叫我X / 喊我X / 称呼我为X」时写成「用户希望被叫X」。用户问「你记得叫我什么吗」「你叫我什么」属于追问，不要改称呼、不要写成公子或角色自称。',
     '冲突：新偏好与旧 active 冲突（喝什么、怎么称呼）必须在 supersedes 写旧 id。没什么可记则 {"ops":[]}；不要发明。',
@@ -449,11 +538,20 @@ export async function extractMemoriesAfterTurn(opts: {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error('[memory] extract fail parse:', msg);
-    return;
+    ops = [];
+  }
+  {
+    const claimed = collectExplicitClaimOps(history);
+    if (claimed.length) {
+      const key = (o: ExtractOp) => `${o.type}|${o.content}`;
+      const have = new Set(ops.map(key));
+      for (const c of claimed) if (!have.has(key(c))) ops.push(c);
+    }
   }
 
   try {
-    const insertedContents = applyOps(characterId, filterExtractOps(characterId, ops));
+    const filtered = filterExtractOps(characterId, ops, history);
+    const insertedContents = applyOps(characterId, filtered);
     if (insertedContents.length > 0) {
       enqueueMemoryNotice(characterId, conversationId, insertedContents);
       console.log(`[memory] extract ok conv=${conversationId} char=${characterId} n=${insertedContents.length}`);
