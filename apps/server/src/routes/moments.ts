@@ -3,6 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { db } from '../db/index.js';
 import { buildSystemPrompt } from '../utils/characterCard.js';
 import { chatCompletion } from '../services/llm.js';
+import { scheduleMomentReactions } from '../services/momentReactions.js';
 import { saveImageBuffer, unlinkUploadPublicPath } from '../services/uploadImage.js';
 
 const MOMENT_SELECT = `
@@ -134,6 +135,8 @@ export async function momentRoutes(app: FastifyInstance) {
       `INSERT INTO moments (id, character_id, author_kind, content, image_path, created_at)
        VALUES (?, NULL, 'user', ?, ?, ?)`
     ).run(id, content, imagePath, created_at);
+
+    scheduleMomentReactions(id);
 
     return { moment: enrichMoment(getMomentRow(id)) };
   });
