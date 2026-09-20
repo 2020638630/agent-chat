@@ -88,7 +88,7 @@ export function appendMemoryBlock(system: string, characterId: string): string {
     return `- (${r.type}) ${text}`;
   });
   const honor =
-    '下面这些是你已经记住的事，当作背景，不要每轮念一遍。用户这轮明确问到其中一件（喝什么、怎么称呼、记不记得某约定）时，先用一句短讯答那一件，再写其他。若用户只发短讯、数字、表情，或说走／好／嗯等未点名记忆的话：禁止提起称呼或饮品，禁止用「唤君××。饮温水。风动竹摇。」排比起句，可写风景或简短回应。称呼可以在句子里自然带过（如「小林」），但不要为了证明自己记得而单列饮品或约定。被问「叫我什么」时必须答记忆里的称呼，禁止说未记／不知／你自己定，也不要用公子顶替。不要用日头、竹影代替被问到的那一件。';
+    '下面这些是你已经记住的事，当作背景，不要每轮念一遍。用户这轮明确问到其中一件（喝什么、怎么称呼、记不记得某约定、记忆里有什么）时，先用一句短讯答那一件，再写其他。用户提到口渴、想喝、要水时：用记忆里的饮品（如温水）自然回应，不要另编山泉、茶等顶替。若用户只发短讯、数字、表情，或说走／好／嗯等未点名记忆的话：禁止提起称呼或饮品清单，禁止用「唤君××。饮温水。风动竹摇。」排比起句，可写风景或简短回应。称呼可以在句子里自然带过（如「小林」），但不要为了证明自己记得而单列饮品或约定。被问「叫我什么」时必须答记忆里的称呼，禁止说未记／不知／你自己定，也不要用公子顶替。不要用日头、竹影代替被问到的那一件。';
   return `${system}\n\n【你记得的事】\n${honor}\n${lines.join('\n')}`;
 }
 
@@ -96,7 +96,9 @@ export function appendMemoryBlock(system: string, characterId: string): string {
 function userAsksAboutMemory(text: string): boolean {
   const t = (text || '').trim();
   if (!t) return false;
-  return /叫我什么|怎么称呼|称呼我|记得我|还记得|记不记得|喝什么|喜欢喝|爱喝|约定/.test(t);
+  if (/叫我什么|怎么称呼|称呼我|记得我|还记得|记不记得|喝什么|喜欢喝|爱喝|约定|记忆里/.test(t)) return true;
+  if (/口渴|渴了|好渴|想喝|喝点水|喝杯|倒.*水|来杯|有点渴|有些渴/.test(t)) return true;
+  return false;
 }
 
 function assistantConflictsAddress(texts: string[]): boolean {
@@ -156,6 +158,14 @@ export function memoryStickyReminder(
   }
   if (promiseBits.length) parts.push(promiseBits[0]);
 
+    const drinkCue = /口渴|渴了|好渴|想喝|喝点水|喝杯|倒.*水|来杯|有点渴|有些渴/.test(lastUser);
+  if (drinkCue && drinkBits.length) {
+    const drinkLine = /温水/.test(drinkBits[0]) ? '温水' : drinkBits[0];
+    return (
+      `【记忆核对·优先于上文】用户表示口渴或要喝：请用记忆中的饮品「${drinkLine}」自然回应，` +
+      `不要另编山泉、茶等。可顺带称呼，但不要背整份清单。`
+    );
+  }
   return (
     `【记忆核对·优先于上文】本轮若在问称呼／饮品／约定：${parts.join('；')}。` +
     `若上文曾说未记／公子，以本条为准。先短答被问到的那一件。未被问到不要复读本条。`
