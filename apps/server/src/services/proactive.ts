@@ -65,6 +65,7 @@ export type ProactiveSettings = {
   quiet_end: string;
   daily_cap: number;
   sent_today: number;
+  in_quiet: boolean;
 };
 
 export function getProactiveSettings(): ProactiveSettings {
@@ -77,12 +78,15 @@ export function getProactiveSettings(): ProactiveSettings {
       }
     | undefined;
   const cap = Number(row?.proactive_daily_cap ?? 3);
+  const quiet_start = row?.proactive_quiet_start || '23:00';
+  const quiet_end = row?.proactive_quiet_end || '08:00';
   return {
     enabled: Number(row?.proactive_enabled ?? 0) === 1,
-    quiet_start: row?.proactive_quiet_start || '23:00',
-    quiet_end: row?.proactive_quiet_end || '08:00',
+    quiet_start,
+    quiet_end,
     daily_cap: Math.min(8, Math.max(1, Number.isFinite(cap) ? cap : 3)),
     sent_today: countProactiveToday(),
+    in_quiet: inQuietHours(new Date(), quiet_start, quiet_end),
   };
 }
 

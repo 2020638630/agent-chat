@@ -37,6 +37,39 @@ function enrichMoment(row: any) {
        WHERE moment_id = ? ORDER BY created_at ASC, rowid ASC`
     )
     .all(row.id);
+
+  const likeRows = db
+    .prepare(
+      `SELECT user_key, created_at FROM moment_likes WHERE moment_id = ? ORDER BY created_at ASC, rowid ASC`
+    )
+    .all(row.id) as Array<{ user_key: string; created_at: string }>;
+
+  const meProfile = db
+    .prepare(`SELECT name, avatar_path FROM user_profile WHERE id = 'me'`)
+    .get() as { name?: string; avatar_path?: string | null } | undefined;
+
+  const likers = likeRows.map((lk) => {
+    if (lk.user_key === 'me') {
+      return {
+        user_key: 'me',
+        name: meProfile?.name || '旅人',
+        avatar_path: meProfile?.avatar_path ?? null,
+      };
+    }
+    const m = /^char:(.+)$/.exec(lk.user_key);
+    if (m) {
+      const ch = db
+        .prepare(`SELECT id, name, avatar_path FROM characters WHERE id = ?`)
+        .get(m[1]) as { id: string; name: string; avatar_path: string | null } | undefined;
+      return {
+        user_key: lk.user_key,
+        name: ch?.name || '角色',
+        avatar_path: ch?.avatar_path ?? null,
+      };
+    }
+    return { user_key: lk.user_key, name: lk.user_key, avatar_path: null };
+  });
+
   return {
     ...row,
     author_kind: row.author_kind === 'user' ? 'user' : 'character',
@@ -44,6 +77,7 @@ function enrichMoment(row: any) {
     image_path: row.image_path ?? null,
     liked,
     like_count,
+    likers,
     comments,
   };
 }

@@ -93,6 +93,12 @@ const uiSpaceBgOpacity = ref(DEFAULT_SPACE_BG_OPACITY);
 const appearanceBusy = ref(false);
 const proactiveEnabled = ref(false);
 const proactiveBusy = ref(false);
+const proactiveSentToday = ref(0);
+const proactiveDailyCap = ref(3);
+const proactiveInQuiet = ref(false);
+const proactiveQuietStart = ref('23:00');
+const proactiveQuietEnd = ref('08:00');
+const expandedLikeMomentId = ref<string | null>(null);
 const avatarFileInput = ref<HTMLInputElement | null>(null);
 const bgFileInput = ref<HTMLInputElement | null>(null);
 const spaceBgFileInput = ref<HTMLInputElement | null>(null);
@@ -372,10 +378,26 @@ async function persistAppearance(partial: {
 }
 
 
+function applyProactiveSettings(settings: {
+  enabled: boolean;
+  quiet_start?: string;
+  quiet_end?: string;
+  daily_cap?: number;
+  sent_today?: number;
+  in_quiet?: boolean;
+}) {
+  proactiveEnabled.value = !!settings.enabled;
+  proactiveSentToday.value = Number(settings.sent_today ?? 0);
+  proactiveDailyCap.value = Number(settings.daily_cap ?? 3);
+  proactiveQuietStart.value = settings.quiet_start || '23:00';
+  proactiveQuietEnd.value = settings.quiet_end || '08:00';
+  proactiveInQuiet.value = !!settings.in_quiet;
+}
+
 async function loadProactiveSettings() {
   try {
     const res = await api.getProactiveSettings();
-    proactiveEnabled.value = !!res.settings.enabled;
+    applyProactiveSettings(res.settings);
   } catch {
     /* ignore */
   }
@@ -385,12 +407,16 @@ async function toggleProactiveEnabled(next: boolean) {
   proactiveBusy.value = true;
   try {
     const res = await api.updateProactiveSettings({ enabled: next });
-    proactiveEnabled.value = !!res.settings.enabled;
+    applyProactiveSettings(res.settings);
   } catch (err) {
     status.value = err instanceof Error ? err.message : String(err);
   } finally {
     proactiveBusy.value = false;
   }
+}
+
+function toggleLikeList(momentId: string) {
+  expandedLikeMomentId.value = expandedLikeMomentId.value === momentId ? null : momentId;
 }
 
 async function selectTheme(id: ThemeId) {
@@ -1900,7 +1926,11 @@ onUnmounted(() => {
                   />
                   <span>允许角色主动找你</span>
                 </label>
-                <p class="wx-proactive-hint">关闭时角色不会先开口，也不会在空间里赞评。打开后偶尔会在私聊里主动发一句。</p>
+                <p class="wx-proactive-cap">
+                  今日主动 {{ proactiveSentToday }} / {{ proactiveDailyCap }}
+                  <span v-if="proactiveInQuiet" class="wx-proactive-quiet"> · 静默中（{{ proactiveQuietStart }}–{{ proactiveQuietEnd }}）</span>
+                </p>
+                <p class="wx-proactive-hint">满后今日不再私聊先开口，也不再反应动态。关闭开关则两者都停。</p>
               </div>
             </div>
 
@@ -2031,6 +2061,26 @@ onUnmounted(() => {
                 <button class="wx-mini-btn" :class="{ liked: m.liked }" @click="toggleLike(m)">
                   {{ m.liked ? '♥ 已赞' : '♡ 点赞' }}{{ m.like_count ? ` · ${m.like_count}` : '' }}
                 </button>
+              </div>
+              <button
+                v-if="m.likers?.length"
+                type="button"
+                class="wx-moment-likers"
+                @click="toggleLikeList(m.id)"
+              >
+                <span
+                  v-for="lk in m.likers.slice(0, 5)"
+                  :key="lk.user_key"
+                  class="wx-moment-liker-ava"
+                  :title="lk.name"
+                >
+                  <img v-if="lk.avatar_path" :src="lk.avatar_path" alt="" />
+                  <template v-else>{{ avatarText(lk.name) }}</template>
+                </span>
+                <span v-if="m.likers.length > 5" class="wx-moment-liker-more">+{{ m.likers.length - 5 }}</span>
+              </button>
+              <div v-if="expandedLikeMomentId === m.id && m.likers?.length" class="wx-moment-liker-names">
+                {{ m.likers.map((lk) => lk.name).join('、') }}
               </div>
               <div v-if="m.comments?.length" class="wx-moment-comments">
                 <div v-for="c in m.comments" :key="c.id" class="wx-moment-comment">

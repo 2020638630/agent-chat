@@ -48,6 +48,7 @@ export type ProactiveSettings = {
   quiet_end: string;
   daily_cap: number;
   sent_today: number;
+  in_quiet?: boolean;
 };
 
 export type MemoryNote = {
@@ -101,7 +102,14 @@ export type Moment = {
   created_at: string;
   liked?: boolean;
   like_count?: number;
+  likers?: MomentLiker[];
   comments?: MomentComment[];
+};
+
+export type MomentLiker = {
+  user_key: string;
+  name: string;
+  avatar_path?: string | null;
 };
 
 async function json<T>(res: Response): Promise<T> {
