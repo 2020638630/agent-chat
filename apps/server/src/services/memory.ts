@@ -3,7 +3,7 @@ import { db } from '../db/index.js';
 import { chatCompletion } from './llm.js';
 
 export type MemoryType = 'fact' | 'preference' | 'promise' | 'habit';
-export type MemoryStatus = 'active' | 'superseded' | 'user_hidden';
+export type MemoryStatus = 'active' | 'pending' | 'superseded' | 'user_hidden';
 
 export type MemoryRow = {
   id: string;
@@ -422,8 +422,101 @@ export function filterExtractOps(
   });
 }
 
-function applyOps(characterId: string, ops: ExtractOp[]): string[] {
-  if (!ops.length) return [];
+
+function shortAddressLabel(content: string): string {
+  const m = content.match(
+    /被叫([^，。；\s]+)|叫我([^，。；\s]+)|称呼我为([^，。；\s]+)|希望被叫([^，。；\s]+)|「([^」]+)」/,
+  );
+  return ((m && (m[1] || m[2] || m[3] || m[4] || m[5])) || content).trim().slice(0, 12);
+}
+
+function shortDrinkLabel(content: string): string {
+  if (/温水/.test(content)) return '温水';
+  if (/山泉/.test(content)) return '山泉';
+  if (/茶/.test(content)) return '茶';
+  if (/咖啡/.test(content)) return '咖啡';
+  const m = content.match(/喝\s*([^，。；\s]{1,8})/);
+  return ((m && m[1]) || content).trim().slice(0, 12);
+}
+
+function findActiveConflict(
+  characterId: string,
+  content: string,
+): { id: string; content: string; kind: 'address' | 'drink' } | null {
+  const rows = db
+    .prepare(
+      `SELECT id, content FROM memories
+       WHERE character_id = ? AND status = 'active' AND type = 'preference'`,
+    )
+    .all(characterId) as Array<{ id: string; content: string }>;
+  if (looksLikeAddressPreference(content)) {
+    for (const r of rows) {
+      if (looksLikeAddressPreference(r.content) && r.content.trim() !== content.trim()) {
+        return { id: r.id, content: r.content, kind: 'address' };
+      }
+    }
+  }
+  if (looksLikeDrinkPreference(content)) {
+    for (const r of rows) {
+      if (looksLikeDrinkPreference(r.content) && r.content.trim() !== content.trim()) {
+        return { id: r.id, content: r.content, kind: 'drink' };
+      }
+    }
+  }
+  return null;
+}
+
+function findPendingOfKind(
+  characterId: string,
+  kind: 'address' | 'drink',
+): { id: string; content: string } | null {
+  const rows = db
+    .prepare(
+      `SELECT id, content FROM memories
+       WHERE character_id = ? AND status = 'pending' AND type = 'preference'`,
+    )
+    .all(characterId) as Array<{ id: string; content: string }>;
+  for (const r of rows) {
+    if (kind === 'address' && looksLikeAddressPreference(r.content)) return r;
+    if (kind === 'drink' && looksLikeDrinkPreference(r.content)) return r;
+  }
+  return null;
+}
+
+export type PendingAsk = {
+  kind: 'address' | 'drink';
+  oldLabel: string;
+  newLabel: string;
+};
+
+function buildConfirmQuestion(ask: PendingAsk): string {
+  return `先前记下的是「${ask.oldLabel}」。你这句像是要改成「${ask.newLabel}」。改，还是仍用${ask.oldLabel}？`;
+}
+
+export function insertMemoryConfirmMessage(
+  conversationId: string,
+  characterId: string,
+  ask: PendingAsk,
+): string {
+  const id = randomUUID();
+  const at = nowIso();
+  const content = buildConfirmQuestion(ask);
+  db.prepare(
+    `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at, source)
+     VALUES (?, ?, 'assistant', ?, ?, ?, 'memory_confirm')`,
+  ).run(id, conversationId, characterId, content, at);
+  db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(at, conversationId);
+  return content;
+}
+
+type ApplyResult = {
+  activatedContents: string[];
+  newPendings: PendingAsk[];
+};
+
+export function applyOps(characterId: string, ops: ExtractOp[]): ApplyResult {
+  const empty: ApplyResult = { activatedContents: [], newPendings: [] };
+  if (!ops.length) return empty;
   const at = nowIso();
   const getActiveSame = db.prepare(
     `SELECT id FROM memories WHERE character_id = ? AND status = 'active' AND trim(content) = ? LIMIT 1`,
@@ -432,16 +525,69 @@ function applyOps(characterId: string, ops: ExtractOp[]): string[] {
   const markSuperseded = db.prepare(
     `UPDATE memories SET status = 'superseded', updated_at = ? WHERE id = ? AND character_id = ? AND status = 'active'`,
   );
-  const insert = db.prepare(
+  const insertActive = db.prepare(
     `INSERT INTO memories (id, character_id, type, content, evidence_json, confidence, status, supersedes, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)`,
   );
+  const insertPending = db.prepare(
+    `INSERT INTO memories (id, character_id, type, content, evidence_json, confidence, status, supersedes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?)`,
+  );
+  const updatePending = db.prepare(
+    `UPDATE memories SET content = ?, evidence_json = ?, confidence = ?, supersedes = ?, updated_at = ?
+     WHERE id = ? AND character_id = ? AND status = 'pending'`,
+  );
 
-  const insertedContents: string[] = [];
+  const activatedContents: string[] = [];
+  const newPendings: PendingAsk[] = [];
+
   const tx = db.transaction(() => {
     for (const op of ops) {
-      const same = getActiveSame.get(characterId, op.content) as { id: string } | undefined;
+      const content =
+        op.type === 'preference' ? normalizeDrinkContent(op.content) : op.content;
+      const same = getActiveSame.get(characterId, content) as { id: string } | undefined;
       if (same) continue;
+
+      const evidence = JSON.stringify({ message_ids: op.evidence_message_ids || [] });
+      const confidence = op.confidence ?? 0.7;
+      const conflict =
+        op.type === 'preference' ? findActiveConflict(characterId, content) : null;
+
+      if (conflict) {
+        const pending = findPendingOfKind(characterId, conflict.kind);
+        const oldLabel =
+          conflict.kind === 'address'
+            ? shortAddressLabel(conflict.content)
+            : shortDrinkLabel(conflict.content);
+        const newLabel =
+          conflict.kind === 'address' ? shortAddressLabel(content) : shortDrinkLabel(content);
+        if (pending) {
+          updatePending.run(
+            content,
+            evidence,
+            confidence,
+            conflict.id,
+            at,
+            pending.id,
+            characterId,
+          );
+        } else {
+          const newId = randomUUID();
+          insertPending.run(
+            newId,
+            characterId,
+            op.type,
+            content,
+            evidence,
+            confidence,
+            conflict.id,
+            at,
+            at,
+          );
+          newPendings.push({ kind: conflict.kind, oldLabel, newLabel });
+        }
+        continue;
+      }
 
       const validSupersedes: string[] = [];
       for (const sid of op.supersedes || []) {
@@ -451,31 +597,24 @@ function applyOps(characterId: string, ops: ExtractOp[]): string[] {
           validSupersedes.push(sid);
         }
       }
-
       const newId = randomUUID();
-      const content =
-        op.type === 'preference' ? normalizeDrinkContent(op.content) : op.content;
-      insert.run(
+      insertActive.run(
         newId,
         characterId,
         op.type,
         content,
-        JSON.stringify({ message_ids: op.evidence_message_ids || [] }),
-        op.confidence ?? 0.7,
+        evidence,
+        confidence,
         validSupersedes.length ? validSupersedes.join(',') : null,
         at,
         at,
       );
-      insertedContents.push(content);
-      if (op.type === 'preference') {
-        autoSupersedeDrinkConflicts(characterId, newId, content, at);
-        autoSupersedeAddressConflicts(characterId, newId, content, at);
-      }
+      activatedContents.push(content);
     }
     enforceActiveCap(characterId);
   });
   tx();
-  return insertedContents;
+  return { activatedContents, newPendings };
 }
 
 export async function extractMemoriesAfterTurn(opts: {
@@ -486,13 +625,19 @@ export async function extractMemoriesAfterTurn(opts: {
   console.log(`[memory] extract start conv=${conversationId} char=${characterId}`);
   const history = db
     .prepare(
-      `SELECT id, role, content FROM messages
+      `SELECT id, role, content, source FROM messages
        WHERE conversation_id = ?
        ORDER BY created_at DESC, rowid DESC
        LIMIT ?`,
     )
-    .all(conversationId, EXTRACT_HISTORY) as Array<{ id: string; role: string; content: string }>;
+    .all(conversationId, EXTRACT_HISTORY) as Array<{
+    id: string;
+    role: string;
+    content: string;
+    source: string | null;
+  }>;
   history.reverse();
+  const historyForExtract = history.filter((m) => m.source !== 'memory_confirm');
 
   const actives = listActiveMemories(characterId, { limit: EXTRACT_ACTIVE_CAP });
   const activeBrief = actives.map((m) => ({ id: m.id, type: m.type, content: m.content }));
@@ -541,7 +686,7 @@ export async function extractMemoriesAfterTurn(opts: {
     ops = [];
   }
   {
-    const claimed = collectExplicitClaimOps(history);
+    const claimed = collectExplicitClaimOps(historyForExtract);
     if (claimed.length) {
       const key = (o: ExtractOp) => `${o.type}|${o.content}`;
       const have = new Set(ops.map(key));
@@ -550,13 +695,19 @@ export async function extractMemoriesAfterTurn(opts: {
   }
 
   try {
-    const filtered = filterExtractOps(characterId, ops, history);
-    const insertedContents = applyOps(characterId, filtered);
-    if (insertedContents.length > 0) {
-      enqueueMemoryNotice(characterId, conversationId, insertedContents);
-      console.log(`[memory] extract ok conv=${conversationId} char=${characterId} n=${insertedContents.length}`);
+    const filtered = filterExtractOps(characterId, ops, historyForExtract);
+    const applied = applyOps(characterId, filtered);
+    if (applied.activatedContents.length > 0) {
+      enqueueMemoryNotice(characterId, conversationId, applied.activatedContents);
+      console.log(
+        `[memory] extract ok conv=${conversationId} char=${characterId} n=${applied.activatedContents.length}`,
+      );
     } else {
       console.log(`[memory] extract empty conv=${conversationId} char=${characterId}`);
+    }
+    for (const ask of applied.newPendings) {
+      const q = insertMemoryConfirmMessage(conversationId, characterId, ask);
+      console.log(`[memory] confirm asked conv=${conversationId}: ${q}`);
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -653,6 +804,84 @@ export function markAllMemoryNoticesRead(characterId: string, conversationId?: s
 }
 
 /** Fire-and-forget after private assistant reply is persisted. */
+
+export function resolvePendingMemoryConfirm(
+  characterId: string,
+  conversationId: string,
+  userText: string,
+): boolean {
+  const t = String(userText || '').trim();
+  if (!t) return false;
+  if (/^(嗯|好|哦|噢|额|唔)[。.!！？]?$/.test(t)) return false;
+
+  const pendings = db
+    .prepare(
+      `SELECT id, content, supersedes FROM memories
+       WHERE character_id = ? AND status = 'pending' AND type = 'preference'`,
+    )
+    .all(characterId) as Array<{ id: string; content: string; supersedes: string | null }>;
+  if (!pendings.length) return false;
+
+  const at = nowIso();
+  let resolved = false;
+
+  for (const p of pendings) {
+    const kind: 'address' | 'drink' | null = looksLikeAddressPreference(p.content)
+      ? 'address'
+      : looksLikeDrinkPreference(p.content)
+        ? 'drink'
+        : null;
+    if (!kind) continue;
+
+    const newLabel = kind === 'address' ? shortAddressLabel(p.content) : shortDrinkLabel(p.content);
+    let oldLabel = '';
+    if (p.supersedes) {
+      const old = db
+        .prepare(`SELECT content FROM memories WHERE id = ? AND character_id = ?`)
+        .get(p.supersedes, characterId) as { content: string } | undefined;
+      if (old) {
+        oldLabel =
+          kind === 'address' ? shortAddressLabel(old.content) : shortDrinkLabel(old.content);
+      }
+    }
+
+    const acceptHint =
+      /(?:^|[，。\s])(?:改|换成|按新的|以后叫|就叫|改喝|对，改|对改)/.test(t) ||
+      (Boolean(newLabel) &&
+        ((kind === 'address' && new RegExp('(?:叫|称呼).{0,6}' + newLabel).test(t)) ||
+          (kind === 'drink' && new RegExp('(?:喝|改喝).{0,6}' + newLabel).test(t))));
+    const rejectHint =
+      /不改|不用|还是|继续|仍用|算了|别改/.test(t) ||
+      (Boolean(oldLabel) &&
+        ((kind === 'address' &&
+          new RegExp('(?:还是|仍用|叫|继续).{0,6}' + oldLabel).test(t)) ||
+          (kind === 'drink' &&
+            new RegExp('(?:还是|仍用|喝|继续).{0,6}' + oldLabel).test(t))));
+
+    if (acceptHint && !rejectHint) {
+      db.prepare(
+        `UPDATE memories SET status = 'active', updated_at = ? WHERE id = ? AND character_id = ?`,
+      ).run(at, p.id, characterId);
+      if (p.supersedes) {
+        db.prepare(
+          `UPDATE memories SET status = 'superseded', updated_at = ?
+           WHERE id = ? AND character_id = ? AND status = 'active'`,
+        ).run(at, p.supersedes, characterId);
+      }
+      enqueueMemoryNotice(characterId, conversationId, [p.content]);
+      resolved = true;
+      continue;
+    }
+    if (rejectHint) {
+      db.prepare(
+        `UPDATE memories SET status = 'superseded', updated_at = ? WHERE id = ? AND character_id = ?`,
+      ).run(at, p.id, characterId);
+      resolved = true;
+    }
+  }
+  return resolved;
+}
+
 export function scheduleMemoryExtractAfterTurn(characterId: string, conversationId: string) {
   setImmediate(() => {
     void extractMemoriesAfterTurn({ characterId, conversationId }).catch((e) => {

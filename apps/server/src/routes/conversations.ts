@@ -9,7 +9,7 @@ import { buildSystemPrompt } from '../utils/characterCard.js';
 import { emojiConstraintForPrompt, hasEmojiToken, sanitizeAssistantEmoji } from '../constants/emojiWhitelist.js';
 import { shouldAssistantUseVoice } from '../utils/voiceRequest.js';
 import { chatCompletion } from '../services/llm.js';
-import { appendMemoryBlock, memoryStickyReminder, scheduleMemoryExtractAfterTurn } from '../services/memory.js';
+import { appendMemoryBlock, memoryStickyReminder, resolvePendingMemoryConfirm, scheduleMemoryExtractAfterTurn } from '../services/memory.js';
 import { onPrivateUserMessage } from '../services/proactive.js';
 import {
   isTtsCacheFileForMessage,
@@ -399,7 +399,9 @@ export async function conversationRoutes(app: FastifyInstance) {
       character = pickGroupResponder(members, conversationId, mentionCharacterId);
     }
 
+    let pendingResolved = false;
     if (conv.type === 'private' && character?.id && (source === 'text' || source === 'voice')) {
+      pendingResolved = resolvePendingMemoryConfirm(character.id, conversationId, trimmed);
       onPrivateUserMessage(character.id);
     }
 
@@ -530,7 +532,7 @@ export async function conversationRoutes(app: FastifyInstance) {
 
     db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(at, conversationId);
 
-    if (conv.type === 'private' && character?.id && !llmFailed) {
+    if (conv.type === 'private' && character?.id && !llmFailed && !pendingResolved) {
       scheduleMemoryExtractAfterTurn(character.id, conversationId);
     }
 
