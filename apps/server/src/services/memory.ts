@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { db } from '../db/index.js';
 import { chatCompletion } from './llm.js';
+import { gateExtractOps } from './memoryGate.js';
 
 export type MemoryType = 'fact' | 'preference' | 'promise' | 'habit';
 export type MemoryStatus = 'active' | 'pending' | 'superseded' | 'user_hidden';
@@ -695,7 +696,11 @@ export async function extractMemoriesAfterTurn(opts: {
   }
 
   try {
-    const filtered = filterExtractOps(characterId, ops, historyForExtract);
+    const recentUserText =
+      [...historyForExtract].reverse().find((m) => m.role === 'user')?.content || '';
+    const activeMemorySummary = actives.map((m) => m.content).join(';');
+    const gated = gateExtractOps(ops, { recentUserText, activeMemorySummary });
+    const filtered = filterExtractOps(characterId, gated as ExtractOp[], historyForExtract);
     const applied = applyOps(characterId, filtered);
     if (applied.activatedContents.length > 0) {
       enqueueMemoryNotice(characterId, conversationId, applied.activatedContents);

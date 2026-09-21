@@ -1,0 +1,277 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "w01",
+      "label": "should_write",
+      "kind": "address",
+      "text": "以后请叫我小林。",
+      "expect": {
+        "should_write": true,
+        "is_conflict": false,
+        "kind": "address"
+      }
+    },
+    {
+      "id": "w02",
+      "label": "should_write",
+      "kind": "address",
+      "text": "喊我阿杰就行。",
+      "expect": {
+        "should_write": true,
+        "is_conflict": false,
+        "kind": "address"
+      }
+    },
+    {
+      "id": "w03",
+      "label": "should_write",
+      "kind": "drink",
+      "text": "我只喝温水，别给我点别的。",
+      "expect": {
+        "should_write": true,
+        "is_conflict": false,
+        "kind": "drink"
+      }
+    },
+    {
+      "id": "w04",
+      "label": "should_write",
+      "kind": "drink",
+      "text": "以后改喝美式。",
+      "expect": {
+        "should_write": true,
+        "is_conflict": false,
+        "kind": "drink"
+      }
+    },
+    {
+      "id": "w05",
+      "label": "should_write",
+      "kind": "other",
+      "text": "记住我周末一般不回消息。",
+      "expect": {
+        "should_write": true,
+        "is_conflict": false,
+        "kind": "other"
+      }
+    },
+    {
+      "id": "w06",
+      "label": "should_write",
+      "kind": "other",
+      "text": "我对花生过敏，千万别放。",
+      "expect": {
+        "should_write": true,
+        "is_conflict": false,
+        "kind": "other"
+      }
+    },
+    {
+      "id": "w07",
+      "label": "should_write",
+      "kind": "address",
+      "text": "别叫我小少爷，直接喊名字。",
+      "expect": {
+        "should_write": true,
+        "is_conflict": false,
+        "kind": "address"
+      }
+    },
+    {
+      "id": "w08",
+      "label": "should_write",
+      "kind": "other",
+      "text": "我住浦东，晚高峰别约出门。",
+      "expect": {
+        "should_write": true,
+        "is_conflict": false,
+        "kind": "other"
+      }
+    },
+    {
+      "id": "n01",
+      "label": "no_write",
+      "kind": "other",
+      "text": "哈哈今天好累啊。",
+      "expect": {
+        "should_write": false,
+        "is_conflict": false,
+        "kind": "other"
+      }
+    },
+    {
+      "id": "n02",
+      "label": "no_write",
+      "kind": "other",
+      "text": "走走再聊。",
+      "expect": {
+        "should_write": false,
+        "is_conflict": false,
+        "kind": "other"
+      }
+    },
+    {
+      "id": "n03",
+      "label": "no_write",
+      "kind": "drink",
+      "text": "口渴了。",
+      "expect": {
+        "should_write": false,
+        "is_conflict": false,
+        "kind": "drink"
+      }
+    },
+    {
+      "id": "n04",
+      "label": "no_write",
+      "kind": "other",
+      "text": "中午吃什么好？",
+      "expect": {
+        "should_write": false,
+        "is_conflict": false,
+        "kind": "other"
+      }
+    },
+    {
+      "id": "n05",
+      "label": "no_write",
+      "kind": "other",
+      "text": "嗯。",
+      "expect": {
+        "should_write": false,
+        "is_conflict": false,
+        "kind": "other"
+      }
+    },
+    {
+      "id": "n06",
+      "label": "no_write",
+      "kind": "drink",
+      "text": "（角色）要不要喝点温水？",
+      "active": "",
+      "expect": {
+        "should_write": false,
+        "is_conflict": false,
+        "kind": "drink"
+      }
+    },
+    {
+      "id": "n07",
+      "label": "no_write",
+      "kind": "drink",
+      "text": "好啊那就温水吧。",
+      "active": "",
+      "expect": {
+        "should_write": false,
+        "is_conflict": false,
+        "kind": "drink"
+      }
+    },
+    {
+      "id": "n08",
+      "label": "no_write",
+      "kind": "other",
+      "text": "记得昨天那件事吗？",
+      "expect": {
+        "should_write": false,
+        "is_conflict": false,
+        "kind": "other"
+      }
+    },
+    {
+      "id": "c01",
+      "label": "conflict",
+      "kind": "address",
+      "text": "以后请叫我阿哲。",
+      "active": "用户希望被叫小林",
+      "expect": {
+        "should_write": true,
+        "is_conflict": true,
+        "kind": "address"
+      }
+    },
+    {
+      "id": "c02",
+      "label": "conflict",
+      "kind": "drink",
+      "text": "以后改喝红茶。",
+      "active": "用户只喝温水",
+      "expect": {
+        "should_write": true,
+        "is_conflict": true,
+        "kind": "drink"
+      }
+    },
+    {
+      "id": "c03",
+      "label": "conflict",
+      "kind": "address",
+      "text": "别叫我小林了，叫我阿凯。",
+      "active": "用户希望被叫小林",
+      "expect": {
+        "should_write": true,
+        "is_conflict": true,
+        "kind": "address"
+      }
+    },
+    {
+      "id": "c04",
+      "label": "conflict",
+      "kind": "drink",
+      "text": "我改喝美式了。",
+      "active": "用户偏好喝绿茶",
+      "expect": {
+        "should_write": true,
+        "is_conflict": true,
+        "kind": "drink"
+      }
+    },
+    {
+      "id": "c05",
+      "label": "conflict",
+      "kind": "other",
+      "text": "之前说错了，其实可以吃花生。",
+      "active": "用户对花生过敏",
+      "expect": {
+        "should_write": true,
+        "is_conflict": true,
+        "kind": "other"
+      }
+    },
+    {
+      "id": "c06",
+      "label": "conflict",
+      "kind": "address",
+      "text": "请叫我少爷。",
+      "active": "用户不喜欢被叫少爷",
+      "expect": {
+        "should_write": true,
+        "is_conflict": true,
+        "kind": "address"
+      }
+    },
+    {
+      "id": "n09",
+      "label": "no_write",
+      "kind": "other",
+      "text": "发个表情包。",
+      "expect": {
+        "should_write": false,
+        "is_conflict": false,
+        "kind": "other"
+      }
+    },
+    {
+      "id": "w09",
+      "label": "should_write",
+      "kind": "drink",
+      "text": "记住：我只喝茶，不喝咖啡。",
+      "expect": {
+        "should_write": true,
+        "is_conflict": false,
+        "kind": "drink"
+      }
+    }
+  ]
+}
