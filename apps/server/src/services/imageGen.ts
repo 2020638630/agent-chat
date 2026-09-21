@@ -8,6 +8,9 @@ function env(name: string, fallback = '') {
   return process.env[name]?.trim() || fallback;
 }
 
+const DEFAULT_IMAGE_STYLE =
+  'anime illustration, clean lines, soft lighting, character-consistent portrait, tasteful, no watermark, no text';
+
 export function wantsImageGeneration(text: string): boolean {
   const t = String(text || '').trim();
   if (!t) return false;
@@ -25,8 +28,11 @@ export function buildImagePrompt(userText: string, characterName: string): strin
     .trim();
   if (!subject) subject = userText.trim();
   return (
+    
     `Character-aware illustration for chat bubble. Soft lighting, clean composition, no watermark, no UI chrome. ` +
     `Drawn in a style that fits persona "${characterName}". Subject: ${subject}`
+   +
+    `. ${DEFAULT_IMAGE_STYLE}`
   );
 }
 
