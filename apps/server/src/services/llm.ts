@@ -1,10 +1,20 @@
 /**
  * Chat completions against OpenAI-compatible APIs (Ollama / DeepSeek, etc.).
  * When talking to Ollama, always send reasoning_effort: "none"; read message.content only.
+ * Content may be a plain string or an OpenAI-style multimodal parts array (text + image_url).
  */
+export type ChatContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
 export type ChatMessage = {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: string | ChatContentPart[];
+};
+
+export type ChatCompletionOptions = {
+  /** Override model; used for vision turns via LLM_VISION_MODEL. */
+  model?: string;
 };
 
 function env(name: string, fallback = '') {
@@ -18,10 +28,18 @@ function isOllama(baseUrl: string): boolean {
   return /11434/.test(baseUrl) || /ollama/i.test(baseUrl);
 }
 
-export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
+/** Vision model for B-04A; empty LLM_VISION_MODEL falls back to LLM_MODEL. */
+export function resolveVisionModel(): string {
+  return env('LLM_VISION_MODEL') || env('LLM_MODEL', 'qwen3.5:9b-nothink');
+}
+
+export async function chatCompletion(
+  messages: ChatMessage[],
+  opts?: ChatCompletionOptions,
+): Promise<string> {
   const baseUrl = env('LLM_BASE_URL', 'http://127.0.0.1:11434/v1').replace(/\/$/, '');
   const apiKey = env('LLM_API_KEY', 'ollama');
-  const model = env('LLM_MODEL', 'qwen3.5:9b-nothink');
+  const model = (opts?.model?.trim() || env('LLM_MODEL', 'qwen3.5:9b-nothink'));
 
   const body: Record<string, unknown> = {
     model,
@@ -30,7 +48,7 @@ export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
     stream: false,
   };
 
-  // Qwen3.5 via Ollama OpenAI-compat: disable thinking chain
+  // Qwen3.5 / vision via Ollama OpenAI-compat: disable thinking chain when applicable
   if (isOllama(baseUrl)) {
     body.reasoning_effort = 'none';
   }
@@ -42,7 +60,7 @@ export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
       Authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(120_000),
+    signal: AbortSignal.timeout(180_000),
   });
 
   if (!res.ok) {
