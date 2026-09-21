@@ -1,0 +1,98 @@
+/**
+ * OpenAI-compatible image generation (SiliconFlow by default; same key family as STT/TTS).
+ * Never log API keys.
+ */
+import { saveImageBuffer } from './uploadImage.js';
+
+function env(name: string, fallback = '') {
+  return process.env[name]?.trim() || fallback;
+}
+
+export function wantsImageGeneration(text: string): boolean {
+  const t = String(text || '').trim();
+  if (!t) return false;
+  return /画一[张个幅]|画个|画张|帮我画|给我画|生成一[张个]图|生成图片|来一[张个]图|出一[张个]图|画张图|draw (me )?(a|an)|generate (an? )?image/i.test(
+    t,
+  );
+}
+
+/** Short prompt from user text; rule template, no second agent. */
+export function buildImagePrompt(userText: string, characterName: string): string {
+  let subject = String(userText || '').trim();
+  subject = subject
+    .replace(/^(请|麻烦|帮我|给我)?(画一[张个幅]|画个|画张|生成一[张个]图|生成图片|来一[张个]图|出一[张个]图)/, '')
+    .replace(/^(please\s+)?(draw|generate)\s+(me\s+)?(a|an)?\s*/i, '')
+    .trim();
+  if (!subject) subject = userText.trim();
+  return (
+    `Character-aware illustration for chat bubble. Soft lighting, clean composition, no watermark, no UI chrome. ` +
+    `Drawn in a style that fits persona "${characterName}". Subject: ${subject}`
+  );
+}
+
+export type GeneratedImage = {
+  publicPath: string;
+  model: string;
+};
+
+export async function generateChatImage(prompt: string): Promise<GeneratedImage> {
+  const baseUrl = env('IMAGE_GEN_BASE_URL', 'https://api.siliconflow.cn/v1').replace(/\/$/, '');
+  const apiKey = env('IMAGE_GEN_API_KEY') || env('STT_API_KEY');
+  const model = env('IMAGE_GEN_MODEL', 'Kwai-Kolors/Kolors');
+  if (!apiKey) {
+    throw new Error('未配置 IMAGE_GEN_API_KEY（或 STT_API_KEY），请在本机 .env 填写');
+  }
+
+  const res = await fetch(`${baseUrl}/images/generations`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      prompt,
+      image_size: '1024x1024',
+      batch_size: 1,
+    }),
+    signal: AbortSignal.timeout(180_000),
+  });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`生图失败 ${res.status}: ${text.slice(0, 400)}`);
+  }
+
+  const data = (await res.json()) as {
+    images?: Array<{ url?: string; b64_json?: string }>;
+    data?: Array<{ url?: string; b64_json?: string }>;
+  };
+  const item = data.images?.[0] || data.data?.[0];
+  if (!item) throw new Error('生图返回为空');
+
+  let buffer: Buffer;
+  let ext = '.png';
+  if (item.b64_json) {
+    buffer = Buffer.from(item.b64_json, 'base64');
+  } else if (item.url) {
+    if (item.url.startsWith('data:')) {
+      const m = item.url.match(/^data:(image\/[\w+.-]+);base64,(.+)$/);
+      if (!m) throw new Error('无法解析 data URL 图片');
+      if (m[1].includes('jpeg') || m[1].includes('jpg')) ext = '.jpg';
+      else if (m[1].includes('webp')) ext = '.webp';
+      buffer = Buffer.from(m[2], 'base64');
+    } else {
+      const imgRes = await fetch(item.url, { signal: AbortSignal.timeout(120_000) });
+      if (!imgRes.ok) throw new Error(`下载生图失败 ${imgRes.status}`);
+      const ctype = imgRes.headers.get('content-type') || '';
+      if (ctype.includes('jpeg') || ctype.includes('jpg')) ext = '.jpg';
+      else if (ctype.includes('webp')) ext = '.webp';
+      buffer = Buffer.from(await imgRes.arrayBuffer());
+    }
+  } else {
+    throw new Error('生图结果无 url / b64_json');
+  }
+
+  const saved = saveImageBuffer(buffer, ext, 'gen-img');
+  return { publicPath: saved.publicPath, model };
+}

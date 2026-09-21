@@ -9,6 +9,7 @@ import { buildSystemPrompt } from '../utils/characterCard.js';
 import { emojiConstraintForPrompt, hasEmojiToken, sanitizeAssistantEmoji } from '../constants/emojiWhitelist.js';
 import { shouldAssistantUseVoice } from '../utils/voiceRequest.js';
 import { chatCompletion, resolveVisionModel } from '../services/llm.js';
+import { wantsImageGeneration, buildImagePrompt, generateChatImage } from '../services/imageGen.js';
 import { appendMemoryBlock, memoryStickyReminder, resolvePendingMemoryConfirm, scheduleMemoryExtractAfterTurn } from '../services/memory.js';
 import { onPrivateUserMessage } from '../services/proactive.js';
 import {
@@ -403,6 +404,48 @@ export async function conversationRoutes(app: FastifyInstance) {
     if (conv.type === 'private' && character?.id && (source === 'text' || source === 'voice')) {
       pendingResolved = resolvePendingMemoryConfirm(character.id, conversationId, trimmed);
       onPrivateUserMessage(character.id);
+
+    // B-04B: private chat explicit image request -> one generated image bubble
+    if (conv.type === 'private' && character?.id && source === 'text' && wantsImageGeneration(trimmed)) {
+      const aid = uuid();
+      const at = new Date().toISOString();
+      let replyText = '';
+      let imagePath: string | null = null;
+      const prompt = buildImagePrompt(trimmed, character.name);
+      try {
+        const gen = await generateChatImage(prompt);
+        imagePath = gen.publicPath;
+        replyText = '画好了，给你看看。';
+        console.log(`[image-gen] conv=${conversationId} char=${character.id} model=${gen.model}`);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.log(`[image-gen] conv=${conversationId} fail ${msg}`);
+        replyText = `（这张图没画成：${msg.slice(0, 160)}。文字还能继续聊；也可检查本机 IMAGE_GEN_API_KEY / IMAGE_GEN_MODEL。）`;
+      }
+
+      const recentAssistants = db
+        .prepare(
+          `SELECT content FROM messages
+           WHERE conversation_id = ? AND role = 'assistant'
+           ORDER BY created_at DESC, rowid DESC
+           LIMIT 2`,
+        )
+        .all(conversationId) as Array<{ content: string }>;
+      const recentAssistantHadEmoji = recentAssistants.some((row) => hasEmojiToken(row.content || ''));
+      replyText = sanitizeAssistantEmoji(replyText, { recentAssistantHadEmoji });
+
+      db.prepare(
+        `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at, source, image_path)
+         VALUES (?, ?, 'assistant', ?, ?, ?, ?, ?)`,
+      ).run(aid, conversationId, character.id, replyText, at, 'text', imagePath);
+
+      db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(at, conversationId);
+      markConversationRead(conversationId);
+
+      const userMessage = db.prepare('SELECT * FROM messages WHERE id = ?').get(userMsgId);
+      const assistantMessage = db.prepare('SELECT * FROM messages WHERE id = ?').get(aid);
+      return { userMessage, assistantMessages: [assistantMessage] };
+    }
     }
 
     const history = (
