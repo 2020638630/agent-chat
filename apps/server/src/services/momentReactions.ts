@@ -7,6 +7,11 @@ import { buildSystemPrompt } from '../utils/characterCard.js';
 const DELAY_MS = 45_000;
 const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+/** True if any M-07 delayed settlement is still waiting. */
+export function hasPendingMomentReactions(): boolean {
+  return pendingTimers.size > 0;
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -188,3 +193,159 @@ export function scheduleMomentReactions(momentId: string) {
   pendingTimers.set(momentId, t);
   console.log(`[moment-react] scheduled moment=${momentId} in ${DELAY_MS}ms`);
 }
+
+// ----- M-01: character author replies once to user comments on their moment -----
+const AUTHOR_REPLY_DELAY_MIN_MS = 5_000;
+const AUTHOR_REPLY_DELAY_MAX_MS = 15_000;
+const authorReplyTimers = new Map<string, ReturnType<typeof setTimeout>>();
+const authorReplyScheduled = new Set<string>();
+
+function authorReplyDelayMs(): number {
+  return (
+    AUTHOR_REPLY_DELAY_MIN_MS +
+    Math.floor(Math.random() * (AUTHOR_REPLY_DELAY_MAX_MS - AUTHOR_REPLY_DELAY_MIN_MS + 1))
+  );
+}
+
+async function writeAuthorReplyComment(
+  momentId: string,
+  momentContent: string,
+  userComment: string,
+  character: { id: string; name: string },
+): Promise<boolean> {
+  if (alreadyCommented(momentId, character.name)) return false;
+  const full = db.prepare(`SELECT * FROM characters WHERE id = ?`).get(character.id) as
+    | {
+        id: string;
+        name: string;
+        description: string;
+        personality: string;
+        scenario: string;
+        system_prompt: string;
+        post_history_instructions: string;
+        mes_example: string;
+      }
+    | undefined;
+  if (!full) return false;
+
+  let text = '';
+  try {
+    const system = buildSystemPrompt(full);
+    text = await chatCompletion([
+      { role: 'system', content: system },
+      {
+        role: 'user',
+        content:
+          `用户在你的朋友圈「${momentContent.slice(0, 120)}」下评论：「${userComment.slice(0, 120)}」\n` +
+          '请用你的口吻回一句很短的评论（不超过 30 字）。只输出评论正文，不要引号、不要列表、不要解释。',
+      },
+    ]);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[moment-author-reply] llm fail:', msg);
+    return false;
+  }
+  text = String(text || '')
+    .trim()
+    .replace(/^["「『]|["」』]$/g, '')
+    .split(/\n/)[0]
+    .trim()
+    .slice(0, 40);
+  if (!text) return false;
+  return insertComment(momentId, character.name, text);
+}
+
+export type AuthorReplyResult = {
+  skipped?: string;
+  comment: { author: string; content: string } | null;
+};
+
+export async function settleAuthorReplyToUserComment(
+  momentId: string,
+  userComment: string,
+): Promise<AuthorReplyResult> {
+  const moment = db
+    .prepare(`SELECT id, author_kind, character_id, content FROM moments WHERE id = ?`)
+    .get(momentId) as
+    | { id: string; author_kind: string; character_id: string | null; content: string }
+    | undefined;
+  if (!moment || moment.author_kind !== 'character' || !moment.character_id) {
+    return { skipped: 'not_character_moment', comment: null };
+  }
+
+  const settings = getProactiveSettings();
+  if (!settings.enabled) return { skipped: 'disabled', comment: null };
+  if (inQuietHours(new Date(), settings.quiet_start, settings.quiet_end)) {
+    return { skipped: 'quiet_hours', comment: null };
+  }
+  if (settings.sent_today >= settings.daily_cap) {
+    return { skipped: 'daily_cap', comment: null };
+  }
+  if (recentProactiveFired()) {
+    return { skipped: 'c05_recent', comment: null };
+  }
+
+  const character = db
+    .prepare(`SELECT id, name FROM characters WHERE id = ?`)
+    .get(moment.character_id) as { id: string; name: string } | undefined;
+  if (!character) return { skipped: 'no_character', comment: null };
+  if (alreadyCommented(momentId, character.name)) {
+    return { skipped: 'already_replied', comment: null };
+  }
+
+  const ok = await writeAuthorReplyComment(
+    momentId,
+    moment.content || '',
+    userComment || '',
+    character,
+  );
+  if (!ok) return { skipped: 'write_failed', comment: null };
+
+  const comment = db
+    .prepare(
+      `SELECT author, content FROM moment_comments WHERE moment_id = ? AND author = ? ORDER BY created_at DESC LIMIT 1`,
+    )
+    .get(momentId, character.name) as { author: string; content: string };
+  console.log(`[moment-author-reply] moment=${momentId} author=${character.name}`);
+  return { comment };
+}
+
+/** After user comments on a character moment: delay 5–15s, author replies once. Gated by proactive master switch. */
+export function scheduleAuthorReplyToUserComment(momentId: string, userComment: string) {
+  if (authorReplyScheduled.has(momentId) || authorReplyTimers.has(momentId)) {
+    console.log(`[moment-author-reply] skip schedule (once) moment=${momentId}`);
+    return;
+  }
+
+  const moment = db
+    .prepare(`SELECT author_kind, character_id FROM moments WHERE id = ?`)
+    .get(momentId) as { author_kind: string; character_id: string | null } | undefined;
+  if (!moment || moment.author_kind !== 'character' || !moment.character_id) return;
+
+  const character = db
+    .prepare(`SELECT name FROM characters WHERE id = ?`)
+    .get(moment.character_id) as { name: string } | undefined;
+  if (character && alreadyCommented(momentId, character.name)) {
+    authorReplyScheduled.add(momentId);
+    return;
+  }
+
+  // Stagger if M-07 settlement still pending (same feed space).
+  let delay = authorReplyDelayMs();
+  if (hasPendingMomentReactions()) {
+    delay += 20_000;
+  }
+
+  authorReplyScheduled.add(momentId);
+  const commentSnapshot = String(userComment || '').slice(0, 200);
+  const t = setTimeout(() => {
+    authorReplyTimers.delete(momentId);
+    void settleAuthorReplyToUserComment(momentId, commentSnapshot).catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[moment-author-reply] settle error:', msg);
+    });
+  }, delay);
+  authorReplyTimers.set(momentId, t);
+  console.log(`[moment-author-reply] scheduled moment=${momentId} in ${delay}ms`);
+}
+

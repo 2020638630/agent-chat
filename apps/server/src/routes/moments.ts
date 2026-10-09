@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { db } from '../db/index.js';
 import { buildSystemPrompt } from '../utils/characterCard.js';
 import { chatCompletion } from '../services/llm.js';
-import { scheduleMomentReactions } from '../services/momentReactions.js';
+import { scheduleMomentReactions, scheduleAuthorReplyToUserComment } from '../services/momentReactions.js';
 import { saveImageBuffer, unlinkUploadPublicPath } from '../services/uploadImage.js';
 
 const MOMENT_SELECT = `
@@ -274,6 +274,12 @@ export async function momentRoutes(app: FastifyInstance) {
       `INSERT INTO moment_comments (id, moment_id, author, content, created_at)
        VALUES (?, ?, '我', ?, ?)`
     ).run(id, req.params.id, content, created_at);
+
+    // M-01: if this is a character moment, schedule one delayed author reply (proactive master gated).
+    const authorKind = (moment as { author_kind?: string }).author_kind;
+    if (authorKind === 'character') {
+      scheduleAuthorReplyToUserComment(req.params.id, content);
+    }
 
     return {
       moment: enrichMoment(getMomentRow(req.params.id)),
