@@ -1930,7 +1930,7 @@ onUnmounted(() => {
                   今日主动 {{ proactiveSentToday }} / {{ proactiveDailyCap }}
                   <span v-if="proactiveInQuiet" class="wx-proactive-quiet"> · 静默中（{{ proactiveQuietStart }}–{{ proactiveQuietEnd }}）</span>
                 </p>
-                <p class="wx-proactive-hint">满后今日不再私聊先开口，也不再反应动态。关闭开关则两者都停。</p>
+                <p class="wx-proactive-hint">满后只停私聊先开口，不挡空间赞评。关闭开关则两者都停。</p>
               </div>
             </div>
 

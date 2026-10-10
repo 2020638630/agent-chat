@@ -143,9 +143,8 @@ export async function settleMomentReactions(momentId: string): Promise<MomentRea
   if (inQuietHours(new Date(), settings.quiet_start, settings.quiet_end)) {
     return { skipped: 'quiet_hours', likes: [], comment: null };
   }
-  if (settings.sent_today >= settings.daily_cap) {
-    return { skipped: 'daily_cap', likes: [], comment: null };
-  }
+  // C-06: space likes/comments ignore private proactive daily_cap (sent_today).
+  // Master switch + quiet hours still apply; private tick still checks daily_cap.
   if (recentProactiveFired()) {
     return { skipped: 'c05_recent', likes: [], comment: null };
   }
