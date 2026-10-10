@@ -2023,7 +2023,17 @@ onUnmounted(() => {
             </div>
             <div ref="chatBody" class="wx-chat-body">
               <template v-if="activeConversation">
-                <template v-for="(m, i) in messages" :key="m.id">
+                <TransitionGroup
+                  :key="activeConversationId || undefined"
+                  name="wx-motion-msg"
+                  tag="div"
+                  class="wx-msg-stream"
+                >
+                  <div
+                    v-for="(m, i) in messages"
+                    :key="m.id"
+                    class="wx-msg-block"
+                  >
                   <div v-if="showDayDivider(i)" class="wx-day-div">{{ dayLabel(m.created_at) }}</div>
                   <div
                     class="wx-msg"
@@ -2087,7 +2097,20 @@ onUnmounted(() => {
                       </div>
                     </div>
                   </div>
-                </template>
+                  </div>
+                </TransitionGroup>
+                <Transition name="wx-motion-fade">
+                  <div
+                    v-if="sending"
+                    key="typing"
+                    class="wx-typing"
+                    aria-live="polite"
+                    aria-label="正在输入"
+                  >
+                    <span class="wx-typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <span class="wx-typing-label">正在输入</span>
+                  </div>
+                </Transition>
               </template>
               <div v-else class="wx-empty">
                 选择会话开始聊天<br />

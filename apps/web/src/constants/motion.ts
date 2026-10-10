@@ -1,6 +1,6 @@
 /** UI-1 motion foundation — duration / easing tokens.
  *
- * Scene map (基础层约定；UI-2/UI-3 再挂消息入场、红点等):
+ * Scene map (基础层约定；UI-2 消息入场已挂 TransitionGroup；UI-3 再挂红点等):
  * - micro（hover / active / 按压反馈）→ durationFast + easingStandard
  * - panel（侧栏 tab 内容感、轻量状态切换）→ durationNormal + easingStandard
  * - overlay（确认框 / 人设编辑等 mask 显隐）→ durationNormal + easingEnter/Exit
