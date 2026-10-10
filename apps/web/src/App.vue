@@ -1403,7 +1403,9 @@ onUnmounted(() => {
       <button class="wx-nav-btn" :class="{ active: tab === 'chat' }" title="消息" aria-label="消息" @click="switchTab('chat')">
         <svg class="wx-nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       
+        <Transition name="wx-motion-badge">
         <span v-if="totalUnread > 0" class="wx-nav-dot" aria-hidden="true"></span>
+      </Transition>
       </button>
       <button class="wx-nav-btn" :class="{ active: tab === 'contacts' }" title="通讯录" aria-label="通讯录" @click="switchTab('contacts')">
         <svg class="wx-nav-icon" viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -1503,7 +1505,9 @@ onUnmounted(() => {
               </div>
               <div class="wx-list-sub">{{ c.last_message || (c.type === 'group' ? '群聊' : '私聊') }}</div>
             </div>
+            <Transition name="wx-motion-badge">
             <span v-if="(c.unread_count || 0) > 0" class="wx-unread-badge">{{ (c.unread_count || 0) > 99 ? '99+' : (c.unread_count || 0) }}</span>
+          </Transition>
           </div>
         </div>
         <div

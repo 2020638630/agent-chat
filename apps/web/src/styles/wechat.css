@@ -2351,6 +2351,22 @@ button.wx-space-filter-item {
   opacity: 0;
 }
 
+/* ===== UI-3 unread badge / nav dot (Transition name="wx-motion-badge") ===== */
+/* 纯 CSS 出现/消失；状态仍在 App.vue（C-03 unread_count / totalUnread），不搬不建 useUnread */
+.wx-motion-badge-enter-active {
+  transition: opacity var(--motion-duration-fast) var(--motion-easing-enter),
+    transform var(--motion-duration-fast) var(--motion-easing-enter);
+}
+.wx-motion-badge-leave-active {
+  transition: opacity var(--motion-duration-fast) var(--motion-easing-exit),
+    transform var(--motion-duration-fast) var(--motion-easing-exit);
+}
+.wx-motion-badge-enter-from,
+.wx-motion-badge-leave-to {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
 /* ===== UI-2 message stream (TransitionGroup name="wx-motion-msg") ===== */
 .wx-msg-stream {
   display: flex;
