@@ -217,15 +217,15 @@ Agent Chat 是一个**多角色 AI 社交客户端**：用户导入角色卡后�
 
 2026-10-10：前四刀管道侧已交（ARCH-1 / M-05a / X-01 / ARCH-2 管道）。**ARCH-2 真关单待试跑线**（DeepSeek 文本 / 官方 VLM 读图 / Gemini TTS）。试跑线是 ARCH-2 验收标准，不是独立刀。N-02 不动；读图 VLM 债 / B-04d 在试跑线还。
 
-**下一顺序：试跑线 → ARCH-3 → UI-1**
+**下一顺序：补 Gemini 钥跑通试跑线 → ARCH-3 → UI-1**（或你拍板先开 ARCH-3）
 
 | ID | 状态意向 | 说明 |
 | -- | -------- | ---- |
 | ARCH-1 | 已处理 | 债清单已交（1b3b635）；stash 已 drop |
 | M-05a | 已处理 | 由 M-06（7293da3）覆盖：发动态可附一张上传图；本刀仅文档收口 |
 | X-01 | 已处理 | 最终 tip `0fce6d8`（能力 ae4120d；验证关单 cac031c） |
-| ARCH-2 | 待处理（管道已交，关单待试跑线） | Provider+.env+D-05 纯日志可观测已交；三条验收已记；真关单=试跑线三条跑通 |
-| 试跑线 | ARCH-2 验收（非独立刀） | DeepSeek 文本 / 官方 VLM 读图 / Gemini TTS；顺带还读图 VLM 债 / B-04d |
+| ARCH-2 | 待处理（试跑线 2/3，真关单否） | 管道已交；2026-10-10 试跑：DeepSeek 通 / 硅基 VLM 通 / Gemini TTS 缺钥；补 GEMINI_API_KEY 后再关 |
+| 试跑线 | ARCH-2 验收进行中 2/3 | DeepSeek 通；硅基 Qwen3-VL 读图通；Gemini TTS 缺 GEMINI_API_KEY；B-04d 仍暂缓 |
 | ARCH-3 | 待处理 | 试跑线之后 |
 | UI-1 | 待处理 | 试跑线与 ARCH-3 之后（原第五/可并行，现顺序排后） |
 | M-05b | 暂缓 P2 | 动态配图含生图；先走 B-04B，不绑 N-01 |
@@ -251,3 +251,4 @@ Agent Chat 是一个**多角色 AI 社交客户端**：用户导入角色卡后�
 
 **ARCH-1 扫描补 6 项：** 模型入口与 .env 绑定；主动/空间结算隐式耦合；记忆链路失败与空泡；App.vue 体量与状态交叉；uploads/SQLite 增长与清理；未 push/stash 残留与双机 .env 漂移。
 
+2026-10-10 试跑线实跑：`scripts/arch2-tryrun.py` — DeepSeek 官方文本通；硅基 Qwen3-VL 读图通；Gemini TTS 缺 `GEMINI_API_KEY` 不通。ARCH-2 真关单否。

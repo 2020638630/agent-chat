@@ -11,7 +11,7 @@
 
 ## ARCH-2 收口（2026-10-10）
 
-管道已交；**真关单待试跑线三条跑通**（DeepSeek 文本 / 官方 VLM 读图 / Gemini TTS）。试跑线是 ARCH-2 验收标准，不是独立刀。N-02 不动。
+管道已交；**试跑线 2/3（2026-10-10）**：DeepSeek 通 / 硅基 VLM 通 / Gemini TTS 缺钥不通 → **真关单否**。试跑线=ARCH-2 验收标准，非独立刀；N-02 不动。
 
 | 债 | 状态 | 说明 |
 | ---- | ---- | ---- |
@@ -337,6 +337,21 @@
 
 ## 阶段顺序修订（2026-10-10 20:30 CST）
 
-下一顺序：**试跑线 → ARCH-3 → UI-1**。
-试跑线 = ARCH-2 验收标准（非独立刀）；N-02 不动；读图 VLM 债 / B-04d 在试跑线还。
+下一顺序**补 Gemini 钥再跑试跑线 → ARCH-3 → UI-1**。
+试跑线 2026-10-10：DeepSeek 通 / 硅基 VLM 通 / Gemini TTS 不通（缺钥）；ARCH-2 真关单否（2/3）。N-02 不动；B-04d 仍暂缓。
 O-03 stash 已 drop → 已处理。ARCH-2 / ARCH-3 问题表改为「待处理」（ARCH-2：管道已交，关单待试跑线）。
+
+
+## ARCH-2 试跑线（2026-10-10 20:40 CST）
+
+脚本：`scripts/arch2-tryrun.py`（无密钥；结果目录 `scripts/_tryrun_out/` 默认不入库）
+
+| 项 | 结果 | 说明 |
+|---|---|---|
+| DeepSeek 文本 | **通** | 官方 `api.deepseek.com` + 进程环境 `DEEPSEEK_API_KEY`，模型 `deepseek-flash`，约 0.8s |
+| 官方/云 VLM 读图 | **通（硅基）** | 本机无 OpenAI/厂商官网 VLM Key；用硅基 `Qwen/Qwen3-VL-8B-Instruct` 读图验证管道（本地 7b 假多模态债可对照） |
+| Gemini TTS | **不通** | 未配置 `GEMINI_API_KEY` / `GOOGLE_API_KEY`；端点见 `.env.example` |
+| B-04d | **仍暂缓** | 坏 Key 上游返回 HTTP 401 `Token is invalid`；产品侧失败回流人话路径未在本刀改代码实打 |
+
+**ARCH-2 真关单：否（2/3）。** 管道债 D-01/D-09/D-13/D-05 仍保持已收；真关单阻塞项=补 `GEMINI_API_KEY` 后再跑通 Gemini TTS。N-02 不动。
+

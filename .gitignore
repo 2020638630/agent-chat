@@ -12,3 +12,6 @@ apps/web/dist/
 apps/server/dist/
 picture/
 docs/*待优化点*.md
+
+# ARCH-2 try-run local outputs (may contain audio bytes)
+scripts/_tryrun_out/
