@@ -118,6 +118,7 @@
 - **影响**：易误用旧 stash；备份含环境形态差（见 D-11）。
 - **建议动作**：确认后丢弃/入库脚本到 `scripts/`；bak 不入库；勿 commit 密钥。**stash 分类（2026-10-10）**：`stash@{0}` 问题表 WIP 已被 tip 表覆盖 → **临时丢**；`stash@{1}` vite `0.0.0.0` / lock libc 本地 WIP → **临时丢**（若需局域网监听可再开独立改动）。smoke 见 D-22。
 - **建议阶段**：ARCH-3（或随时清理）
+- **收口备注（2026-10-10 17:12 CST）**：用户拍板丢弃；内容简述见文末「收口修订」；两条均已 `git stash drop`。
 
 ### D-11 双机 `.env` 漂移（BF 可扫部分；HY 离线）
 - **位置**：BF `.env` vs `.env.bak-20261010-135801` vs `.env.example`
@@ -287,9 +288,13 @@
 - **功能池：D-04 → 与 C-06 同组，P2**（C-06 遗留不一致：M-01 作者回复仍吃私聊 `daily_cap`，与 M-07「空间不受 cap」不一致）。已从 ARCH 汇总与 ARCH-2/3 映射移除；问题表 C-06 维护备注已补一行指向本项。
 - **D-05**：保留高影响；ARCH-2 一并做可观测。
 - **D-11**：挂 HY 上线时做双机 `.env` diff。
-- **stash×2**：均建议 **临时丢**（见 D-10）；未在本收口 `git stash drop`（等用户确认后执行）。
+**stash×2（2026-10-10 用户拍板已丢）**：
+- 丢前简述（2026-10-10 17:12 CST）：
+  - `stash@{0}`「wip: bf issue tracker before rebase」：仅改 `docs/product/AgentChat-问题记录.xlsx`（二进制 25832→27876），旧问题表 WIP，已被 tip 表覆盖 → **临时丢**。
+  - `stash@{1}`「wip: bf local before M-01」：`apps/web/package.json` + `vite.config.ts` 把 vite host `127.0.0.1`→`0.0.0.0`（局域网监听）、`package-lock.json` 去掉若干 optional `libc` 字段 → **临时丢**（若以后要局域网监听另开独立改动）。
+- 已按 list 顺序 `git stash drop` 两条；工作区无 stash。
 - **smoke_*.py**：建议入库（本收口 commit 一并纳入）。
 - **`.env.bak-*`**：保持未跟踪，不入库。
 
 
-*ARCH-1 收口调整完成（债清单 + smoke 入库）。M-05a 由父代理另开。*
+*ARCH-1 收口调整完成（债清单 + smoke 入库）。2026-10-10 17:12 CST：stash×2 已记简述并 drop；M-05a 已做 multipart 实际上墙验证。*
