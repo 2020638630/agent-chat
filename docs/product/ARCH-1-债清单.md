@@ -161,6 +161,14 @@
 - **建议动作**：HY 上线后做「键名清单」diff（禁止贴密钥）；维护 example 键全集。
 - **建议阶段**：**挂 HY 上线时做**（HY 当前离线；上线后做双机 `.env` 键名 diff。属 ARCH-2/3 边界，清单项挂起不阻塞 ARCH-2 开干）
 
+
+### D-11 双机 `.env` 键名 diff（HY 上线补记 · 2026-10-10 21:30 CST）
+- **BF**：当时 `ListMachines` 显示 BF 不可达，未能直接读 BF `.env` 键集合。
+- **HY vs `.env.example`（ARCH-2 后 tip `f092de0`）**：example 全部键 HY 已具备；HY 多出 `LAYA_MODEL` / `LAYA_PYTHON` / `OLLAMA_MODELS`（R-04x spike 可选，保留）。
+- **对齐动作**：HY 补空键 `DEEPSEEK_API_KEY` / `GEMINI_API_KEY` / `GOOGLE_API_KEY`（仅键名，值为空；不入库）；`.env.example` 同步列出上述可选空键。
+- **密钥**：未拷贝 BF 密钥；未把任何 Key 写入 git。
+- **状态**：键名对齐（对 example）完成；BF 机上线后可再做一次纯键名复核。
+
 ### D-12 前端 API 客户端重复与死方法
 - **位置**：`apps/web/src/api/client.ts`
 - **类型**：死代码 / 重复

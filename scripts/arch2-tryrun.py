@@ -1,7 +1,7 @@
 """
 ARCH-2 try-run (acceptance, not a separate knife).
-Proves provider pipe can hit: DeepSeek text / cloud VLM / Gemini TTS.
-Never prints API keys. Reads .env + process env.
+Proves provider pipe can hit: DeepSeek text / local Ollama VLM (preferred) / Gemini TTS.
+Cloud VLM is fallback only. Never prints API keys. Reads .env + process env.
 """
 from __future__ import annotations
 
@@ -113,67 +113,128 @@ def run_deepseek(file_env: dict[str, str]) -> dict:
     }
 
 
-def run_vlm(file_env: dict[str, str]) -> dict:
-    """Cloud VLM via SiliconFlow Qwen3-VL (proves vision pipe beyond local 7b)."""
-    key = secret("STT_API_KEY", file_env) or secret("LLM_API_KEY", file_env)
-    if not key:
-        return {"ok": False, "reason": "缺硅基/云 Key（STT_API_KEY 或 LLM_API_KEY）", "need_keys": ["STT_API_KEY", "LLM_API_KEY"]}
+def find_test_image() -> Path | None:
+    preferred = [
+        ROOT / "picture" / "raw" / "creature" / "butterfly-on-flower-bf232d12.jpg",
+        ROOT / "scripts" / "_tryrun_out" / "tiny-red.png",
+    ]
+    for p in preferred:
+        if p.exists() and p.stat().st_size > 0:
+            return p
+    for folder in (ROOT / "uploads", ROOT / "picture", ROOT / "samples"):
+        if not folder.exists():
+            continue
+        cands = sorted(
+            [x for x in folder.rglob("*") if x.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"} and x.is_file()],
+            key=lambda x: x.stat().st_size,
+        )
+        for c in cands:
+            if 50 < c.stat().st_size < 800_000:
+                return c
+    return None
 
-    base = (file_env.get("STT_BASE_URL") or "https://api.siliconflow.cn/v1").rstrip("/")
-    model = "Qwen/Qwen3-VL-8B-Instruct"
-    img_path = ROOT / "picture" / "raw" / "creature" / "butterfly-on-flower-bf232d12.jpg"
-    if not img_path.exists():
-        # fallback tiny upload
-        cand = list((ROOT / "uploads").glob("*.png")) + list((ROOT / "uploads").glob("*.jpg"))
-        if not cand:
-            return {"ok": False, "reason": "无测试图片"}
-        img_path = cand[0]
+
+def run_vlm(file_env: dict[str, str]) -> dict:
+    """Prefer local Ollama VLM (LLM_VISION_MODEL + 11434); cloud SiliconFlow is fallback."""
+    img_path = find_test_image()
+    if not img_path:
+        return {"ok": False, "reason": "无测试图片"}
+
     raw = img_path.read_bytes()
-    # keep payload modest
-    if len(raw) > 400_000:
-        # pick smaller butterfly
-        img_path = ROOT / "picture" / "raw" / "creature" / "butterfly-on-flower-bf232d12.jpg"
-        raw = img_path.read_bytes()
     b64 = base64.b64encode(raw).decode("ascii")
     mime = "image/jpeg" if img_path.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
+    if img_path.suffix.lower() == ".webp":
+        mime = "image/webp"
     data_url = f"data:{mime};base64,{b64}"
 
-    t0 = time.time()
-    status, data, _ = http_json(
-        f"{base}/chat/completions",
-        method="POST",
-        headers={"Authorization": f"Bearer {key}"},
-        body={
-            "model": model,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": "用中文一句话描述图中主要物体，不要废话。"},
-                        {"type": "image_url", "image_url": {"url": data_url}},
-                    ],
-                }
-            ],
-            "temperature": 0.2,
-            "max_tokens": 128,
-            "stream": False,
-        },
-        timeout=180,
+    llm_base = (file_env.get("LLM_BASE_URL") or "http://127.0.0.1:11434/v1").rstrip("/")
+    llm_key = secret("LLM_API_KEY", file_env) or "ollama"
+    vision_model = (file_env.get("LLM_VISION_MODEL") or "").strip()
+    provider = (file_env.get("LLM_PROVIDER") or "").strip().lower()
+    force_cloud = (os.environ.get("TRYRUN_VLM") or "").strip().lower() in {"cloud", "silicon", "siliconflow"}
+    localish = (not force_cloud) and (
+        provider == "ollama" or "11434" in llm_base or "ollama" in llm_base.lower()
     )
-    content = ((data or {}).get("choices") or [{}])[0].get("message", {}).get("content", "")
-    content = (content or "").strip()
-    ms = int((time.time() - t0) * 1000)
-    ok = status == 200 and bool(content)
-    return {
-        "ok": ok,
-        "source": "siliconflow+Qwen3-VL-8B",
-        "model": model,
-        "image": str(img_path.relative_to(ROOT)),
-        "ms": ms,
-        "reply_preview": content[:120],
-        "reason": "通（云 VLM；非本地假多模态）" if ok else f"失败 status={status}",
-        "note": "产品备胎称「官方 VLM」；本机无 OpenAI/厂商官网 VLM Key，用硅基托管 Qwen3-VL 验证读图管道。",
-    }
+
+    def call(base: str, key: str, model: str, source: str, note: str) -> dict:
+        t0 = time.time()
+        status, data, _ = http_json(
+            f"{base}/chat/completions",
+            method="POST",
+            headers={"Authorization": f"Bearer {key}"},
+            body={
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "用中文一句话描述图中主要物体，不要废话。"},
+                            {"type": "image_url", "image_url": {"url": data_url}},
+                        ],
+                    }
+                ],
+                "temperature": 0.2,
+                "max_tokens": 128,
+                "stream": False,
+            },
+            timeout=300,
+        )
+        content = ((data or {}).get("choices") or [{}])[0].get("message", {}).get("content", "")
+        content = (content or "").strip()
+        ms = int((time.time() - t0) * 1000)
+        ok = status == 200 and bool(content)
+        try:
+            rel = str(img_path.relative_to(ROOT))
+        except Exception:
+            rel = str(img_path)
+        reason = "通（本地 VLM 实跑）" if ok and source.startswith("local-ollama") else ("通" if ok else f"失败 status={status}")
+        return {
+            "ok": ok,
+            "source": source,
+            "model": model,
+            "image": rel,
+            "ms": ms,
+            "reply_preview": content[:120],
+            "reason": reason,
+            "note": note,
+        }
+
+    local_err = None
+    if localish and vision_model:
+        try:
+            result = call(
+                llm_base,
+                llm_key,
+                vision_model,
+                "local-ollama+" + vision_model,
+                "HY 本地 Ollama qwen2.5-vl 实跑；已替代硅基 Qwen3-VL 作为 ARCH-2 读图验收主证据",
+            )
+            if result.get("ok"):
+                return result
+            local_err = result.get("reason") or "local_not_ok"
+        except Exception as e:
+            local_err = str(e)[:180]
+    else:
+        local_err = "skipped_local"
+
+    key = secret("STT_API_KEY", file_env) or secret("LLM_API_KEY", file_env)
+    if not key:
+        return {
+            "ok": False,
+            "reason": f"本地 VLM 未通且缺云 Key；local={local_err}",
+            "need_keys": ["STT_API_KEY", "LLM_API_KEY"],
+            "local_error": local_err,
+        }
+    base = (file_env.get("STT_BASE_URL") or "https://api.siliconflow.cn/v1").rstrip("/")
+    model = "Qwen/Qwen3-VL-8B-Instruct"
+    try:
+        r = call(base, key, model, "siliconflow+Qwen3-VL-8B", "云读图回落；优先应使用本地 Ollama VLM")
+        if local_err and local_err != "skipped_local":
+            r["local_error"] = local_err
+            r["note"] = (r.get("note") or "") + f"；本地失败: {local_err}"
+        return r
+    except Exception as e:
+        return {"ok": False, "reason": f"本地与云读图均失败 local={local_err} cloud={str(e)[:160]}"}
 
 
 def run_gemini_tts(file_env: dict[str, str]) -> dict:
@@ -281,9 +342,11 @@ def probe_b04d(file_env: dict[str, str]) -> dict:
 
 def main() -> int:
     file_env = load_dotenv(ROOT / ".env")
+    vlm = run_vlm(file_env)
     results = {
         "deepseek_text": run_deepseek(file_env),
-        "official_vlm": run_vlm(file_env),
+        "local_vlm": vlm,
+        "official_vlm": vlm,  # backward-compat alias (now local-first)
         "gemini_tts": run_gemini_tts(file_env),
         "b04d_probe": probe_b04d(file_env),
     }
@@ -291,8 +354,16 @@ def main() -> int:
     out.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(results, ensure_ascii=False, indent=2))
     print("WROTE", out.relative_to(ROOT))
-    oks = [results["deepseek_text"].get("ok"), results["official_vlm"].get("ok"), results["gemini_tts"].get("ok")]
-    return 0 if all(oks) else 2
+    # Close criteria (HY拍板): text + local VLM; Gemini TTS may hang as debt
+    gemini = results["gemini_tts"]
+    reason = str(gemini.get("reason") or "")
+    gemini_hang = (not gemini.get("ok")) and (
+        "GEMINI_API_KEY" in reason or "GOOGLE_API_KEY" in reason or "未配置" in reason
+    )
+    oks_core = [results["deepseek_text"].get("ok"), results["local_vlm"].get("ok")]
+    if all(oks_core) and (gemini.get("ok") or gemini_hang):
+        return 0
+    return 2
 
 
 if __name__ == "__main__":

@@ -224,8 +224,8 @@ Agent Chat 是一个**多角色 AI 社交客户端**：用户导入角色卡后�
 | ARCH-1 | 已处理 | 债清单已交（1b3b635）；stash 已 drop |
 | M-05a | 已处理 | 由 M-06（7293da3）覆盖：发动态可附一张上传图；本刀仅文档收口 |
 | X-01 | 已处理 | 最终 tip `0fce6d8`（能力 ae4120d；验证关单 cac031c） |
-| ARCH-2 | 待处理（试跑线 2/3，真关单否） | 管道已交；2026-10-10 试跑：DeepSeek 通 / 硅基 VLM 通 / Gemini TTS 缺钥；补 GEMINI_API_KEY 后再关 |
-| 试跑线 | ARCH-2 验收进行中 2/3 | DeepSeek 通；硅基 Qwen3-VL 读图通；Gemini TTS 缺 GEMINI_API_KEY；B-04d 仍暂缓 |
+| ARCH-2 | 已处理 | Provider+.env+D-05 可观测已交；试跑线：DeepSeek 文本通 + **HY 本地 Ollama qwen2.5vl:7b 读图通**；Gemini TTS **缺 Key 未实跑**（挂 B-04d/API 试跑线续债）；N-02 未做 |
+| 试跑线 | ARCH-2 验收已收口（2026-10-10 21:30 CST） | 文本通（BF/HY DeepSeek）+ 本地 VLM 通（HY）+ Gemini TTS 挂债 |
 | ARCH-3 | 待处理 | 试跑线之后 |
 | UI-1 | 待处理 | 试跑线与 ARCH-3 之后（原第五/可并行，现顺序排后） |
 | M-05b | 暂缓 P2 | 动态配图含生图；先走 B-04B，不绑 N-01 |
