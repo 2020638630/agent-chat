@@ -50,6 +50,81 @@ export async function characterRoutes(app: FastifyInstance) {
     return { characters: rows };
   });
 
+  const EDITABLE_FIELDS = [
+    'name',
+    'description',
+    'personality',
+    'scenario',
+    'first_mes',
+    'mes_example',
+    'system_prompt',
+    'post_history_instructions',
+  ] as const;
+
+  type EditableField = (typeof EDITABLE_FIELDS)[number];
+
+  const CHARACTER_DETAIL_SELECT = `SELECT id, name, description, personality, scenario, first_mes,
+            mes_example, system_prompt, post_history_instructions, avatar_path, created_at,
+            initiative_tier
+     FROM characters WHERE id = ?`;
+
+  app.get<{ Params: { id: string } }>('/api/characters/:id', async (req, reply) => {
+    const row = db.prepare(CHARACTER_DETAIL_SELECT).get(req.params.id) as
+      | Record<string, unknown>
+      | undefined;
+    if (!row) return reply.code(404).send({ error: '角色不存在' });
+    return { character: row };
+  });
+
+  app.patch<{
+    Params: { id: string };
+    Body: Partial<Record<EditableField, string>>;
+  }>('/api/characters/:id', async (req, reply) => {
+    const existing = db.prepare('SELECT * FROM characters WHERE id = ?').get(req.params.id) as
+      | Record<string, unknown>
+      | undefined;
+    if (!existing) return reply.code(404).send({ error: '角色不存在' });
+
+    const body = (req.body || {}) as Partial<Record<EditableField, unknown>>;
+    const updates: Partial<Record<EditableField, string>> = {};
+    for (const key of EDITABLE_FIELDS) {
+      if (body[key] === undefined) continue;
+      updates[key] = String(body[key] ?? '');
+    }
+    if (!Object.keys(updates).length) {
+      return reply.code(400).send({ error: '请至少提供一个人设字段' });
+    }
+
+    const nextName = updates.name !== undefined ? updates.name.trim() : String(existing.name ?? '');
+    if (!nextName) {
+      return reply.code(400).send({ error: '角色名称不能为空' });
+    }
+    if (updates.name !== undefined) updates.name = nextName;
+
+    const nameClash = findCharacterByName(nextName);
+    if (nameClash && nameClash.id !== existing.id) {
+      return reply.code(409).send({
+        error: `已有角色「${nameClash.name}」，请换一个名字`,
+        code: 'NAME_EXISTS',
+        existing: { id: nameClash.id, name: nameClash.name },
+      });
+    }
+
+    const sets: string[] = [];
+    const values: string[] = [];
+    for (const key of EDITABLE_FIELDS) {
+      if (updates[key] === undefined) continue;
+      sets.push(`${key} = ?`);
+      values.push(updates[key]!);
+    }
+    values.push(String(existing.id));
+    db.prepare(`UPDATE characters SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+
+    const row = db.prepare(CHARACTER_DETAIL_SELECT).get(existing.id);
+    return { character: row };
+  });
+
+
   
   app.get<{ Params: { id: string }; Querystring: { status?: string } }>(
     '/api/characters/:id/memories',

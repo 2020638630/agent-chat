@@ -6,8 +6,25 @@ export type Character = {
   name: string;
   description?: string;
   personality?: string;
-  avatar_path?: string | null;
+  scenario?: string;
   first_mes?: string;
+  mes_example?: string;
+  system_prompt?: string;
+  post_history_instructions?: string;
+  avatar_path?: string | null;
+  created_at?: string;
+  initiative_tier?: string;
+};
+
+export type CharacterPersonaPatch = {
+  name?: string;
+  description?: string;
+  personality?: string;
+  scenario?: string;
+  first_mes?: string;
+  mes_example?: string;
+  system_prompt?: string;
+  post_history_instructions?: string;
 };
 
 export type Conversation = {
@@ -125,6 +142,16 @@ export const api = {
 
   listCharacters: () =>
     fetch('/api/characters').then((r) => json<{ characters: Character[] }>(r)),
+
+  getCharacter: (id: string) =>
+    fetch(`/api/characters/${id}`).then((r) => json<{ character: Character }>(r)),
+
+  updateCharacter: (id: string, body: CharacterPersonaPatch) =>
+    fetch(`/api/characters/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }).then((r) => json<{ character: Character }>(r)),
 
   deleteCharacter: (id: string) =>
     fetch(`/api/characters/${id}`, { method: 'DELETE' }).then((r) =>

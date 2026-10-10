@@ -8,7 +8,7 @@
  */
 
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import { api, type Character, type ChatMessage, type Conversation, type MemoryNote, type Moment, type Profile } from './api/client';
+import { api, type Character, type CharacterPersonaPatch, type ChatMessage, type Conversation, type MemoryNote, type Moment, type Profile } from './api/client';
 import { useHoldToTalk } from './composables/useHoldToTalk';
 import { EMOJI_WHITELIST } from './constants/emojiWhitelist';
 import {
@@ -121,6 +121,20 @@ const profileLoading = ref(false);
 const profileEditing = ref(false);
 const editMood = ref('');
 const editBio = ref('');
+
+const personaEditorOpen = ref(false);
+const personaEditorBusy = ref(false);
+const personaEditorId = ref<string | null>(null);
+const personaDraft = reactive({
+  name: '',
+  description: '',
+  personality: '',
+  scenario: '',
+  first_mes: '',
+  mes_example: '',
+  system_prompt: '',
+  post_history_instructions: '',
+});
 
 const activeConversation = computed(() =>
   conversations.value.find((c) => c.id === activeConversationId.value) ?? null
@@ -581,6 +595,23 @@ function privatePeer(c: Conversation | null | undefined) {
   return (c.members && c.members[0]) || null;
 }
 
+function clearWhisperTimers() {
+  if (whisperDelayTimer) {
+    clearTimeout(whisperDelayTimer);
+    whisperDelayTimer = null;
+  }
+  if (whisperHideTimer) {
+    clearTimeout(whisperHideTimer);
+    whisperHideTimer = null;
+  }
+  if (whisperFadeTimer) {
+    clearTimeout(whisperFadeTimer);
+    whisperFadeTimer = null;
+  }
+  for (const t of whisperPollTimers) clearTimeout(t);
+  whisperPollTimers = [];
+}
+
 function showMemoryWhisper(summary?: string) {
   const body = String(summary || '').trim() || '新的记忆';
   memoryWhisperText.value = body;
@@ -890,6 +921,73 @@ async function onImport(e: Event) {
     status.value = err instanceof Error ? err.message : String(err);
   } finally {
     input.value = '';
+  }
+}
+
+
+async function openPersonaEditor(id: string) {
+  contactMenuId.value = null;
+  personaEditorBusy.value = true;
+  personaEditorOpen.value = true;
+  personaEditorId.value = id;
+  try {
+    const res = await api.getCharacter(id);
+    const c = res.character;
+    personaDraft.name = c.name || '';
+    personaDraft.description = c.description || '';
+    personaDraft.personality = c.personality || '';
+    personaDraft.scenario = c.scenario || '';
+    personaDraft.first_mes = c.first_mes || '';
+    personaDraft.mes_example = c.mes_example || '';
+    personaDraft.system_prompt = c.system_prompt || '';
+    personaDraft.post_history_instructions = c.post_history_instructions || '';
+  } catch (e: any) {
+    personaEditorOpen.value = false;
+    personaEditorId.value = null;
+    status.value = e?.message || '加载人设失败';
+  } finally {
+    personaEditorBusy.value = false;
+  }
+}
+
+function closePersonaEditor() {
+  if (personaEditorBusy.value) return;
+  personaEditorOpen.value = false;
+  personaEditorId.value = null;
+}
+
+async function savePersonaEditor() {
+  const id = personaEditorId.value;
+  if (!id || personaEditorBusy.value) return;
+  const name = personaDraft.name.trim();
+  if (!name) {
+    status.value = '角色名称不能为空';
+    return;
+  }
+  personaEditorBusy.value = true;
+  try {
+    const body: CharacterPersonaPatch = {
+      name,
+      description: personaDraft.description,
+      personality: personaDraft.personality,
+      scenario: personaDraft.scenario,
+      first_mes: personaDraft.first_mes,
+      mes_example: personaDraft.mes_example,
+      system_prompt: personaDraft.system_prompt,
+      post_history_instructions: personaDraft.post_history_instructions,
+    };
+    const res = await api.updateCharacter(id, body);
+    await refreshCharacters();
+    if (profileView.value?.kind === 'character' && profileView.value.id === id) {
+      await openCharacterProfile(id);
+    }
+    status.value = `已保存「${res.character.name}」的人设`;
+    personaEditorOpen.value = false;
+    personaEditorId.value = null;
+  } catch (e: any) {
+    status.value = e?.message || '保存人设失败';
+  } finally {
+    personaEditorBusy.value = false;
   }
 }
 
@@ -1645,7 +1743,7 @@ onUnmounted(() => {
               </div>
               <div class="wx-list-sub">{{ c.last_message || (c.type === 'group' ? '群聊' : '私聊') }}</div>
             </div>
-            <span v-if="(c.unread_count || 0) > 0" class="wx-unread-badge">{{ c.unread_count > 99 ? '99+' : c.unread_count }}</span>
+            <span v-if="(c.unread_count || 0) > 0" class="wx-unread-badge">{{ (c.unread_count || 0) > 99 ? '99+' : (c.unread_count || 0) }}</span>
           </div>
         </div>
         <div
@@ -1721,6 +1819,7 @@ onUnmounted(() => {
             <button class="wx-contact-more-btn" title="更多" @click="toggleContactMenu(ch.id)">⋯</button>
             <div v-if="contactMenuId === ch.id" class="wx-menu contact">
               <button @click="contactMenuId = null; openCharacterProfile(ch.id)">查看主页</button>
+              <button @click="contactMenuId = null; openPersonaEditor(ch.id)">编辑人设</button>
               <button @click="contactMenuId = null; letThemPost(ch.id)">让 TA 发动态</button>
               <button class="danger" @click="askDeleteCharacter(ch.id, ch.name)">删除角色</button>
             </div>
@@ -1844,6 +1943,13 @@ onUnmounted(() => {
                 </template>
                 <template v-else>
                   <button class="wx-mini-btn primary" @click="messageFromProfile">发消息</button>
+                  <button
+                    class="wx-mini-btn"
+                    :disabled="personaEditorBusy"
+                    @click="openPersonaEditor(profileView.id)"
+                  >
+                    编辑人设
+                  </button>
                   <button
                     class="wx-mini-btn danger"
                     @click="askDeleteCharacter(profileView.id, profile?.name || '角色')"
@@ -2455,6 +2561,56 @@ onUnmounted(() => {
       style="display: none"
       @change="onMomentImagePick"
     />
+
+
+    <div
+      v-if="personaEditorOpen"
+      class="wx-confirm-mask"
+      @click.self="closePersonaEditor"
+    >
+      <div class="wx-confirm-card wx-persona-editor" @click.stop>
+        <div class="wx-confirm-title">编辑人设</div>
+        <p class="wx-hint" style="margin:0 0 10px">改完保存即可，聊天记录会保留；不必重新导入角色卡。</p>
+        <div class="wx-persona-fields" :class="{ busy: personaEditorBusy }">
+          <label class="wx-persona-field">
+            <span>名称</span>
+            <input v-model="personaDraft.name" class="wx-search" maxlength="80" :disabled="personaEditorBusy" />
+          </label>
+          <label class="wx-persona-field">
+            <span>简介</span>
+            <textarea v-model="personaDraft.description" rows="2" :disabled="personaEditorBusy"></textarea>
+          </label>
+          <label class="wx-persona-field">
+            <span>性格</span>
+            <textarea v-model="personaDraft.personality" rows="2" :disabled="personaEditorBusy"></textarea>
+          </label>
+          <label class="wx-persona-field">
+            <span>场景</span>
+            <textarea v-model="personaDraft.scenario" rows="2" :disabled="personaEditorBusy"></textarea>
+          </label>
+          <label class="wx-persona-field">
+            <span>开场白</span>
+            <textarea v-model="personaDraft.first_mes" rows="2" :disabled="personaEditorBusy"></textarea>
+          </label>
+          <label class="wx-persona-field">
+            <span>对话示例</span>
+            <textarea v-model="personaDraft.mes_example" rows="3" :disabled="personaEditorBusy"></textarea>
+          </label>
+          <label class="wx-persona-field">
+            <span>系统提示</span>
+            <textarea v-model="personaDraft.system_prompt" rows="3" :disabled="personaEditorBusy"></textarea>
+          </label>
+          <label class="wx-persona-field">
+            <span>额外指示</span>
+            <textarea v-model="personaDraft.post_history_instructions" rows="2" :disabled="personaEditorBusy"></textarea>
+          </label>
+        </div>
+        <div class="wx-confirm-actions">
+          <button class="wx-mini-btn" :disabled="personaEditorBusy" @click="closePersonaEditor">取消</button>
+          <button class="wx-confirm-ok" :disabled="personaEditorBusy || !personaDraft.name.trim()" @click="savePersonaEditor">保存</button>
+        </div>
+      </div>
+    </div>
 
 <div
       v-if="lightboxUrl"
