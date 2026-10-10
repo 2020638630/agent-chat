@@ -85,6 +85,7 @@
 - **状态（UI-1 2026-10-10 后）**：D-02 **部分收口**（不追全收）。ARCH-3 已抽 composable；UI-1 只落动效基础层（`constants/motion.ts` + `--motion-*`），**不**借机继续拆 `App.vue`。UI-1 做完后再回头看 `App.vue` 体量；Pinia / 聊天·会话·导航状态仍待续抽。
 - **备注（UI-2 2026-10-10）**：`profileMoments`（主页动态）与 `useMoments`（空间 feed）仍为两条线，待合并；UI-2 **不动** `profileMoments`，主页动态动效等 D-02 合并后再说。D-02 仍记部分收口，不追全收。UI-2 消息动效用 CSS/`TransitionGroup` + UI-1 token，**未**往 `App.vue` 加播放态、未建 `useMessageMotion`、未引 Pinia。 关单补注：App.vue 所谓 2234→2243 那 9 行是计行口径差，工作区与 HEAD 内容一致。
 - **备注（UI-3 2026-10-10）**：红点/角标仅 Transition wx-motion-badge 纯 CSS；C-03 未读状态仍在 App.vue，未搬、未建 useUnread。
+- **备注（收尾 2026-10-10）**：红点/未读状态（`conversations[].unread_count` + `totalUnread`）仍在 `App.vue`；未来收 D-02 时要抽 composable（UI-3 顺手发现，勿忘）。D-02 仍记**部分收口**，不追全收。
 
 ### D-03 `conversations` 路由承载业务编排
 - **位置**：`apps/server/src/routes/conversations.ts`（约 864 行）
