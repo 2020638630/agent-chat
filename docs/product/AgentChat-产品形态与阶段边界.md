@@ -217,7 +217,7 @@ Agent Chat 是一个**多角色 AI 社交客户端**：用户导入角色卡后�
 
 2026-10-10：前四刀管道侧已交（ARCH-1 / M-05a / X-01 / ARCH-2 管道）。**ARCH-2 真关单待试跑线**（DeepSeek 文本 / 官方 VLM 读图 / Gemini TTS）。试跑线是 ARCH-2 验收标准，不是独立刀。N-02 不动；读图 VLM 债 / B-04d 在试跑线还。
 
-**下一顺序：UI-1**（ARCH-3 本刀已交；Gemini TTS 续债仍挂）（或你拍板先开 ARCH-3）
+**下一顺序：UI-2 / UI-3**（UI-1 基础层已落地且 tip 齐后可开）；Gemini TTS 挂债维持；N-02 仍不动。
 
 | ID | 状态意向 | 说明 |
 | -- | -------- | ---- |
@@ -226,8 +226,8 @@ Agent Chat 是一个**多角色 AI 社交客户端**：用户导入角色卡后�
 | X-01 | 已处理 | 最终 tip `0fce6d8`（能力 ae4120d；验证关单 cac031c） |
 | ARCH-2 | 已处理 | Provider+.env+D-05 可观测已交；试跑线：DeepSeek 文本通 + **HY 本地 Ollama qwen2.5vl:7b 读图通**；Gemini TTS **缺 Key 未实跑**（挂 B-04d/API 试跑线续债）；N-02 未做 |
 | 试跑线 | ARCH-2 验收已收口（2026-10-10 21:30 CST） | 文本通（BF/HY DeepSeek）+ 本地 VLM 通（HY）+ Gemini TTS 挂债 |
-| ARCH-3 | 已处理 | 2026-10-10：抽 `useMoments`/`usePersonaEditor`/`useProactiveSettings`；App.vue 变薄；未引 Pinia；D-03 未动；下一刀 UI-1 |
-| UI-1 | 待处理 | 试跑线与 ARCH-3 之后（原第五/可并行，现顺序排后） |
+| ARCH-3 | 已处理 | 2026-10-10：抽出 `useMoments`/`usePersonaEditor`/`useProactiveSettings`；App.vue 变薄。未上 Pinia；D-03 未动。**D-02 部分收口**（UI-1 后不追全收，回头再看 App.vue） |
+| UI-1 | 已处理 | 2026-10-10：动效基础层（`motion.ts` + `--motion-*`；nav micro + 人设/发动态 overlay fade）；**未做** UI-2/3 |
 | M-05b | 暂缓 P2 | 动态配图含生图；先走 B-04B，不绑 N-01 |
 | X-02～X-07 / UI-2～6 | 见问题表 | 体验与 UI 债池 |
 | N-02 | 暂缓不动 | 本刀与试跑线均不交付动态路由 |

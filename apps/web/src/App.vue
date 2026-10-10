@@ -5,6 +5,7 @@
  * Layout: left nav → mid list (chat / contacts / space tools) → main pane
  * (profile | moments feed | conversation). Talks to apps/server via ./api/client.
  * Composables: useHoldToTalk, useMoments, usePersonaEditor, useProactiveSettings (ARCH-3);
+ * Motion tokens: constants/motion.ts + --motion-* CSS vars (UI-1 foundation);
  * styles in ./styles/wechat.css.
  */
 
@@ -2282,6 +2283,7 @@ onUnmounted(() => {
 
   
     
+    <Transition name="wx-motion-fade">
     <div
       v-if="momentComposerOpen"
       class="wx-confirm-mask"
@@ -2313,6 +2315,7 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+    </Transition>
     <input
       ref="momentImageInput"
       type="file"
@@ -2322,6 +2325,7 @@ onUnmounted(() => {
     />
 
 
+    <Transition name="wx-motion-fade">
     <div
       v-if="personaEditorOpen"
       class="wx-confirm-mask"
@@ -2370,6 +2374,7 @@ onUnmounted(() => {
         </div>
       </div>
     </div>
+    </Transition>
 
 <div
       v-if="lightboxUrl"

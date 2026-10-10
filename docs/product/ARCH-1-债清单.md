@@ -57,6 +57,11 @@
 
 ---
 
+
+## UI-1 收口（2026-10-10）
+
+动效**基础层**已落：`apps/web/src/constants/motion.ts` + `wechat.css` `--motion-*`；nav / 列表等 micro transition 改走 token；人设编辑 / 发动态 composer 挂 `<Transition name="wx-motion-fade">`。**未做** UI-2（消息动效）/ UI-3（红点）。D-02 记**部分收口**，不追全收。Gemini TTS 挂债维持；N-02 不动。
+
 ## 高影响
 
 ### D-01 模型入口与 `.env` 硬绑定、无统一 Provider 层
@@ -77,6 +82,7 @@
 - **建议阶段**：ARCH-3（UI-1 可先收时间/动效，避免与大拆并行冲突时先定边界）
 
 - **状态（ARCH-3 2026-10-10）**：已抽 composable：`useMoments` / `usePersonaEditor` / `useProactiveSettings`；`App.vue` ~2627→~2386 行（行数以本次 commit 为准）；**未**引 Pinia；D-03 `conversations.ts` 未动。剩余：聊天/资料/外观等状态仍在 `App.vue`，可续抽。
+- **状态（UI-1 2026-10-10 后）**：D-02 **部分收口**（不追全收）。ARCH-3 已抽 composable；UI-1 只落动效基础层（`constants/motion.ts` + `--motion-*`），**不**借机继续拆 `App.vue`。UI-1 做完后再回头看 `App.vue` 体量；Pinia / 聊天·会话·导航状态仍待续抽。
 
 ### D-03 `conversations` 路由承载业务编排
 - **位置**：`apps/server/src/routes/conversations.ts`（约 864 行）
