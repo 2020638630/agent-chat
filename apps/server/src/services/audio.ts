@@ -1,16 +1,8 @@
 /**
  * SiliconFlow STT/TTS helpers + gendered CosyVoice voice selection and cache filenames.
- * Keys come from STT_ and TTS_ env vars; never log secrets.
+ * Keys come from config/providers (STT_/TTS_); never log secrets.
  */
-function env(name: string, fallback = '') {
-  return process.env[name]?.trim() || fallback;
-}
-
-function requireEnv(name: string): string {
-  const v = env(name);
-  if (!v) throw new Error(`未配置 ${name}，请在 .env 中填写（勿提交密钥）`);
-  return v;
-}
+import { getSttConfig, getTtsConfig, getTtsVoiceSettings } from '../config/providers.js';
 
 export type VoiceKind = 'male' | 'female' | 'user';
 
@@ -26,13 +18,10 @@ const NAME_GENDER: Record<string, VoiceKind> = {
 };
 
 export function voiceForKind(kind: VoiceKind): string {
-  if (kind === 'male') {
-    return env('TTS_VOICE_MALE', env('TTS_VOICE', DEFAULT_MALE));
-  }
-  if (kind === 'female') {
-    return env('TTS_VOICE_FEMALE', DEFAULT_FEMALE);
-  }
-  return env('TTS_VOICE_USER', DEFAULT_USER);
+  const tts = getTtsVoiceSettings();
+  if (kind === 'male') return tts.voiceMale || DEFAULT_MALE;
+  if (kind === 'female') return tts.voiceFemale || DEFAULT_FEMALE;
+  return tts.voiceUser || DEFAULT_USER;
 }
 
 function digGender(raw: unknown, depth = 0): string | null {
@@ -108,18 +97,16 @@ export async function transcribeAudio(
   filename: string,
   mimeType: string
 ): Promise<string> {
-  const baseUrl = env('STT_BASE_URL', 'https://api.siliconflow.cn/v1').replace(/\/$/, '');
-  const apiKey = requireEnv('STT_API_KEY');
-  const model = env('STT_MODEL', 'FunAudioLLM/SenseVoiceSmall');
+  const cfg = getSttConfig();
 
   const form = new FormData();
   const blob = new Blob([new Uint8Array(buffer)], { type: mimeType || 'audio/wav' });
   form.append('file', blob, filename || 'audio.wav');
-  form.append('model', model);
+  form.append('model', cfg.model);
 
-  const res = await fetch(`${baseUrl}/audio/transcriptions`, {
+  const res = await fetch(`${cfg.baseUrl}/audio/transcriptions`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${apiKey}` },
+    headers: { Authorization: `Bearer ${cfg.apiKey}` },
     body: form,
     signal: AbortSignal.timeout(120_000),
   });
@@ -136,21 +123,19 @@ export async function transcribeAudio(
 }
 
 export async function synthesizeSpeech(text: string, voice?: string): Promise<Buffer> {
-  const baseUrl = env('TTS_BASE_URL', 'https://api.siliconflow.cn/v1').replace(/\/$/, '');
-  const apiKey = requireEnv('TTS_API_KEY');
-  const model = env('TTS_MODEL', 'FunAudioLLM/CosyVoice2-0.5B');
+  const cfg = getTtsConfig();
   const useVoice = (voice || voiceForKind('female')).trim();
   const input = stripForTts(text);
   if (!input) throw new Error('没有可朗读的文字');
 
-  const res = await fetch(`${baseUrl}/audio/speech`, {
+  const res = await fetch(`${cfg.baseUrl}/audio/speech`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${cfg.apiKey}`,
     },
     body: JSON.stringify({
-      model,
+      model: cfg.model,
       input,
       voice: useVoice,
       response_format: 'mp3',

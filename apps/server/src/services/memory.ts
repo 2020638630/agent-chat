@@ -618,12 +618,47 @@ export function applyOps(characterId: string, ops: ExtractOp[]): ApplyResult {
   return { activatedContents, newPendings };
 }
 
+
+/** ARCH-2 D-05: structured, greppable memory-extract signals (no secrets). */
+export type MemoryExtractStatus =
+  | 'start'
+  | 'ok'
+  | 'empty'
+  | 'fail_llm'
+  | 'fail_parse'
+  | 'fail_apply'
+  | 'fail_after_turn'
+  | 'confirm';
+
+export function logMemoryExtract(payload: {
+  status: MemoryExtractStatus;
+  conversationId?: string;
+  characterId?: string;
+  n?: number;
+  detail?: string;
+  ask?: string;
+}): void {
+  const row: Record<string, unknown> = {
+    event: 'memory.extract',
+    status: payload.status,
+    ts: new Date().toISOString(),
+  };
+  if (payload.conversationId) row.conversationId = payload.conversationId;
+  if (payload.characterId) row.characterId = payload.characterId;
+  if (payload.n != null) row.n = payload.n;
+  if (payload.detail) row.detail = String(payload.detail).slice(0, 240);
+  if (payload.ask) row.ask = String(payload.ask).slice(0, 120);
+  const line = JSON.stringify(row);
+  if (payload.status.startsWith('fail')) console.error(`[memory.obs] ${line}`);
+  else console.log(`[memory.obs] ${line}`);
+}
+
 export async function extractMemoriesAfterTurn(opts: {
   characterId: string;
   conversationId: string;
 }): Promise<void> {
   const { characterId, conversationId } = opts;
-  console.log(`[memory] extract start conv=${conversationId} char=${characterId}`);
+  logMemoryExtract({ status: 'start', conversationId, characterId });
   const history = db
     .prepare(
       `SELECT id, role, content, source FROM messages
@@ -674,7 +709,7 @@ export async function extractMemoriesAfterTurn(opts: {
     ]);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error('[memory] extract fail llm:', msg);
+    logMemoryExtract({ status: 'fail_llm', conversationId, characterId, detail: msg });
     return;
   }
 
@@ -683,7 +718,7 @@ export async function extractMemoriesAfterTurn(opts: {
     ops = parseOps(raw);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error('[memory] extract fail parse:', msg);
+    logMemoryExtract({ status: 'fail_parse', conversationId, characterId, detail: msg });
     ops = [];
   }
   {
@@ -704,19 +739,22 @@ export async function extractMemoriesAfterTurn(opts: {
     const applied = applyOps(characterId, filtered);
     if (applied.activatedContents.length > 0) {
       enqueueMemoryNotice(characterId, conversationId, applied.activatedContents);
-      console.log(
-        `[memory] extract ok conv=${conversationId} char=${characterId} n=${applied.activatedContents.length}`,
-      );
+      logMemoryExtract({
+        status: 'ok',
+        conversationId,
+        characterId,
+        n: applied.activatedContents.length,
+      });
     } else {
-      console.log(`[memory] extract empty conv=${conversationId} char=${characterId}`);
+      logMemoryExtract({ status: 'empty', conversationId, characterId, n: 0 });
     }
     for (const ask of applied.newPendings) {
       const q = insertMemoryConfirmMessage(conversationId, characterId, ask);
-      console.log(`[memory] confirm asked conv=${conversationId}: ${q}`);
+      logMemoryExtract({ status: 'confirm', conversationId, characterId, ask: q });
     }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    console.error('[memory] extract fail apply:', msg);
+    logMemoryExtract({ status: 'fail_apply', conversationId, characterId, detail: msg });
   }
 }
 
@@ -891,7 +929,7 @@ export function scheduleMemoryExtractAfterTurn(characterId: string, conversation
   setImmediate(() => {
     void extractMemoriesAfterTurn({ characterId, conversationId }).catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
-      console.error('[memory] after_turn error:', msg);
+      logMemoryExtract({ status: 'fail_after_turn', conversationId, characterId, detail: msg });
     });
   });
 }

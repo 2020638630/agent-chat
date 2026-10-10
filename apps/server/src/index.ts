@@ -17,14 +17,15 @@ import { profileRoutes } from './routes/profile.js';
 import { proactiveRoutes } from './routes/proactive.js';
 import { runProactiveTick } from './services/proactive.js';
 import { getUploadsDir } from './db/index.js';
+import { env, envInt } from './config/env.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(__dirname, '../../../');
 dotenv.config({ path: path.join(root, '.env') });
 dotenv.config(); // also allow apps/server/.env
 
-const port = Number(process.env.PORT || 8787);
-const host = process.env.HOST || '127.0.0.1';
+const port = envInt('PORT', 8787);
+const host = env('HOST', '127.0.0.1');
 
 const app = Fastify({ logger: true });
 
@@ -53,7 +54,7 @@ try {
   await app.listen({ port, host });
   console.log(`[agent-chat] server http://${host}:${port}`);
 
-  const proactiveMs = Number(process.env.PROACTIVE_INTERVAL_MS || 60_000);
+  const proactiveMs = envInt('PROACTIVE_INTERVAL_MS', 60_000);
   if (Number.isFinite(proactiveMs) && proactiveMs >= 5_000) {
     setInterval(() => {
       void runProactiveTick().catch((err) => app.log.error(err, 'proactive tick'));

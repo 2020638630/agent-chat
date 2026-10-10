@@ -2,7 +2,10 @@
  * Chat completions against OpenAI-compatible APIs (Ollama / DeepSeek, etc.).
  * When talking to Ollama, always send reasoning_effort: "none"; read message.content only.
  * Content may be a plain string or an OpenAI-style multimodal parts array (text + image_url).
+ * Config comes from config/providers (ARCH-2); no local env() copies.
  */
+import { getLlmConfig, getVisionConfig, isOllamaTarget } from '../config/providers.js';
+
 export type ChatContentPart =
   | { type: 'text'; text: string }
   | { type: 'image_url'; image_url: { url: string } };
@@ -17,47 +20,34 @@ export type ChatCompletionOptions = {
   model?: string;
 };
 
-function env(name: string, fallback = '') {
-  return process.env[name]?.trim() || fallback;
-}
-
-function isOllama(baseUrl: string): boolean {
-  const provider = env('LLM_PROVIDER').toLowerCase();
-  if (provider === 'ollama') return true;
-  if (provider && provider !== 'ollama') return false;
-  return /11434/.test(baseUrl) || /ollama/i.test(baseUrl);
-}
-
 /** Vision model for B-04A; empty LLM_VISION_MODEL falls back to LLM_MODEL. */
 export function resolveVisionModel(): string {
-  return env('LLM_VISION_MODEL') || env('LLM_MODEL', 'qwen3.5:9b-nothink');
+  return getVisionConfig().model;
 }
 
 export async function chatCompletion(
   messages: ChatMessage[],
   opts?: ChatCompletionOptions,
 ): Promise<string> {
-  const baseUrl = env('LLM_BASE_URL', 'http://127.0.0.1:11434/v1').replace(/\/$/, '');
-  const apiKey = env('LLM_API_KEY', 'ollama');
-  const model = (opts?.model?.trim() || env('LLM_MODEL', 'qwen3.5:9b-nothink'));
+  const cfg = getLlmConfig(opts?.model);
 
   const body: Record<string, unknown> = {
-    model,
+    model: cfg.model,
     messages,
     temperature: 0.8,
     stream: false,
   };
 
   // Qwen3.5 / vision via Ollama OpenAI-compat: disable thinking chain when applicable
-  if (isOllama(baseUrl)) {
+  if (isOllamaTarget(cfg)) {
     body.reasoning_effort = 'none';
   }
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
+  const res = await fetch(`${cfg.baseUrl}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${cfg.apiKey}`,
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(180_000),

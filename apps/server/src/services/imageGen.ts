@@ -1,12 +1,9 @@
 /**
- * OpenAI-compatible image generation (SiliconFlow by default; same key family as STT/TTS).
- * Never log API keys.
+ * OpenAI-compatible image generation (SiliconFlow by default).
+ * Config via config/providers (IMAGE_GEN_*); never log API keys.
  */
 import { saveImageBuffer } from './uploadImage.js';
-
-function env(name: string, fallback = '') {
-  return process.env[name]?.trim() || fallback;
-}
+import { getImageGenConfig } from '../config/providers.js';
 
 const DEFAULT_IMAGE_STYLE =
   'anime illustration, clean lines, soft lighting, character-consistent portrait, tasteful, no watermark, no text';
@@ -42,21 +39,16 @@ export type GeneratedImage = {
 };
 
 export async function generateChatImage(prompt: string): Promise<GeneratedImage> {
-  const baseUrl = env('IMAGE_GEN_BASE_URL', 'https://api.siliconflow.cn/v1').replace(/\/$/, '');
-  const apiKey = env('IMAGE_GEN_API_KEY') || env('STT_API_KEY');
-  const model = env('IMAGE_GEN_MODEL', 'Kwai-Kolors/Kolors');
-  if (!apiKey) {
-    throw new Error('未配置 IMAGE_GEN_API_KEY（或 STT_API_KEY），请在本机 .env 填写');
-  }
+  const cfg = getImageGenConfig();
 
-  const res = await fetch(`${baseUrl}/images/generations`, {
+  const res = await fetch(`${cfg.baseUrl}/images/generations`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${cfg.apiKey}`,
     },
     body: JSON.stringify({
-      model,
+      model: cfg.model,
       prompt,
       image_size: '1024x1024',
       batch_size: 1,
@@ -100,5 +92,5 @@ export async function generateChatImage(prompt: string): Promise<GeneratedImage>
   }
 
   const saved = saveImageBuffer(buffer, ext, 'gen-img');
-  return { publicPath: saved.publicPath, model };
+  return { publicPath: saved.publicPath, model: cfg.model };
 }

@@ -7,6 +7,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { env } from '../config/env.js';
 
 export type MemoryGateKind = 'address' | 'drink' | 'other';
 
@@ -25,7 +26,7 @@ export type MemoryGateInput = {
 };
 
 function envBackend(): 'off' | 'laya' | 'heuristic' {
-  const v = (process.env.MEMORY_GATE_BACKEND || 'off').trim().toLowerCase();
+  const v = env('MEMORY_GATE_BACKEND', 'off').toLowerCase();
   if (v === 'laya' || v === 'heuristic') return v;
   return 'off';
 }
@@ -74,7 +75,7 @@ export function heuristicMemoryGate(input: MemoryGateInput): MemoryGateDecision 
 }
 
 function resolveLayaScript(): string {
-  const fromEnv = process.env.LAYA_GATE_SCRIPT;
+  const fromEnv = env('LAYA_GATE_SCRIPT') || undefined;
   if (fromEnv) return fromEnv;
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.resolve(here, '../../../../scripts/laya_memory_gate.py');
@@ -87,7 +88,7 @@ function runLayaPython(input: MemoryGateInput): MemoryGateDecision | null {
     active_memory: input.activeMemory || '',
     proposed_content: input.proposedContent || '',
   });
-  const py = process.env.LAYA_PYTHON || process.env.PYTHON || 'python';
+  const py = env('LAYA_PYTHON') || env('PYTHON') || 'python';
   const r = spawnSync(py, [script], {
     input: payload,
     encoding: 'utf8',

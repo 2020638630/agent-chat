@@ -8,6 +8,21 @@
 
 ---
 
+
+## ARCH-2 收口（2026-10-10）
+
+本刀（管道，非调度）已收：
+
+| 债 | 状态 | 说明 |
+| ---- | ---- | ---- |
+| **D-01** | **本刀已收** | `apps/server/src/config/providers.ts` 统一 llm/vision/stt/tts/imageGen；业务经 Provider 取配置再调现有 OpenAI 兼容请求；**不做** N-02 动态路由 |
+| **D-09** | **本刀已收** | 优先 `IMAGE_GEN_API_KEY`；空时兼容回落 `STT_API_KEY` 并一次性 `console.warn`（兼容期）；`.env.example` 已写明 |
+| **D-13** | **本刀已收** | 消灭 services 内重复 `function env`；统一 `config/env.ts`；gate / index 读写亦走共享 helper |
+| **D-05** | **本刀已收** | `logMemoryExtract` 结构化 `[memory.obs]` JSON 日志（start/ok/empty/fail_*/confirm）；无大 UI |
+
+未做（确认）：N-02 动态路由、试跑线插桩、换供应商实跑、ARCH-3、D-04 功能池项。
+
+
 ## 汇总
 
 | 影响 | 数量 |
@@ -30,6 +45,7 @@
 ## 高影响
 
 ### D-01 模型入口与 `.env` 硬绑定、无统一 Provider 层
+- **状态**：本刀已收（ARCH-2）
 - **位置**：`apps/server/src/services/llm.ts`、`audio.ts`、`imageGen.ts`；`index.ts` dotenv；根目录 `.env` / `.env.example`
 - **类型**：架构 / 配置
 - **现象**：LLM / Vision / STT / TTS / ImageGen 各自 `process.env` + 本地 `env()`；无共享 client、无按能力切换注册表。BF 实机：`LLM_MODEL=qwen2.5:7b-fast`，`.env.example` 默认仍为 `qwen3.5:9b-nothink`。Vision 空则回落到文本模型。
@@ -65,6 +81,7 @@
 - **建议阶段**：**已挪出 ARCH** → 功能池（与 **C-06 同组，P2**；C-06 遗留：M-01 仍吃私聊 `daily_cap`）。不再进 ARCH-2/ARCH-3。
 
 ### D-05 记忆链路失败与空泡（extract→filter→pending→honor）
+- **状态**：本刀已收（ARCH-2 可观测）
 - **位置**：`services/memory.ts`（`extractMemoriesAfterTurn` / `scheduleMemoryExtractAfterTurn`）；`memoryGate.ts`；`routes/conversations.ts` 调用点；前端 `scheduleMemoryWhisper`
 - **类型**：可靠性 / 可观测性
 - **现象**：LLM 提取失败仅 `console.error` 后 `return`；parse 失败变空 ops；`extract empty` 只打日志；成功才 `enqueueMemoryNotice`。前端耳语依赖 notice，失败/空结果用户侧无区分。Gate 默认 `MEMORY_GATE_BACKEND=off`，Laya 路径失败再静默回退。
@@ -101,6 +118,7 @@
 - **建议阶段**：ARCH-3
 
 ### D-09 ImageGen Key 回落到 STT Key
+- **状态**：本刀已收（ARCH-2）
 - **位置**：`services/imageGen.ts`（`IMAGE_GEN_API_KEY || STT_API_KEY`）；`.env.example` 已注明
 - **类型**：配置耦合
 - **现象**：生图与语音共用密钥族，权限与轮换边界模糊。
@@ -137,6 +155,7 @@
 - **建议阶段**：ARCH-3
 
 ### D-13 环境变量读取点分散且 example 不全
+- **状态**：本刀已收（ARCH-2）
 - **位置**：`llm.ts` / `audio.ts` / `imageGen.ts` / `memoryGate.ts` / `index.ts`（`PORT`/`HOST`/`PROACTIVE_INTERVAL_MS`）；`.env.example` 缺 `HOST`、`PROACTIVE_INTERVAL_MS`、部分 LAYA_*
 - **类型**：配置
 - **现象**：三处复制 `function env()`；部分键只在代码默认值出现。
