@@ -4,12 +4,16 @@
  *
  * Layout: left nav → mid list (chat / contacts / space tools) → main pane
  * (profile | moments feed | conversation). Talks to apps/server via ./api/client.
- * Voice hold-to-talk lives in ./composables/useHoldToTalk; styles in ./styles/wechat.css.
+ * Composables: useHoldToTalk, useMoments, usePersonaEditor, useProactiveSettings (ARCH-3);
+ * styles in ./styles/wechat.css.
  */
 
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
-import { api, type Character, type CharacterPersonaPatch, type ChatMessage, type Conversation, type MemoryNote, type Moment, type Profile } from './api/client';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { api, type Character, type ChatMessage, type Conversation, type MemoryNote, type Moment, type Profile } from './api/client';
 import { useHoldToTalk } from './composables/useHoldToTalk';
+import { useMoments } from './composables/useMoments';
+import { usePersonaEditor } from './composables/usePersonaEditor';
+import { useProactiveSettings } from './composables/useProactiveSettings';
 import { EMOJI_WHITELIST } from './constants/emojiWhitelist';
 import {
   THEME_PRESETS,
@@ -27,8 +31,6 @@ const tab = ref<Tab>('chat');
 const characters = ref<Character[]>([]);
 const conversations = ref<Conversation[]>([]);
 const messages = ref<ChatMessage[]>([]);
-const moments = ref<Moment[]>([]);
-const momentsFilterId = ref<string | null>(null);
 const activeConversationId = ref<string | null>(null);
 const draft = ref('');
 const draftInput = ref<HTMLTextAreaElement | null>(null);
@@ -60,17 +62,8 @@ const contactMenuId = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const chatBody = ref<HTMLElement | null>(null);
 const mentionId = ref<string>('');
-const commentDrafts = reactive<Record<string, string>>({});
 const menuOpen = ref(false);
 const msgMenuId = ref<string | null>(null);
-const momentMenuId = ref<string | null>(null);
-const pendingDeleteMoment = ref<Moment | null>(null);
-const momentComposerOpen = ref(false);
-const momentDraft = ref('');
-const momentImageFile = ref<File | null>(null);
-const momentImagePreview = ref<string | null>(null);
-const momentPostBusy = ref(false);
-const momentImageInput = ref<HTMLInputElement | null>(null);
 const pendingDeleteMessage = ref<ChatMessage | null>(null);
 const pendingOverwriteImport = ref<{ file: File; name: string } | null>(null);
 const pendingDeleteCharacter = ref<{ id: string; name: string } | null>(null);
@@ -91,14 +84,6 @@ const uiTheme = ref<ThemeId>(DEFAULT_THEME);
 const uiBgOpacity = ref(DEFAULT_BG_OPACITY);
 const uiSpaceBgOpacity = ref(DEFAULT_SPACE_BG_OPACITY);
 const appearanceBusy = ref(false);
-const proactiveEnabled = ref(false);
-const proactiveBusy = ref(false);
-const proactiveSentToday = ref(0);
-const proactiveDailyCap = ref(3);
-const proactiveInQuiet = ref(false);
-const proactiveQuietStart = ref('23:00');
-const proactiveQuietEnd = ref('08:00');
-const expandedLikeMomentId = ref<string | null>(null);
 const avatarFileInput = ref<HTMLInputElement | null>(null);
 const bgFileInput = ref<HTMLInputElement | null>(null);
 const spaceBgFileInput = ref<HTMLInputElement | null>(null);
@@ -106,6 +91,88 @@ const chatImageInput = ref<HTMLInputElement | null>(null);
 const imageBusy = ref(false);
 const lightboxUrl = ref<string | null>(null);
 const profileMoments = ref<Moment[]>([]);
+
+const setStatus = (msg: string) => {
+  status.value = msg;
+};
+
+const {
+  proactiveEnabled,
+  proactiveBusy,
+  proactiveSentToday,
+  proactiveDailyCap,
+  proactiveInQuiet,
+  proactiveQuietStart,
+  proactiveQuietEnd,
+  loadProactiveSettings,
+  toggleProactiveEnabled,
+} = useProactiveSettings({ setStatus });
+
+const {
+  moments,
+  momentsFilterId,
+  commentDrafts,
+  momentMenuId,
+  pendingDeleteMoment,
+  momentComposerOpen,
+  momentDraft,
+  momentImageFile,
+  momentImagePreview,
+  momentPostBusy,
+  momentImageInput,
+  expandedLikeMomentId,
+  momentsToday,
+  momentsTodayAuthors,
+  spaceCharacterStats,
+  filteredMoments,
+  setMomentsFilter,
+  clearMomentsFilter,
+  refreshMoments,
+  toggleLikeList,
+  openMomentComposer,
+  closeMomentComposer,
+  clearMomentImage,
+  onMomentImagePick,
+  submitMyMoment,
+  openMomentAuthor,
+  letThemPost,
+  toggleMomentMenu,
+  askDeleteMoment,
+  cancelDeleteMoment,
+  confirmDeleteMoment,
+  toggleLike,
+  submitComment,
+} = useMoments({
+  setStatus,
+  characters,
+  profileView,
+  profileMoments,
+  tab,
+  openMyProfile: () => openMyProfile(),
+  openCharacterProfile: (id: string) => openCharacterProfile(id),
+});
+
+const {
+  personaEditorOpen,
+  personaEditorBusy,
+  personaEditorId,
+  personaDraft,
+  openPersonaEditor,
+  closePersonaEditor,
+  savePersonaEditor,
+} = usePersonaEditor({
+  setStatus,
+  clearContactMenu: () => {
+    contactMenuId.value = null;
+  },
+  refreshCharacters: () => refreshCharacters(),
+  reloadCharacterProfileIfOpen: async (id: string) => {
+    if (profileView.value?.kind === 'character' && profileView.value.id === id) {
+      await openCharacterProfile(id);
+    }
+  },
+});
+
 const profileMemories = ref<MemoryNote[]>([]);
 const memoryWhisperText = ref('记下了');
 const memoryWhisperVisible = ref(false);
@@ -122,20 +189,6 @@ const profileEditing = ref(false);
 const editMood = ref('');
 const editBio = ref('');
 
-const personaEditorOpen = ref(false);
-const personaEditorBusy = ref(false);
-const personaEditorId = ref<string | null>(null);
-const personaDraft = reactive({
-  name: '',
-  description: '',
-  personality: '',
-  scenario: '',
-  first_mes: '',
-  mes_example: '',
-  system_prompt: '',
-  post_history_instructions: '',
-});
-
 const activeConversation = computed(() =>
   conversations.value.find((c) => c.id === activeConversationId.value) ?? null
 );
@@ -149,58 +202,6 @@ const midTitle = computed(() => {
   if (tab.value === 'contacts') return creatingGroup.value ? '创建群聊' : '通讯录';
   return '空间';
 });
-
-function isSameLocalDay(iso: string, now = new Date()) {
-  const d = new Date(iso);
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  );
-}
-
-const momentsToday = computed(() => moments.value.filter((m) => isSameLocalDay(m.created_at)));
-
-const momentsTodayAuthors = computed(() => {
-  const seen = new Set<string>();
-  const list: Array<{ id: string; name: string; avatar_path?: string | null }> = [];
-  for (const m of momentsToday.value) {
-    if (!m.character_id || seen.has(m.character_id)) continue;
-    seen.add(m.character_id);
-    list.push({
-      id: m.character_id,
-      name: m.character_name || '角色',
-      avatar_path: m.avatar_path,
-    });
-  }
-  return list;
-});
-
-const spaceCharacterStats = computed(() => {
-  const countBy = new Map<string, number>();
-  for (const m of moments.value) {
-    if (!m.character_id) continue;
-    countBy.set(m.character_id, (countBy.get(m.character_id) || 0) + 1);
-  }
-  return characters.value
-    .map((ch) => ({
-      id: ch.id,
-      name: ch.name,
-      avatar_path: ch.avatar_path,
-      count: countBy.get(ch.id) || 0,
-    }))
-    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'zh'));
-});
-
-const filteredMoments = computed(() => {
-  const id = momentsFilterId.value;
-  if (!id) return moments.value;
-  return moments.value.filter((m) => m.character_id === id);
-});
-
-function setMomentsFilter(id: string | null) {
-  momentsFilterId.value = id;
-}
 
 
 const groupPickableCharacters = computed(() => {
@@ -391,47 +392,6 @@ async function persistAppearance(partial: {
   }
 }
 
-
-function applyProactiveSettings(settings: {
-  enabled: boolean;
-  quiet_start?: string;
-  quiet_end?: string;
-  daily_cap?: number;
-  sent_today?: number;
-  in_quiet?: boolean;
-}) {
-  proactiveEnabled.value = !!settings.enabled;
-  proactiveSentToday.value = Number(settings.sent_today ?? 0);
-  proactiveDailyCap.value = Number(settings.daily_cap ?? 3);
-  proactiveQuietStart.value = settings.quiet_start || '23:00';
-  proactiveQuietEnd.value = settings.quiet_end || '08:00';
-  proactiveInQuiet.value = !!settings.in_quiet;
-}
-
-async function loadProactiveSettings() {
-  try {
-    const res = await api.getProactiveSettings();
-    applyProactiveSettings(res.settings);
-  } catch {
-    /* ignore */
-  }
-}
-
-async function toggleProactiveEnabled(next: boolean) {
-  proactiveBusy.value = true;
-  try {
-    const res = await api.updateProactiveSettings({ enabled: next });
-    applyProactiveSettings(res.settings);
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    proactiveBusy.value = false;
-  }
-}
-
-function toggleLikeList(momentId: string) {
-  expandedLikeMomentId.value = expandedLikeMomentId.value === momentId ? null : momentId;
-}
 
 async function selectTheme(id: ThemeId) {
   uiTheme.value = id;
@@ -802,11 +762,6 @@ async function refreshConversations() {
   conversations.value = res.conversations;
 }
 
-async function refreshMoments() {
-  const res = await api.listMoments();
-  moments.value = res.moments;
-}
-
 async function openConversation(id: string) {
   await closeProfile();
   activeConversationId.value = id;
@@ -924,72 +879,6 @@ async function onImport(e: Event) {
   }
 }
 
-
-async function openPersonaEditor(id: string) {
-  contactMenuId.value = null;
-  personaEditorBusy.value = true;
-  personaEditorOpen.value = true;
-  personaEditorId.value = id;
-  try {
-    const res = await api.getCharacter(id);
-    const c = res.character;
-    personaDraft.name = c.name || '';
-    personaDraft.description = c.description || '';
-    personaDraft.personality = c.personality || '';
-    personaDraft.scenario = c.scenario || '';
-    personaDraft.first_mes = c.first_mes || '';
-    personaDraft.mes_example = c.mes_example || '';
-    personaDraft.system_prompt = c.system_prompt || '';
-    personaDraft.post_history_instructions = c.post_history_instructions || '';
-  } catch (e: any) {
-    personaEditorOpen.value = false;
-    personaEditorId.value = null;
-    status.value = e?.message || '加载人设失败';
-  } finally {
-    personaEditorBusy.value = false;
-  }
-}
-
-function closePersonaEditor() {
-  if (personaEditorBusy.value) return;
-  personaEditorOpen.value = false;
-  personaEditorId.value = null;
-}
-
-async function savePersonaEditor() {
-  const id = personaEditorId.value;
-  if (!id || personaEditorBusy.value) return;
-  const name = personaDraft.name.trim();
-  if (!name) {
-    status.value = '角色名称不能为空';
-    return;
-  }
-  personaEditorBusy.value = true;
-  try {
-    const body: CharacterPersonaPatch = {
-      name,
-      description: personaDraft.description,
-      personality: personaDraft.personality,
-      scenario: personaDraft.scenario,
-      first_mes: personaDraft.first_mes,
-      mes_example: personaDraft.mes_example,
-      system_prompt: personaDraft.system_prompt,
-      post_history_instructions: personaDraft.post_history_instructions,
-    };
-    const res = await api.updateCharacter(id, body);
-    await refreshCharacters();
-    if (profileView.value?.kind === 'character' && profileView.value.id === id) {
-      await openCharacterProfile(id);
-    }
-    status.value = `已保存「${res.character.name}」的人设`;
-    personaEditorOpen.value = false;
-    personaEditorId.value = null;
-  } catch (e: any) {
-    status.value = e?.message || '保存人设失败';
-  } finally {
-    personaEditorBusy.value = false;
-  }
-}
 
 function askDeleteCharacter(id: string, name: string) {
   contactMenuId.value = null;
@@ -1447,143 +1336,13 @@ function toggleMsgMenu(id: string) {
 }
 
 
-function openMomentComposer() {
-  momentComposerOpen.value = true;
-  momentDraft.value = '';
-  clearMomentImage();
-}
-
-function closeMomentComposer() {
-  momentComposerOpen.value = false;
-  momentDraft.value = '';
-  clearMomentImage();
-}
-
-function clearMomentImage() {
-  if (momentImagePreview.value) {
-    URL.revokeObjectURL(momentImagePreview.value);
-  }
-  momentImagePreview.value = null;
-  momentImageFile.value = null;
-  if (momentImageInput.value) momentImageInput.value.value = '';
-}
-
-function onMomentImagePick(ev: Event) {
-  const input = ev.target as HTMLInputElement;
-  const file = input.files?.[0] || null;
-  if (!file) return;
-  const okType = /image\/(jpeg|jpg|png|webp)/i.test(file.type) || /\.(jpe?g|png|webp)$/i.test(file.name);
-  if (!okType) {
-    status.value = '仅支持 jpg / png / webp';
-    input.value = '';
-    return;
-  }
-  if (file.size > 5 * 1024 * 1024) {
-    status.value = '图片不能超过 5MB';
-    input.value = '';
-    return;
-  }
-  clearMomentImage();
-  momentImageFile.value = file;
-  momentImagePreview.value = URL.createObjectURL(file);
-}
-
-async function submitMyMoment() {
-  const text = momentDraft.value.trim();
-  if (!text || momentPostBusy.value) return;
-  momentPostBusy.value = true;
-  try {
-    const res = await api.createMyMoment(text, momentImageFile.value);
-    moments.value = [res.moment, ...moments.value.filter((m) => m.id !== res.moment.id)];
-    if (profileView.value?.kind === 'user') {
-      profileMoments.value = [res.moment, ...profileMoments.value.filter((m) => m.id !== res.moment.id)];
-    }
-    closeMomentComposer();
-    status.value = '动态已发布';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    momentPostBusy.value = false;
-  }
-}
-
-function openMomentAuthor(m: Moment) {
-  if (m.author_kind === 'user' || !m.character_id) {
-    openMyProfile();
-    return;
-  }
-  openCharacterProfile(m.character_id);
-}
-
-async function letThemPost(characterId: string) {
-  status.value = '生成动态…';
-  try {
-    await api.generateMoment(characterId);
-    tab.value = 'moments';
-    await refreshMoments();
-    status.value = '';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
-function toggleMomentMenu(id: string) {
-  momentMenuId.value = momentMenuId.value === id ? null : id;
-}
-
-function askDeleteMoment(m: Moment) {
-  momentMenuId.value = null;
-  pendingDeleteMoment.value = m;
-}
-
-function cancelDeleteMoment() {
-  pendingDeleteMoment.value = null;
-}
-
-async function confirmDeleteMoment() {
-  const m = pendingDeleteMoment.value;
-  if (!m) return;
-  try {
-    await api.deleteMoment(m.id);
-    moments.value = moments.value.filter((x) => x.id !== m.id);
-    profileMoments.value = profileMoments.value.filter((x) => x.id !== m.id);
-    delete commentDrafts[m.id];
-    status.value = '动态已删除';
-    pendingDeleteMoment.value = null;
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  }
-}
-async function toggleLike(m: Moment) {
-  try {
-    const res = await api.likeMoment(m.id);
-    const idx = moments.value.findIndex((x) => x.id === m.id);
-    if (idx >= 0) moments.value[idx] = res.moment;
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
-async function submitComment(m: Moment) {
-  const text = (commentDrafts[m.id] || '').trim();
-  if (!text) return;
-  try {
-    const res = await api.commentMoment(m.id, text);
-    commentDrafts[m.id] = '';
-    const idx = moments.value.findIndex((x) => x.id === m.id);
-    if (idx >= 0) moments.value[idx] = res.moment;
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
 watch(tab, (t) => {
   if (t !== 'contacts') {
     creatingGroup.value = false;
     contactMenuId.value = null;
   }
   if (t !== 'moments') {
-    momentsFilterId.value = null;
+    clearMomentsFilter();
   }
   if (t === 'moments') void refreshMoments();
   if (t === 'contacts') void refreshCharacters();

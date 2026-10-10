@@ -76,6 +76,8 @@
 - **建议动作**：按域拆面板组件 + composable/store（chat / contacts / moments / profile / proactive / memory-ui）；`App.vue` 降为壳。
 - **建议阶段**：ARCH-3（UI-1 可先收时间/动效，避免与大拆并行冲突时先定边界）
 
+- **状态（ARCH-3 2026-10-10）**：已抽 composable：`useMoments` / `usePersonaEditor` / `useProactiveSettings`；`App.vue` ~2627→~2386 行（行数以本次 commit 为准）；**未**引 Pinia；D-03 `conversations.ts` 未动。剩余：聊天/资料/外观等状态仍在 `App.vue`，可续抽。
+
 ### D-03 `conversations` 路由承载业务编排
 - **位置**：`apps/server/src/routes/conversations.ts`（约 864 行）
 - **类型**：后端架构 / 路由耦合
