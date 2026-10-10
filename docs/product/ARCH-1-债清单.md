@@ -11,16 +11,31 @@
 
 ## ARCH-2 收口（2026-10-10）
 
-本刀（管道，非调度）已收：
+管道已交；**真关单待试跑线三条跑通**（DeepSeek 文本 / 官方 VLM 读图 / Gemini TTS）。试跑线是 ARCH-2 验收标准，不是独立刀。N-02 不动。
 
 | 债 | 状态 | 说明 |
 | ---- | ---- | ---- |
-| **D-01** | **本刀已收** | `apps/server/src/config/providers.ts` 统一 llm/vision/stt/tts/imageGen；业务经 Provider 取配置再调现有 OpenAI 兼容请求；**不做** N-02 动态路由 |
-| **D-09** | **本刀已收** | 优先 `IMAGE_GEN_API_KEY`；空时兼容回落 `STT_API_KEY` 并一次性 `console.warn`（兼容期）；`.env.example` 已写明 |
-| **D-13** | **本刀已收** | 消灭 services 内重复 `function env`；统一 `config/env.ts`；gate / index 读写亦走共享 helper |
-| **D-05** | **本刀已收** | `logMemoryExtract` 结构化 `[memory.obs]` JSON 日志（start/ok/empty/fail_*/confirm）；无大 UI |
+| **D-01** | **管道已收（关单待试跑）** | `apps/server/src/config/providers.ts` 统一 llm/vision/stt/tts/imageGen；业务经 Provider 取配置再调现有 OpenAI 兼容请求；**不做** N-02 动态路由 |
+| **D-09** | **管道已收** | 优先 `IMAGE_GEN_API_KEY`；空时兼容回落 `STT_API_KEY` 并一次性 `console.warn`（兼容期）；`.env.example` 已写明 |
+| **D-13** | **管道已收** | 消灭 services 内重复 `function env`；统一 `config/env.ts`；gate / index 读写亦走共享 helper |
+| **D-05** | **可观测已交（纯日志）** | 见下「ARCH-2 三条验收」 |
 
-未做（确认）：N-02 动态路由、试跑线插桩、换供应商实跑、ARCH-3、D-04 功能池项。
+### ARCH-2 三条验收（2026-10-10 20:30 CST，先不最终关单）
+
+1. **D-05**：纯 `[memory.obs]` 结构化 console 日志（`logMemoryExtract` → `console.log`/`console.error`；status=start/ok/empty/fail_llm/fail_parse/fail_apply/fail_after_turn/confirm）。失败路径仅打日志后 `return`，**用户侧无失败信号**（无失败气泡、无耳语 notice、无对客户端的失败 API 字段）；仅成功写入记忆时 `enqueueMemoryNotice`。
+2. **五入口核对**：均进 `apps/server/src/config/providers.ts`
+
+| 入口 | providers API | 调用方 |
+| ---- | ------------- | ------ |
+| llm | `getLlmConfig` | `services/llm.ts` → `chatCompletion` |
+| vision | `getVisionConfig` / `resolveVisionModel` | `llm.ts`；读图路径 `routes/conversations.ts` 经 `resolveVisionModel` |
+| stt | `getSttConfig` | `services/audio.ts` → `transcribeAudio` |
+| tts | `getTtsConfig` | `services/audio.ts` → `synthesizeSpeech` |
+| imageGen | `getImageGenConfig` | `services/imageGen.ts` |
+
+3. **X-01 最终 tip**：`0fce6d8`（能力 `ae4120d` → tip对齐 `9d5bde4` → 验证关单 `cac031c` → tip对齐 `0fce6d8`）；问题表本地/远程统一为 `0fce6d8`。
+
+未做（确认）：N-02 动态路由、试跑线实跑（父代理另开）、换供应商实跑、ARCH-3、D-04 功能池项。读图 VLM 债 / B-04d 在试跑线还。
 
 
 ## 汇总
@@ -81,7 +96,7 @@
 - **建议阶段**：**已挪出 ARCH** → 功能池（与 **C-06 同组，P2**；C-06 遗留：M-01 仍吃私聊 `daily_cap`）。不再进 ARCH-2/ARCH-3。
 
 ### D-05 记忆链路失败与空泡（extract→filter→pending→honor）
-- **状态**：本刀已收（ARCH-2 可观测）
+- **状态**：ARCH-2 可观测已交（**纯日志**；用户侧无失败信号）；关单随 ARCH-2 试跑线
 - **位置**：`services/memory.ts`（`extractMemoriesAfterTurn` / `scheduleMemoryExtractAfterTurn`）；`memoryGate.ts`；`routes/conversations.ts` 调用点；前端 `scheduleMemoryWhisper`
 - **类型**：可靠性 / 可观测性
 - **现象**：LLM 提取失败仅 `console.error` 后 `return`；parse 失败变空 ops；`extract empty` 只打日志；成功才 `enqueueMemoryNotice`。前端耳语依赖 notice，失败/空结果用户侧无区分。Gate 默认 `MEMORY_GATE_BACKEND=off`，Laya 路径失败再静默回退。
@@ -317,3 +332,11 @@
 
 
 *ARCH-1 收口调整完成（债清单 + smoke 入库）。2026-10-10 17:12 CST：stash×2 已记简述并 drop；M-05a 已做 multipart 实际上墙验证。*
+
+---
+
+## 阶段顺序修订（2026-10-10 20:30 CST）
+
+下一顺序：**试跑线 → ARCH-3 → UI-1**。
+试跑线 = ARCH-2 验收标准（非独立刀）；N-02 不动；读图 VLM 债 / B-04d 在试跑线还。
+O-03 stash 已 drop → 已处理。ARCH-2 / ARCH-3 问题表改为「待处理」（ARCH-2：管道已交，关单待试跑线）。
