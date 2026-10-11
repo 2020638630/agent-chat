@@ -322,7 +322,7 @@ function collectExplicitClaimOps(history: HistoryMsg[]): ExtractOp[] {
   for (const m of history) {
     if (m.role !== 'user') continue;
     const t = String(m.content || '').trim();
-    const drink = t.match(/我(?:只|改)?喝s*([^s，。！？]{1,12})|以后(?:都)?喝s*([^s，。！？]{1,12})/);
+    const drink = t.match(/我(?:只|改)?喝\s*([^\s，。！？]{1,12})|以后(?:都)?喝\s*([^\s，。！？]{1,12})/);
     if (drink) {
       const bev = (drink[1] || drink[2] || '').trim();
       if (bev && !/口水|汤药/.test(bev)) {
@@ -337,7 +337,7 @@ function collectExplicitClaimOps(history: HistoryMsg[]): ExtractOp[] {
         });
       }
     }
-    const addr = t.match(/(?:叫我|喊我|称呼我为|以后叫我)s*([^s，。！？]{1,12})/);
+    const addr = t.match(/(?:叫我|喊我|称呼我为|以后叫我)\s*([^\s，。！？]{1,12})/);
     if (addr) {
       const name = (addr[1] || '').trim();
       if (name && !/什么|啥|谁/.test(name)) {
@@ -563,6 +563,10 @@ export function applyOps(characterId: string, ops: ExtractOp[]): ApplyResult {
         const newLabel =
           conflict.kind === 'address' ? shortAddressLabel(content) : shortDrinkLabel(content);
         if (pending) {
+          const prevLabel =
+            conflict.kind === 'address'
+              ? shortAddressLabel(pending.content)
+              : shortDrinkLabel(pending.content);
           updatePending.run(
             content,
             evidence,
@@ -572,6 +576,10 @@ export function applyOps(characterId: string, ops: ExtractOp[]): ApplyResult {
             pending.id,
             characterId,
           );
+          // Same-kind pending already open: only re-ask if the proposed label changed.
+          if (prevLabel !== newLabel) {
+            newPendings.push({ kind: conflict.kind, oldLabel, newLabel });
+          }
         } else {
           const newId = randomUUID();
           insertPending.run(
@@ -610,6 +618,8 @@ export function applyOps(characterId: string, ops: ExtractOp[]): ApplyResult {
         at,
         at,
       );
+      autoSupersedeAddressConflicts(characterId, newId, content, at);
+      autoSupersedeDrinkConflicts(characterId, newId, content, at);
       activatedContents.push(content);
     }
     enforceActiveCap(characterId);
@@ -911,6 +921,8 @@ export function resolvePendingMemoryConfirm(
            WHERE id = ? AND character_id = ? AND status = 'active'`,
         ).run(at, p.supersedes, characterId);
       }
+      autoSupersedeAddressConflicts(characterId, p.id, p.content, at);
+      autoSupersedeDrinkConflicts(characterId, p.id, p.content, at);
       enqueueMemoryNotice(characterId, conversationId, [p.content]);
       resolved = true;
       continue;

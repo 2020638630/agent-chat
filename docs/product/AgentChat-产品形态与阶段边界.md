@@ -252,3 +252,9 @@ Agent Chat 是一个**多角色 AI 社交客户端**：用户导入角色卡后�
 **ARCH-1 扫描补 6 项：** 模型入口与 .env 绑定；主动/空间结算隐式耦合；记忆链路失败与空泡；App.vue 体量与状态交叉；uploads/SQLite 增长与清理；未 push/stash 残留与双机 .env 漂移。
 
 2026-10-10 试跑线实跑：`scripts/arch2-tryrun.py` — DeepSeek 官方文本通；硅基 Qwen3-VL 读图通；Gemini TTS 缺 `GEMINI_API_KEY` 不通。ARCH-2 真关单否。
+
+### X-05（2026-10-11）
+
+- **口径：部分收口。** 复盘过召回/冲突确认边角；小修 F1–F3（显式认领 \s 正则、utoSupersede* 接线、pending 标签变化重问）。
+- 续债见 docs/product/X-05-记忆体验债复盘.md；问题表已立 **X05-D1**（确认快捷按钮，P1）。
+- N-02 / Gemini TTS 未动。
