@@ -13,7 +13,7 @@
  */
 
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { api, type Character, type ChatMessage, type Conversation, type MemoryNote, type Profile } from './api/client';
+import { api, type ChatMessage, type Conversation } from './api/client';
 import { useHoldToTalk } from './composables/useHoldToTalk';
 import { useMoments } from './composables/useMoments';
 import { usePersonaEditor } from './composables/usePersonaEditor';
@@ -23,21 +23,12 @@ import { useMessageReactions } from './composables/useMessageReactions';
 import { useUnread } from './composables/useUnread';
 import { useAppShell } from './composables/useAppShell';
 import { useChatSession } from './composables/useChatSession';
+import { useProfileAppearance } from './composables/useProfileAppearance';
+import { useContactsImport } from './composables/useContactsImport';
 import { EMOJI_WHITELIST } from './constants/emojiWhitelist';
-import {
-  THEME_PRESETS,
-  DEFAULT_THEME,
-  DEFAULT_BG_OPACITY,
-  DEFAULT_SPACE_BG_OPACITY,
-  normalizeThemeId,
-  clampBgOpacity,
-  type ThemeId,
-} from './constants/themes';
 
 
-const characters = ref<Character[]>([]);
-
-// D-02 P0: late-bound bridges so shell/chat can close over App helpers defined below.
+// D-02 P0/P1: late-bound bridges so shell/chat/profile/contacts can close over helpers below.
 let openConversation!: (id: string) => Promise<void>;
 let deleteConversationById!: (id: string, title: string) => Promise<boolean>;
 let markReadOnOpen!: (conversationId: string) => void;
@@ -45,6 +36,14 @@ let closeProfile!: () => Promise<void>;
 let scheduleMemoryWhisper!: (characterId: string, conversationId?: string) => void;
 let clearUnreadMemoryNotices!: (characterId: string, conversationId?: string) => Promise<void>;
 let conversations!: import('vue').Ref<Conversation[]>;
+let applyProfileMoments!: (list: import('./api/client').Moment[]) => void;
+let loadProactiveSettings!: () => Promise<void>;
+let refreshConversations!: () => Promise<void>;
+let startPrivate!: (characterId: string) => Promise<void>;
+let refreshMoments!: () => Promise<void>;
+let refreshCharacters!: () => Promise<void>;
+let activeConversationId!: import('vue').Ref<string | null>;
+let messages!: import('vue').Ref<ChatMessage[]>;
 const {
   holding: voiceHolding,
   recording: voiceRecording,
@@ -69,30 +68,101 @@ const {
     status.value = msg;
   },
 });
-const selectedForGroup = ref<string[]>([]);
-const creatingGroup = ref(false);
-const groupTitleDraft = ref('');
-const groupSearch = ref('');
-const contactMenuId = ref<string | null>(null);
-const fileInput = ref<HTMLInputElement | null>(null);
-const pendingOverwriteImport = ref<{ file: File; name: string } | null>(null);
-const pendingDeleteCharacter = ref<{ id: string; name: string } | null>(null);
-
-type ProfileView = null | { kind: 'user' } | { kind: 'character'; id: string };
-const profileView = ref<ProfileView>(null);
-const profile = ref<Profile | null>(null);
-const meProfile = ref<Profile | null>(null);
-const mediaBusy = ref(false);
-const uiTheme = ref<ThemeId>(DEFAULT_THEME);
-const uiBgOpacity = ref(DEFAULT_BG_OPACITY);
-const uiSpaceBgOpacity = ref(DEFAULT_SPACE_BG_OPACITY);
-const appearanceBusy = ref(false);
-const avatarFileInput = ref<HTMLInputElement | null>(null);
-const bgFileInput = ref<HTMLInputElement | null>(null);
-const spaceBgFileInput = ref<HTMLInputElement | null>(null);
 const setStatus = (msg: string) => {
   status.value = msg;
 };
+
+const {
+  profileView,
+  profile,
+  meProfile,
+  mediaBusy,
+  uiTheme,
+  uiBgOpacity,
+  uiSpaceBgOpacity,
+  appearanceBusy,
+  avatarFileInput,
+  bgFileInput,
+  spaceBgFileInput,
+  profileMemories,
+  profileLoading,
+  profileEditing,
+  editMood,
+  editBio,
+  THEME_PRESETS,
+  closeProfile: closeProfileImpl,
+  selectTheme,
+  onBgOpacityInput,
+  onBgOpacityCommit,
+  onSpaceBgOpacityInput,
+  onSpaceBgOpacityCommit,
+  refreshMeProfile,
+  onAvatarFileChange,
+  onBgFileChange,
+  onSpaceBgFileChange,
+  clearAvatar,
+  clearBg,
+  clearSpaceBg,
+  openMyProfile,
+  openCharacterProfile,
+  saveMyProfile,
+  messageFromProfile,
+  onMsgAvatarClick,
+} = useProfileAppearance({
+  setStatus,
+  applyProfileMoments: (list) => applyProfileMoments(list),
+  loadProactiveSettings: () => loadProactiveSettings(),
+  refreshCharacters: () => refreshCharacters(),
+  refreshConversations: () => refreshConversations(),
+  startPrivate: (id) => startPrivate(id),
+});
+closeProfile = closeProfileImpl;
+
+const {
+  characters,
+  selectedForGroup,
+  creatingGroup,
+  groupTitleDraft,
+  groupSearch,
+  contactMenuId,
+  fileInput,
+  pendingOverwriteImport,
+  pendingDeleteCharacter,
+  groupPickableCharacters,
+  refreshCharacters: refreshCharactersImpl,
+  openGroupCreator,
+  cancelGroupCreator,
+  toggleGroupPick,
+  toggleContactMenu,
+  createGroup,
+  onImport,
+  askDeleteCharacter,
+  cancelDeleteCharacter,
+  confirmDeleteCharacter,
+  cancelOverwriteImport,
+  confirmOverwriteImport,
+  onLeaveContactsTab,
+} = useContactsImport({
+  setStatus,
+  profileView,
+  closeProfile: () => closeProfile(),
+  refreshConversations: () => refreshConversations(),
+  openConversation: (id) => openConversation(id),
+  refreshMoments: () => refreshMoments(),
+  clearOpenPrivateChatIfPeer: (characterId: string) => {
+    const open = conversations.value.find((c) => c.id === activeConversationId.value);
+    if (
+      open &&
+      open.type === 'private' &&
+      open.members?.length === 1 &&
+      open.members[0].id === characterId
+    ) {
+      activeConversationId.value = null;
+      messages.value = [];
+    }
+  },
+});
+refreshCharacters = refreshCharactersImpl;
 
 const {
   tab,
@@ -122,8 +192,8 @@ const {
 
 const {
   conversations: conversationsRef,
-  messages,
-  activeConversationId,
+  messages: messagesRef,
+  activeConversationId: activeConversationIdRef,
   activeConversation,
   draft,
   draftInput,
@@ -138,9 +208,9 @@ const {
   imageBusy,
   lightboxUrl,
   privatePeer,
-  refreshConversations,
+  refreshConversations: refreshConversationsImpl,
   openConversation: openConversationImpl,
-  startPrivate,
+  startPrivate: startPrivateImpl,
   toggleEmojiPicker,
   closeEmojiPicker,
   insertEmoji,
@@ -176,8 +246,12 @@ const {
   isVoiceActive: () => voiceActive.value,
 });
 conversations = conversationsRef;
+messages = messagesRef;
+activeConversationId = activeConversationIdRef;
 openConversation = openConversationImpl;
 deleteConversationById = deleteConversationByIdImpl;
+refreshConversations = refreshConversationsImpl;
+startPrivate = startPrivateImpl;
 
 const { totalUnread, markReadOnOpen: markReadOnOpenImpl, hasUnread, badgeText } = useUnread(conversations);
 markReadOnOpen = markReadOnOpenImpl;
@@ -199,14 +273,15 @@ const {
   proactiveInQuiet,
   proactiveQuietStart,
   proactiveQuietEnd,
-  loadProactiveSettings,
+  loadProactiveSettings: loadProactiveSettingsImpl,
   toggleProactiveEnabled,
 } = useProactiveSettings({ setStatus });
+loadProactiveSettings = loadProactiveSettingsImpl;
 
 const {
   moments,
   profileMoments,
-  applyProfileMoments,
+  applyProfileMoments: applyProfileMomentsImpl,
   momentsFilterId,
   commentDrafts,
   momentMenuId,
@@ -224,7 +299,7 @@ const {
   filteredMoments,
   setMomentsFilter,
   clearMomentsFilter,
-  refreshMoments,
+  refreshMoments: refreshMomentsImpl,
   toggleLikeList,
   openMomentComposer,
   closeMomentComposer,
@@ -247,6 +322,8 @@ const {
   openMyProfile: () => openMyProfile(),
   openCharacterProfile: (id: string) => openCharacterProfile(id),
 });
+applyProfileMoments = applyProfileMomentsImpl;
+refreshMoments = refreshMomentsImpl;
 
 const {
   personaEditorOpen,
@@ -269,7 +346,6 @@ const {
   },
 });
 
-const profileMemories = ref<MemoryNote[]>([]);
 const memoryWhisperText = ref('记下了');
 const memoryWhisperVisible = ref(false);
 const memoryWhisperOpaque = ref(false);
@@ -280,22 +356,6 @@ let whisperFadeTimer: ReturnType<typeof setTimeout> | null = null;
 let memoryHighlightTimer: ReturnType<typeof setTimeout> | null = null;
 let whisperPollTimers: ReturnType<typeof setTimeout>[] = [];
 let whisperPollGen = 0;
-const profileLoading = ref(false);
-const profileEditing = ref(false);
-const editMood = ref('');
-const editBio = ref('');
-
-
-
-const groupPickableCharacters = computed(() => {
-  const q = groupSearch.value.trim().toLowerCase();
-  if (!q) return characters.value;
-  return characters.value.filter((ch) => {
-    const name = (ch.name || '').toLowerCase();
-    const desc = (ch.description || '').toLowerCase();
-    return name.includes(q) || desc.includes(q);
-  });
-});
 
 function avatarText(name?: string) {
   return (name || '?').slice(0, 1);
@@ -427,204 +487,6 @@ function headerStatus(c: Conversation | null) {
 }
 
 
-closeProfile = async () => {
-  profileView.value = null;
-  profile.value = null;
-  profileMemories.value = [];
-  profileEditing.value = false;
-};
-
-function applyAppearanceToDom() {
-  document.documentElement.setAttribute('data-theme', uiTheme.value);
-  document.documentElement.style.setProperty('--user-bg-opacity', String(uiBgOpacity.value));
-  document.documentElement.style.setProperty('--user-space-bg-opacity', String(uiSpaceBgOpacity.value));
-}
-
-function syncAppearanceFromProfile(p: Profile | null | undefined) {
-  if (!p || p.kind !== 'user') return;
-  uiTheme.value = normalizeThemeId(p.theme);
-  uiBgOpacity.value = clampBgOpacity(p.bg_opacity, DEFAULT_BG_OPACITY);
-  uiSpaceBgOpacity.value = clampBgOpacity(p.space_bg_opacity, DEFAULT_SPACE_BG_OPACITY);
-  applyAppearanceToDom();
-}
-
-async function persistAppearance(partial: {
-  theme?: ThemeId;
-  bg_opacity?: number;
-  space_bg_opacity?: number;
-}) {
-  appearanceBusy.value = true;
-  try {
-    const res = await api.updateMyProfile(partial);
-    meProfile.value = res.profile;
-    if (profileView.value?.kind === 'user') profile.value = res.profile;
-    syncAppearanceFromProfile(res.profile);
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    appearanceBusy.value = false;
-  }
-}
-
-
-async function selectTheme(id: ThemeId) {
-  uiTheme.value = id;
-  applyAppearanceToDom();
-  await persistAppearance({ theme: id });
-}
-
-async function onBgOpacityInput(ev: Event) {
-  const v = clampBgOpacity((ev.target as HTMLInputElement).valueAsNumber, DEFAULT_BG_OPACITY);
-  uiBgOpacity.value = v;
-  applyAppearanceToDom();
-}
-
-async function onBgOpacityCommit() {
-  await persistAppearance({ bg_opacity: uiBgOpacity.value });
-}
-
-async function onSpaceBgOpacityInput(ev: Event) {
-  const v = clampBgOpacity((ev.target as HTMLInputElement).valueAsNumber, DEFAULT_SPACE_BG_OPACITY);
-  uiSpaceBgOpacity.value = v;
-  applyAppearanceToDom();
-}
-
-async function onSpaceBgOpacityCommit() {
-  await persistAppearance({ space_bg_opacity: uiSpaceBgOpacity.value });
-}
-
-async function refreshMeProfile() {
-  try {
-    const res = await api.getMyProfile();
-    meProfile.value = res.profile;
-    syncAppearanceFromProfile(res.profile);
-  } catch {
-    /* keep previous */
-  }
-}
-
-async function applyProfileMedia(next: Profile) {
-  profile.value = next;
-  if (next.kind === 'user') {
-    meProfile.value = next;
-    syncAppearanceFromProfile(next);
-  } else {
-    await refreshCharacters();
-    await refreshConversations();
-  }
-}
-
-async function onAvatarFileChange(ev: Event) {
-  const input = ev.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = '';
-  if (!file || !profileView.value) return;
-  mediaBusy.value = true;
-  status.value = '上传头像…';
-  try {
-    const res =
-      profileView.value.kind === 'user'
-        ? await api.uploadMyAvatar(file)
-        : await api.uploadCharacterAvatar(profileView.value.id, file);
-    await applyProfileMedia(res.profile);
-    status.value = '头像已更新';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    mediaBusy.value = false;
-  }
-}
-
-async function onBgFileChange(ev: Event) {
-  const input = ev.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = '';
-  if (!file || !profileView.value) return;
-  mediaBusy.value = true;
-  status.value = '上传背景…';
-  try {
-    const res =
-      profileView.value.kind === 'user'
-        ? await api.uploadMyBg(file)
-        : await api.uploadCharacterBg(profileView.value.id, file);
-    await applyProfileMedia(res.profile);
-    status.value = '背景已更新';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    mediaBusy.value = false;
-  }
-}
-
-async function onSpaceBgFileChange(ev: Event) {
-  const input = ev.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = '';
-  if (!file) return;
-  mediaBusy.value = true;
-  status.value = '上传空间封面…';
-  try {
-    const res = await api.uploadSpaceBg(file);
-    meProfile.value = res.profile;
-    if (profileView.value?.kind === 'user' && profile.value) {
-      profile.value = { ...profile.value, space_bg_path: res.profile.space_bg_path };
-    }
-    status.value = '空间封面已更新';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    mediaBusy.value = false;
-  }
-}
-
-async function clearAvatar() {
-  if (!profileView.value) return;
-  mediaBusy.value = true;
-  try {
-    const res =
-      profileView.value.kind === 'user'
-        ? await api.clearMyAvatar()
-        : await api.clearCharacterAvatar(profileView.value.id);
-    await applyProfileMedia(res.profile);
-    status.value = '已恢复默认头像';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    mediaBusy.value = false;
-  }
-}
-
-async function clearBg() {
-  if (!profileView.value) return;
-  mediaBusy.value = true;
-  try {
-    const res =
-      profileView.value.kind === 'user'
-        ? await api.clearMyBg()
-        : await api.clearCharacterBg(profileView.value.id);
-    await applyProfileMedia(res.profile);
-    status.value = '已恢复默认背景';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    mediaBusy.value = false;
-  }
-}
-
-async function clearSpaceBg() {
-  mediaBusy.value = true;
-  try {
-    const res = await api.clearSpaceBg();
-    meProfile.value = res.profile;
-    status.value = '已恢复默认空间封面';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    mediaBusy.value = false;
-  }
-}
-
-
 function clearWhisperTimers() {
   if (whisperDelayTimer) {
     clearTimeout(whisperDelayTimer);
@@ -747,218 +609,6 @@ function headerAvatar(c: Conversation | null | undefined) {
   return null;
 }
 
-async function openMyProfile() {
-  profileLoading.value = true;
-  profileView.value = { kind: 'user' };
-  profileEditing.value = false;
-  try {
-    const res = await api.getMyProfile();
-    profile.value = res.profile;
-    meProfile.value = res.profile;
-    applyProfileMoments(res.moments || []);
-    editMood.value = res.profile.mood || '';
-    editBio.value = res.profile.bio || '';
-    syncAppearanceFromProfile(res.profile);
-    status.value = '';
-    await loadProactiveSettings();
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    profileLoading.value = false;
-  }
-}
-
-async function openCharacterProfile(id: string) {
-  if (!id) return;
-  profileLoading.value = true;
-  profileView.value = { kind: 'character', id };
-  profileMemories.value = [];
-  try {
-    const mem = await api.listCharacterMemories(id);
-    profileMemories.value = (mem.memories || []).slice(0, 6);
-  } catch {
-    profileMemories.value = [];
-  }
-  profileEditing.value = false;
-  try {
-    const res = await api.getCharacterProfile(id);
-    profile.value = res.profile;
-    applyProfileMoments(res.moments || []);
-    status.value = '';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    profileLoading.value = false;
-  }
-}
-
-async function saveMyProfile() {
-  try {
-    const res = await api.updateMyProfile({
-      mood: editMood.value,
-      bio: editBio.value,
-    });
-    profile.value = res.profile;
-    meProfile.value = res.profile;
-    profileEditing.value = false;
-    status.value = '已保存';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
-async function messageFromProfile() {
-  if (profileView.value?.kind !== 'character') return;
-  const id = profileView.value.id;
-  await closeProfile();
-  await startPrivate(id);
-}
-
-function onMsgAvatarClick(m: ChatMessage) {
-  if (m.role === 'user') {
-    void openMyProfile();
-    return;
-  }
-  if (m.character_id) void openCharacterProfile(m.character_id);
-}
-
-async function refreshCharacters() {
-  const res = await api.listCharacters();
-  characters.value = res.characters;
-}
-
-function openGroupCreator() {
-  creatingGroup.value = true;
-  selectedForGroup.value = [];
-  groupTitleDraft.value = '';
-  groupSearch.value = '';
-  contactMenuId.value = null;
-  status.value = '';
-}
-
-function cancelGroupCreator() {
-  creatingGroup.value = false;
-  selectedForGroup.value = [];
-  groupTitleDraft.value = '';
-  groupSearch.value = '';
-  status.value = '';
-}
-
-function toggleGroupPick(id: string) {
-  const list = selectedForGroup.value;
-  const i = list.indexOf(id);
-  if (i >= 0) list.splice(i, 1);
-  else list.push(id);
-}
-
-function toggleContactMenu(id: string) {
-  contactMenuId.value = contactMenuId.value === id ? null : id;
-}
-
-async function createGroup() {
-  if (selectedForGroup.value.length < 2) {
-    status.value = '请至少选择 2 名角色';
-    return;
-  }
-  const title = groupTitleDraft.value.trim() || undefined;
-  try {
-    const { conversation } = await api.createConversation(selectedForGroup.value, title, 'group');
-    creatingGroup.value = false;
-    selectedForGroup.value = [];
-    groupTitleDraft.value = '';
-    groupSearch.value = '';
-    await refreshConversations();
-    await openConversation(conversation.id);
-    status.value = '';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
-async function runCharacterImport(file: File, overwrite = false) {
-  status.value = overwrite ? '正在覆盖人设…' : '正在导入…';
-  const res = await api.importCharacter(file, { overwrite });
-  if ('conflict' in res && res.conflict) {
-    pendingOverwriteImport.value = {
-      file,
-      name: res.existing?.name || '该角色',
-    };
-    status.value = '';
-    return;
-  }
-  pendingOverwriteImport.value = null;
-  await refreshCharacters();
-  status.value = res.overwritten
-    ? `已覆盖「${res.character.name}」的人设（聊天记录保留）`
-    : `已导入：${res.character.name}`;
-}
-
-async function onImport(e: Event) {
-  const input = e.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
-  try {
-    await runCharacterImport(file, false);
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    input.value = '';
-  }
-}
-
-
-function askDeleteCharacter(id: string, name: string) {
-  contactMenuId.value = null;
-  pendingDeleteCharacter.value = { id, name };
-}
-
-function cancelDeleteCharacter() {
-  pendingDeleteCharacter.value = null;
-}
-
-async function confirmDeleteCharacter() {
-  const pending = pendingDeleteCharacter.value;
-  if (!pending) return;
-  try {
-    await api.deleteCharacter(pending.id);
-    pendingDeleteCharacter.value = null;
-    if (profileView.value?.kind === 'character' && profileView.value.id === pending.id) {
-      await closeProfile();
-    }
-    // clear open private chat with this character
-    const open = conversations.value.find((c) => c.id === activeConversationId.value);
-    if (
-      open &&
-      open.type === 'private' &&
-      open.members?.length === 1 &&
-      open.members[0].id === pending.id
-    ) {
-      activeConversationId.value = null;
-      messages.value = [];
-    }
-    await Promise.all([refreshCharacters(), refreshConversations(), refreshMoments()]);
-    status.value = `已删除角色「${pending.name}」`;
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
-function cancelOverwriteImport() {
-  pendingOverwriteImport.value = null;
-  status.value = '已取消覆盖导入';
-}
-
-async function confirmOverwriteImport() {
-  const pending = pendingOverwriteImport.value;
-  if (!pending) return;
-  try {
-    await runCharacterImport(pending.file, true);
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-    pendingOverwriteImport.value = null;
-  }
-}
-
 
 async function onVoicePointerDown(e: PointerEvent) {
   e.preventDefault();
@@ -1031,8 +681,7 @@ function isVoiceBubble(m: ChatMessage) {
 
 watch(tab, (t) => {
   if (t !== 'contacts') {
-    creatingGroup.value = false;
-    contactMenuId.value = null;
+    onLeaveContactsTab();
   }
   if (t !== 'moments') {
     clearMomentsFilter();
