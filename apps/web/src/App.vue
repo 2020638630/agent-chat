@@ -4,7 +4,8 @@
  *
  * Layout: left nav → mid list (chat / contacts / space tools) → main pane
  * (profile | moments feed | conversation). Talks to apps/server via ./api/client.
- * Composables: useHoldToTalk, useMoments, usePersonaEditor, useProactiveSettings (ARCH-3);
+ * Composables: useHoldToTalk, useMoments, usePersonaEditor, useProactiveSettings (ARCH-3),
+ * useTtsPlayback (X-06);
  * Motion tokens: constants/motion.ts + --motion-* CSS vars (UI-1 foundation);
  * styles in ./styles/wechat.css.
  */
@@ -15,6 +16,7 @@ import { useHoldToTalk } from './composables/useHoldToTalk';
 import { useMoments } from './composables/useMoments';
 import { usePersonaEditor } from './composables/usePersonaEditor';
 import { useProactiveSettings } from './composables/useProactiveSettings';
+import { useTtsPlayback } from './composables/useTtsPlayback';
 import { EMOJI_WHITELIST } from './constants/emojiWhitelist';
 import {
   THEME_PRESETS,
@@ -51,10 +53,17 @@ const voiceBusy = ref(false);
 const voiceCancelHint = ref(false);
 let voicePointerStartY = 0;
 let voiceWillCancel = false;
-const ttsPlayingId = ref<string | null>(null);
-const ttsLoadingId = ref<string | null>(null);
-let ttsAudio: HTMLAudioElement | null = null;
 const status = ref('');
+const {
+  playingId: ttsPlayingId,
+  loadingId: ttsLoadingId,
+  progressRatio: ttsProgressRatio,
+  play: playTts,
+} = useTtsPlayback({
+  setStatus: (msg) => {
+    status.value = msg;
+  },
+});
 const selectedForGroup = ref<string[]>([]);
 const creatingGroup = ref(false);
 const groupTitleDraft = ref('');
@@ -1113,43 +1122,6 @@ function isVoiceBubble(m: ChatMessage) {
   return m.source === 'voice';
 }
 
-async function playTts(m: ChatMessage) {
-  if (ttsPlayingId.value === m.id && ttsAudio) {
-    ttsAudio.pause();
-    ttsAudio = null;
-    ttsPlayingId.value = null;
-    ttsLoadingId.value = null;
-    return;
-  }
-  if (ttsAudio) {
-    ttsAudio.pause();
-    ttsAudio = null;
-  }
-  ttsLoadingId.value = m.id;
-  ttsPlayingId.value = null;
-  try {
-    const url = api.messageTtsUrl(m.id) + '?t=' + Date.now();
-    const audio = new Audio(url);
-    ttsAudio = audio;
-    audio.onended = () => {
-      if (ttsPlayingId.value === m.id) ttsPlayingId.value = null;
-      ttsAudio = null;
-    };
-    audio.onerror = () => {
-      status.value = '朗读失败，请检查 TTS 配置';
-      ttsPlayingId.value = null;
-      ttsLoadingId.value = null;
-      ttsAudio = null;
-    };
-    await audio.play();
-    ttsLoadingId.value = null;
-    ttsPlayingId.value = m.id;
-  } catch (err) {
-    ttsLoadingId.value = null;
-    status.value = err instanceof Error ? err.message : '朗读失败';
-  }
-}
-
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
@@ -2072,8 +2044,9 @@ onUnmounted(() => {
                           type="button"
                           class="wx-voice-bubble"
                           :class="{ playing: ttsPlayingId === m.id, loading: ttsLoadingId === m.id }"
+                          :style="ttsPlayingId === m.id ? { '--tts-progress': `${Math.round(ttsProgressRatio * 1000) / 10}%` } : undefined"
                           :aria-label="ttsLoadingId === m.id ? '语音加载中' : ttsPlayingId === m.id ? '暂停语音' : '播放语音'"
-                          @click="playTts(m)"
+                          @click="playTts(m.id)"
                         >
                           <span class="wx-voice-play" aria-hidden="true"></span>
                           <span class="wx-voice-main" aria-hidden="true">
@@ -2093,7 +2066,7 @@ onUnmounted(() => {
                             type="button"
                             title="朗读"
                             :disabled="ttsLoadingId === m.id"
-                            @click="playTts(m)"
+                            @click="playTts(m.id)"
                           >
                             {{ ttsLoadingId === m.id ? '…' : ttsPlayingId === m.id ? '■' : '♪' }}
                           </button>

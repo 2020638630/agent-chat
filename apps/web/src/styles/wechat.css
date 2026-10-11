@@ -1758,17 +1758,13 @@ select {
   background: var(--accent-deep);
 }
 .wx-voice-bubble.playing .wx-voice-progress-bar {
-  /* UI-4 选 A：装饰性假进度，真 currentTime 留给 X-06 */
-  animation: wx-voice-fake-progress 4.8s var(--motion-easing-standard) infinite;
+  /* X-06: real progress via --tts-progress (bound from progressRatio) */
+  width: var(--tts-progress, 0%);
+  transition: width 0.1s linear;
 }
 .wx-voice-bubble.loading .wx-voice-progress-bar {
   width: 36%;
   animation: wx-voice-indeterminate 1.2s var(--motion-easing-standard) infinite;
-}
-@keyframes wx-voice-fake-progress {
-  0% { width: 0%; }
-  85% { width: 90%; }
-  100% { width: 0%; }
 }
 @keyframes wx-voice-indeterminate {
   0% { transform: translateX(-120%); }
