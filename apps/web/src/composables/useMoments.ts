@@ -1,6 +1,6 @@
 /**
  * Moments / space feed state: list, filter, composer (with image), like/comment/delete.
- * Extracted from App.vue for ARCH-3 (D-02); no product logic change.
+ * Extracted from App.vue for ARCH-3 (D-02). profileMoments derived from same moments feed (D-02 merge).
  */
 import { computed, reactive, ref, type Ref } from 'vue';
 import { api, type Character, type Moment } from '../api/client';
@@ -20,13 +20,33 @@ export function useMoments(opts: {
   setStatus: (msg: string) => void;
   characters: Ref<Character[]>;
   profileView: Ref<ProfileView>;
-  profileMoments: Ref<Moment[]>;
   tab: Ref<string>;
   openMyProfile: () => void | Promise<void>;
   openCharacterProfile: (id: string) => void | Promise<void>;
 }) {
   const moments = ref<Moment[]>([]);
   const momentsFilterId = ref<string | null>(null);
+
+  /** Upsert profile/API moments into the single feed (no dual-write). */
+  function applyProfileMoments(list: Moment[]) {
+    if (!list.length) return;
+    const byId = new Map(moments.value.map((m) => [m.id, m] as const));
+    for (const m of list) byId.set(m.id, m);
+    const had = new Set(moments.value.map((m) => m.id));
+    const incoming = list.filter((m) => !had.has(m.id));
+    moments.value = [...incoming, ...moments.value.map((m) => byId.get(m.id)!)];
+  }
+
+  /** Profile page list: same source as space feed, filtered + sorted. */
+  const profileMoments = computed(() => {
+    const pv = opts.profileView.value;
+    if (!pv) return [];
+    const list =
+      pv.kind === 'user'
+        ? moments.value.filter((m) => m.author_kind === 'user' || !m.character_id)
+        : moments.value.filter((m) => m.character_id === pv.id);
+    return [...list].sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+  });
   const commentDrafts = reactive<Record<string, string>>({});
   const momentMenuId = ref<string | null>(null);
   const pendingDeleteMoment = ref<Moment | null>(null);
@@ -143,12 +163,6 @@ export function useMoments(opts: {
     try {
       const res = await api.createMyMoment(text, momentImageFile.value);
       moments.value = [res.moment, ...moments.value.filter((m) => m.id !== res.moment.id)];
-      if (opts.profileView.value?.kind === 'user') {
-        opts.profileMoments.value = [
-          res.moment,
-          ...opts.profileMoments.value.filter((m) => m.id !== res.moment.id),
-        ];
-      }
       closeMomentComposer();
       opts.setStatus('\u52a8\u6001\u5df2\u53d1\u5e03');
     } catch (err) {
@@ -197,7 +211,6 @@ export function useMoments(opts: {
     try {
       await api.deleteMoment(m.id);
       moments.value = moments.value.filter((x) => x.id !== m.id);
-      opts.profileMoments.value = opts.profileMoments.value.filter((x) => x.id !== m.id);
       delete commentDrafts[m.id];
       opts.setStatus('\u52a8\u6001\u5df2\u5220\u9664');
       pendingDeleteMoment.value = null;
@@ -211,6 +224,7 @@ export function useMoments(opts: {
       const res = await api.likeMoment(m.id);
       const idx = moments.value.findIndex((x) => x.id === m.id);
       if (idx >= 0) moments.value[idx] = res.moment;
+      else moments.value = [res.moment, ...moments.value];
     } catch (err) {
       opts.setStatus(err instanceof Error ? err.message : String(err));
     }
@@ -224,6 +238,7 @@ export function useMoments(opts: {
       commentDrafts[m.id] = '';
       const idx = moments.value.findIndex((x) => x.id === m.id);
       if (idx >= 0) moments.value[idx] = res.moment;
+      else moments.value = [res.moment, ...moments.value];
     } catch (err) {
       opts.setStatus(err instanceof Error ? err.message : String(err));
     }
@@ -231,6 +246,8 @@ export function useMoments(opts: {
 
   return {
     moments,
+    profileMoments,
+    applyProfileMoments,
     momentsFilterId,
     commentDrafts,
     momentMenuId,

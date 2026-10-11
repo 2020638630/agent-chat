@@ -87,6 +87,8 @@
 - **备注（UI-3 2026-10-10）**：红点/角标仅 Transition wx-motion-badge 纯 CSS；C-03 未读状态仍在 App.vue，未搬、未建 useUnread。
 - **备注（收尾 2026-10-10）**：红点/未读状态（`conversations[].unread_count` + `totalUnread`）仍在 `App.vue`；未来收 D-02 时要抽 composable（UI-3 顺手发现，勿忘）。D-02 仍记**部分收口**，不追全收。
 - **备注（D-02 未读抽离 2026-10-11）：** C-03 未读已抽到 `useUnread`（`totalUnread` + `markReadOnOpen` + badge helpers）；App 只渲染；UI-3 `wx-motion-badge` 动效保留。记忆 whisper notices 仍在 App。D-02 仍记部分收口（下一段再合 `profileMoments` / `useMoments`）。
+- **备注（D-02 profileMoments 合并 2026-10-11）：** `profileMoments` 已并入 `useMoments`：主页动态与空间 feed 同一 `moments` 源；`profileMoments` 为按 `profileView` 过滤的 computed；资料接口结果经 `applyProfileMoments` upsert，无双写。未读此前已抽 `useUnread`。D-02 仍记**部分收口**（聊天/资料外观/壳层等仍在 App.vue），不追全收。
+
 
 ### D-03 `conversations` 路由承载业务编排
 - **位置**：`apps/server/src/routes/conversations.ts`（约 864 行）

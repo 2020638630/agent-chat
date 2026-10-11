@@ -12,7 +12,7 @@
  */
 
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-import { api, type Character, type ChatMessage, type Conversation, type MemoryNote, type Moment, type Profile } from './api/client';
+import { api, type Character, type ChatMessage, type Conversation, type MemoryNote, type Profile } from './api/client';
 import { useHoldToTalk } from './composables/useHoldToTalk';
 import { useMoments } from './composables/useMoments';
 import { usePersonaEditor } from './composables/usePersonaEditor';
@@ -111,8 +111,6 @@ const spaceBgFileInput = ref<HTMLInputElement | null>(null);
 const chatImageInput = ref<HTMLInputElement | null>(null);
 const imageBusy = ref(false);
 const lightboxUrl = ref<string | null>(null);
-const profileMoments = ref<Moment[]>([]);
-
 const setStatus = (msg: string) => {
   status.value = msg;
 };
@@ -131,6 +129,8 @@ const {
 
 const {
   moments,
+  profileMoments,
+  applyProfileMoments,
   momentsFilterId,
   commentDrafts,
   momentMenuId,
@@ -167,7 +167,6 @@ const {
   setStatus,
   characters,
   profileView,
-  profileMoments,
   tab,
   openMyProfile: () => openMyProfile(),
   openCharacterProfile: (id: string) => openCharacterProfile(id),
@@ -364,7 +363,6 @@ function headerStatus(c: Conversation | null) {
 async function closeProfile() {
   profileView.value = null;
   profile.value = null;
-  profileMoments.value = [];
   profileMemories.value = [];
   profileEditing.value = false;
 }
@@ -702,7 +700,7 @@ async function openMyProfile() {
     const res = await api.getMyProfile();
     profile.value = res.profile;
     meProfile.value = res.profile;
-    profileMoments.value = res.moments || [];
+    applyProfileMoments(res.moments || []);
     editMood.value = res.profile.mood || '';
     editBio.value = res.profile.bio || '';
     syncAppearanceFromProfile(res.profile);
@@ -730,7 +728,7 @@ async function openCharacterProfile(id: string) {
   try {
     const res = await api.getCharacterProfile(id);
     profile.value = res.profile;
-    profileMoments.value = res.moments || [];
+    applyProfileMoments(res.moments || []);
     status.value = '';
   } catch (err) {
     status.value = err instanceof Error ? err.message : String(err);

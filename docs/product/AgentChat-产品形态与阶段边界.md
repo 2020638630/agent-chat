@@ -217,7 +217,7 @@ Agent Chat 是一个**多角色 AI 社交客户端**：用户导入角色卡后�
 
 2026-10-10：前四刀管道侧已交（ARCH-1 / M-05a / X-01 / ARCH-2 管道）。**ARCH-2 真关单待试跑线**（DeepSeek 文本 / 官方 VLM 读图 / Gemini TTS）。试跑线是 ARCH-2 验收标准，不是独立刀。N-02 不动；读图 VLM 债 / B-04d 在试跑线还。
 
-**下一顺序：D-02 `profileMoments` 与 `useMoments` 合并（未读已抽 `useUnread`；UI-5/UI-6 已关）；Gemini TTS 挂债维持；N-02 仍不动；D-02 仍部分收口。**
+**下一顺序：D-02 部分收口已推进（未读已抽 `useUnread`，`profileMoments` 已合入 `useMoments`）；Gemini TTS 挂债维持；N-02 仍不动；D-02 仍部分收口。
 
 | ID | 状态意向 | 说明 |
 | -- | -------- | ---- |
@@ -247,7 +247,7 @@ Agent Chat 是一个**多角色 AI 社交客户端**：用户导入角色卡后�
 | UI-3 | 已处理 | 红点/未读动效（纯 CSS Transition） |
 | UI-4 | 已处理（tip 08d4050） | 语音气泡视觉：波形+播放/暂停外观+装饰假进度（选 A 纯 CSS；复用 ttsPlayingId/ttsLoadingId；真进度留给 X-06） |
 | UI-5 | 已处理 | Reaction：多表情 + 微动效（消息菜单快捷条 + 气泡下 chips；`useMessageReactions`；后端 `message_reactions` + toggle；CSS `wx-motion-react`） |
-| UI-6 | P3 | 群聊活跃感：角色头像浮动、正在输入 |
+| UI-6 | 已处理 | 群聊活跃感：角色头像浮动、正在输入 |
 
 **ARCH-1 扫描补 6 项：** 模型入口与 .env 绑定；主动/空间结算隐式耦合；记忆链路失败与空泡；App.vue 体量与状态交叉；uploads/SQLite 增长与清理；未 push/stash 残留与双机 .env 漂移。
 
