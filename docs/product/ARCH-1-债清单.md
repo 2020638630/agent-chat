@@ -91,7 +91,19 @@
 - **备注（D-02 P0 专项 2026-10-11）：** 抽出 useAppShell（tab / menuOpen / swipe* / listCtx* / midTitle）与 useChatSession（conversations / messages / draft / sending / openConversation / 发送相关 / 会话 CRUD）。App.vue 2446→~2150 行；web build 通过。仍**部分收口**：资料/外观、通讯录与导入、记忆 whisper、语音 STT 编排仍在 App。未碰 N-02 / Gemini / UI-5/6 语义。
 - **备注（D-02 P1 专项 2026-10-11）：** 抽出 `useProfileAppearance`（资料/外观/主题透明度/头像封面）与 `useContactsImport`（通讯录/群创建/导入覆盖）。tip `d6a00c5`。App.vue ~2151→~1800。D-02 仍**部分收口**。
 - **备注（D-02 P2 专项 2026-10-11）：** 抽出 `useMemoryUi`（profileMemories / whisper 三态 / highlight / schedule+clear notices）与 `useVoiceInput`（STT 编排层，底层仍 `useHoldToTalk`；与 `useTtsPlayback` 分工：输入 vs 播放）。App.vue ~1800→~1629（web build 通）。P0+P1+P2 后仍**部分收口**（建议继续记部分，勿标已收口）：App 仍留壳模板、消息列表展示辅助（avatarText/dayLabel/formatTime/collage 等）、emoji 接线、状态条、以及 composable 编排胶水。未动 N-02 / Gemini TTS。
+- **状态（D-02 P0–P2 关单 2026-10-11）**：P0 useAppShell+useChatSession（8606bbb）；P1 useProfileAppearance+useContactsImport（d6a00c5）；P2 useMemoryUi+useVoiceInput（bdca268）。App.vue ~2446→1629。**口径：部分收口（不标已收口）**——状态部分已收；剩壳模板/composable 胶水/status/消息展示辅助/emoji 接线。壳层/辅助清理拆独立债 **D-02b**，**不再继续抽 App.vue**。
 
+
+
+
+### D-02b 壳层/辅助清理（从 D-02 拆出）
+- **位置**：`apps/web/src/App.vue` 剩余壳模板与展示辅助
+- **类型**：前端工程 / 壳层重组（**非**状态管理债）
+- **现象**：D-02 状态迁出后仍剩壳模板、composable 胶水、status、消息展示辅助（avatarText/dayLabel/formatTime/collage 等）、emoji 接线
+- **影响**：继续硬抽边际收益递减，可能拆散壳层、增加耦合
+- **建议动作**：独立债；拍板暂不继续抽；节奏另定
+- **建议阶段**：P3 / 视 UI 线节奏
+- **状态（2026-10-11）**：待处理；与 D-02 状态债分离，不挂 D-02
 
 ### D-03 `conversations` 路由承载业务编排
 - **位置**：`apps/server/src/routes/conversations.ts`（约 864 行）
