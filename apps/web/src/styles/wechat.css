@@ -1613,6 +1613,9 @@ select {
   text-align: left;
   font: inherit;
   box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset;
+  transition: border-color var(--motion-duration-fast) var(--motion-easing-standard),
+    box-shadow var(--motion-duration-fast) var(--motion-easing-standard),
+    background var(--motion-duration-fast) var(--motion-easing-standard);
 }
 .wx-msg.me .wx-voice-bubble {
   border-radius: 14px 14px 14px 4px;
@@ -1623,8 +1626,15 @@ select {
 }
 .wx-voice-bubble.playing {
   border-color: var(--accent-deep);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.5) inset,
+    0 0 0 1px color-mix(in srgb, var(--accent-deep) 22%, transparent);
+}
+.wx-voice-bubble.loading {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  cursor: wait;
 }
 .wx-voice-play {
+  position: relative;
   flex-shrink: 0;
   width: 28px;
   height: 28px;
@@ -1633,7 +1643,50 @@ select {
   place-items: center;
   background: rgba(110, 95, 170, 0.14);
   color: var(--accent-deep);
-  font-size: 11px;
+  transition: background var(--motion-duration-fast) var(--motion-easing-standard),
+    transform var(--motion-duration-fast) var(--motion-easing-standard);
+}
+.wx-voice-bubble:hover .wx-voice-play {
+  background: rgba(110, 95, 170, 0.22);
+}
+.wx-voice-bubble.playing .wx-voice-play {
+  background: color-mix(in srgb, var(--accent-deep) 22%, transparent);
+}
+.wx-voice-play::before {
+  content: "";
+  display: block;
+  width: 0;
+  height: 0;
+  margin-left: 2px;
+  border-style: solid;
+  border-width: 5px 0 5px 8px;
+  border-color: transparent transparent transparent currentColor;
+}
+.wx-voice-bubble.playing .wx-voice-play::before {
+  width: 8px;
+  height: 10px;
+  margin-left: 0;
+  border: 0;
+  background:
+    linear-gradient(currentColor, currentColor) left / 2.5px 100% no-repeat,
+    linear-gradient(currentColor, currentColor) right / 2.5px 100% no-repeat;
+}
+.wx-voice-bubble.loading .wx-voice-play::before {
+  width: 12px;
+  height: 12px;
+  margin-left: 0;
+  border: 2px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  background: none;
+  animation: wx-voice-spin var(--motion-duration-ambient) linear infinite;
+}
+.wx-voice-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 52px;
+  flex-shrink: 0;
 }
 .wx-voice-wave {
   display: flex;
@@ -1649,6 +1702,7 @@ select {
   background: var(--accent-deep);
   opacity: 0.55;
   height: 6px;
+  transform-origin: center bottom;
 }
 .wx-voice-wave i:nth-child(1) { height: 6px; }
 .wx-voice-wave i:nth-child(2) { height: 12px; }
@@ -1656,15 +1710,69 @@ select {
 .wx-voice-wave i:nth-child(4) { height: 14px; }
 .wx-voice-wave i:nth-child(5) { height: 7px; }
 .wx-voice-bubble.playing .wx-voice-wave i {
-  animation: wx-wave 0.9s ease-in-out infinite;
+  opacity: 0.9;
+  animation: wx-wave var(--motion-duration-ambient) var(--motion-easing-standard) infinite;
+}
+.wx-voice-bubble.loading .wx-voice-wave i {
+  opacity: 0.35;
+  animation: wx-wave-idle var(--motion-duration-ambient-slow) var(--motion-easing-standard) infinite;
 }
 .wx-voice-bubble.playing .wx-voice-wave i:nth-child(2) { animation-delay: 0.1s; }
 .wx-voice-bubble.playing .wx-voice-wave i:nth-child(3) { animation-delay: 0.2s; }
 .wx-voice-bubble.playing .wx-voice-wave i:nth-child(4) { animation-delay: 0.15s; }
 .wx-voice-bubble.playing .wx-voice-wave i:nth-child(5) { animation-delay: 0.25s; }
+.wx-voice-bubble.loading .wx-voice-wave i:nth-child(2) { animation-delay: 0.2s; }
+.wx-voice-bubble.loading .wx-voice-wave i:nth-child(3) { animation-delay: 0.4s; }
+.wx-voice-bubble.loading .wx-voice-wave i:nth-child(4) { animation-delay: 0.3s; }
+.wx-voice-bubble.loading .wx-voice-wave i:nth-child(5) { animation-delay: 0.5s; }
 @keyframes wx-wave {
   0%, 100% { transform: scaleY(0.7); }
   50% { transform: scaleY(1.25); }
+}
+@keyframes wx-wave-idle {
+  0%, 100% { transform: scaleY(0.85); opacity: 0.3; }
+  50% { transform: scaleY(1.05); opacity: 0.5; }
+}
+@keyframes wx-voice-spin {
+  to { transform: rotate(360deg); }
+}
+.wx-voice-progress {
+  display: block;
+  width: 100%;
+  height: 2px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent-deep) 16%, transparent);
+  overflow: hidden;
+  opacity: 0;
+  transition: opacity var(--motion-duration-fast) var(--motion-easing-standard);
+}
+.wx-voice-bubble.playing .wx-voice-progress,
+.wx-voice-bubble.loading .wx-voice-progress {
+  opacity: 1;
+}
+.wx-voice-progress-bar {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: var(--accent-deep);
+}
+.wx-voice-bubble.playing .wx-voice-progress-bar {
+  /* UI-4 选 A：装饰性假进度，真 currentTime 留给 X-06 */
+  animation: wx-voice-fake-progress 4.8s var(--motion-easing-standard) infinite;
+}
+.wx-voice-bubble.loading .wx-voice-progress-bar {
+  width: 36%;
+  animation: wx-voice-indeterminate 1.2s var(--motion-easing-standard) infinite;
+}
+@keyframes wx-voice-fake-progress {
+  0% { width: 0%; }
+  85% { width: 90%; }
+  100% { width: 0%; }
+}
+@keyframes wx-voice-indeterminate {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(280%); }
 }
 .wx-voice-label {
   flex-shrink: 0;

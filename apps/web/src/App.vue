@@ -2072,11 +2072,15 @@ onUnmounted(() => {
                           type="button"
                           class="wx-voice-bubble"
                           :class="{ playing: ttsPlayingId === m.id, loading: ttsLoadingId === m.id }"
+                          :aria-label="ttsLoadingId === m.id ? '语音加载中' : ttsPlayingId === m.id ? '暂停语音' : '播放语音'"
                           @click="playTts(m)"
                         >
-                          <span class="wx-voice-play">{{ ttsLoadingId === m.id ? '…' : ttsPlayingId === m.id ? '■' : '▶' }}</span>
-                          <span class="wx-voice-wave" aria-hidden="true">
-                            <i></i><i></i><i></i><i></i><i></i>
+                          <span class="wx-voice-play" aria-hidden="true"></span>
+                          <span class="wx-voice-main" aria-hidden="true">
+                            <span class="wx-voice-wave">
+                              <i></i><i></i><i></i><i></i><i></i>
+                            </span>
+                            <span class="wx-voice-progress"><span class="wx-voice-progress-bar"></span></span>
                           </span>
                           <span class="wx-voice-label">语音</span>
                           <span class="wx-voice-transcript">{{ m.content }}</span>
