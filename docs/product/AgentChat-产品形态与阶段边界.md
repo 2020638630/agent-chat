@@ -245,7 +245,7 @@ Agent Chat 是一个**多角色 AI 社交客户端**：用户导入角色卡后�
 | UI-1 | P2 | 动效基础层：统一时长、曲线、触发场景（第五刀/可并行） |
 | UI-2 | 已处理 | 消息动效：TransitionGroup + 正在输入（纯 CSS） |
 | UI-3 | 已处理 | 红点/未读动效（纯 CSS Transition） |
-| UI-4 | 已处理 | 语音气泡视觉：波形+播放/暂停外观+装饰假进度（选 A 纯 CSS；复用 ttsPlayingId/ttsLoadingId；真进度留给 X-06） |
+| UI-4 | 已处理（tip 08d4050） | 语音气泡视觉：波形+播放/暂停外观+装饰假进度（选 A 纯 CSS；复用 ttsPlayingId/ttsLoadingId；真进度留给 X-06） |
 | UI-5 | P3 | Reaction：多表情 + 微动效 |
 | UI-6 | P3 | 群聊活跃感：角色头像浮动、正在输入 |
 
