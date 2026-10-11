@@ -141,6 +141,20 @@ export function ensureProactiveColumns(db: Database.Database) {
   `);
 }
 
+
+export function ensureMessageReactionsTable(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS message_reactions (
+      message_id TEXT NOT NULL,
+      emoji TEXT NOT NULL,
+      user_key TEXT NOT NULL DEFAULT 'me',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      PRIMARY KEY (message_id, emoji, user_key),
+      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+    );
+  `);
+}
+
 export function ensureMessageImageColumn(db: Database.Database) {
   const cols = db.prepare(`PRAGMA table_info(messages)`).all() as Array<{ name: string }>;
   if (!cols.some((c) => c.name === 'image_path')) {
@@ -349,5 +363,6 @@ export function migrate(db: Database.Database) {
   ensureProactiveColumns(db);
   ensureMemoriesTable(db);
   ensureMemoryNoticesTable(db);
+  ensureMessageReactionsTable(db);
   mergeDuplicatePrivateConversations(db);
 }

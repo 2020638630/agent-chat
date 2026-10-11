@@ -5,7 +5,7 @@
  * Layout: left nav → mid list (chat / contacts / space tools) → main pane
  * (profile | moments feed | conversation). Talks to apps/server via ./api/client.
  * Composables: useHoldToTalk, useMoments, usePersonaEditor, useProactiveSettings (ARCH-3),
- * useTtsPlayback (X-06);
+ * useTtsPlayback (X-06), useMessageReactions (UI-5);
  * Motion tokens: constants/motion.ts + --motion-* CSS vars (UI-1 foundation);
  * styles in ./styles/wechat.css.
  */
@@ -17,6 +17,7 @@ import { useMoments } from './composables/useMoments';
 import { usePersonaEditor } from './composables/usePersonaEditor';
 import { useProactiveSettings } from './composables/useProactiveSettings';
 import { useTtsPlayback } from './composables/useTtsPlayback';
+import { useMessageReactions } from './composables/useMessageReactions';
 import { EMOJI_WHITELIST } from './constants/emojiWhitelist';
 import {
   THEME_PRESETS,
@@ -64,6 +65,13 @@ const {
     status.value = msg;
   },
 });
+const { REACTION_QUICK, toggleReaction } = useMessageReactions(
+  messages,
+  activeConversationId,
+  (msg) => {
+    status.value = msg;
+  },
+);
 const selectedForGroup = ref<string[]>([]);
 const creatingGroup = ref(false);
 const groupTitleDraft = ref('');
@@ -2072,10 +2080,39 @@ onUnmounted(() => {
                           </button>
                           <button class="wx-msg-more" title="消息操作" @click="toggleMsgMenu(m.id)">⋯</button>
                           <div v-if="msgMenuId === m.id" class="wx-menu msg">
+                            <div class="wx-react-quick" role="group" aria-label="表情反应">
+                              <button
+                                v-for="em in REACTION_QUICK"
+                                :key="em"
+                                type="button"
+                                class="wx-react-quick-btn"
+                                :title="em"
+                                @click="toggleReaction(m.id, em); msgMenuId = null"
+                              >{{ em }}</button>
+                            </div>
                             <button class="danger" @click="deleteOneMessage(m)">删除</button>
                           </div>
                         </div>
                       </div>
+                      <TransitionGroup
+                        v-if="m.reactions && m.reactions.length"
+                        name="wx-motion-react"
+                        tag="div"
+                        class="wx-react-row"
+                      >
+                        <button
+                          v-for="r in m.reactions"
+                          :key="r.emoji"
+                          type="button"
+                          class="wx-react-chip"
+                          :class="{ mine: r.me }"
+                          :title="r.emoji"
+                          @click.stop="toggleReaction(m.id, r.emoji)"
+                        >
+                          <span class="wx-react-emoji">{{ r.emoji }}</span>
+                          <span v-if="r.count > 1" class="wx-react-count">{{ r.count }}</span>
+                        </button>
+                      </TransitionGroup>
                     </div>
                   </div>
                   </div>

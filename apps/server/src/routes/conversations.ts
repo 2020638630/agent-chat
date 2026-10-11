@@ -6,7 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import { v4 as uuid } from 'uuid';
 import { db } from '../db/index.js';
 import { buildSystemPrompt } from '../utils/characterCard.js';
-import { emojiConstraintForPrompt, hasEmojiToken, sanitizeAssistantEmoji } from '../constants/emojiWhitelist.js';
+import { emojiConstraintForPrompt, hasEmojiToken, sanitizeAssistantEmoji, EMOJI_WHITELIST_SET } from '../constants/emojiWhitelist.js';
 import { shouldAssistantUseVoice } from '../utils/voiceRequest.js';
 import { chatCompletion, resolveVisionModel } from '../services/llm.js';
 import { wantsImageGeneration, buildImagePrompt, generateChatImage } from '../services/imageGen.js';
@@ -147,6 +147,46 @@ function unreadCountFor(conversationId: string, lastReadAt: string | null | unde
     )
     .all(conversationId, cursor) as Array<{ content: string }>;
   return rows.filter((r) => !isLlmFailureNotice(r.content)).length;
+}
+
+
+type MessageReactionAgg = { emoji: string; count: number; me: boolean };
+
+function reactionsForMessages(messageIds: string[]): Map<string, MessageReactionAgg[]> {
+  const out = new Map<string, MessageReactionAgg[]>();
+  if (!messageIds.length) return out;
+  const placeholders = messageIds.map(() => '?').join(',');
+  const rows = db
+    .prepare(
+      `SELECT message_id, emoji, user_key FROM message_reactions
+       WHERE message_id IN (${placeholders})
+       ORDER BY created_at ASC, rowid ASC`
+    )
+    .all(...messageIds) as Array<{ message_id: string; emoji: string; user_key: string }>;
+  const bucket = new Map<string, Map<string, { count: number; me: boolean }>>();
+  for (const r of rows) {
+    let byEmoji = bucket.get(r.message_id);
+    if (!byEmoji) {
+      byEmoji = new Map();
+      bucket.set(r.message_id, byEmoji);
+    }
+    const cur = byEmoji.get(r.emoji) ?? { count: 0, me: false };
+    cur.count += 1;
+    if (r.user_key === 'me') cur.me = true;
+    byEmoji.set(r.emoji, cur);
+  }
+  for (const [mid, byEmoji] of bucket) {
+    out.set(
+      mid,
+      [...byEmoji.entries()].map(([emoji, v]) => ({ emoji, count: v.count, me: v.me }))
+    );
+  }
+  return out;
+}
+
+function attachReactions<T extends { id: string }>(messages: T[]): Array<T & { reactions: MessageReactionAgg[] }> {
+  const map = reactionsForMessages(messages.map((m) => m.id));
+  return messages.map((m) => ({ ...m, reactions: map.get(m.id) ?? [] }));
 }
 
 export async function conversationRoutes(app: FastifyInstance) {
@@ -300,7 +340,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       .all(req.params.id);
 
     markConversationRead(req.params.id);
-    return { messages };
+    return { messages: attachReactions(messages as Array<{ id: string }>) };
   });
 
   app.delete<{ Params: { id: string; messageId: string } }>(
@@ -323,6 +363,45 @@ export async function conversationRoutes(app: FastifyInstance) {
       return { ok: true };
     }
   );
+
+  app.post<{ Params: { id: string; messageId: string } }>(
+    '/api/conversations/:id/messages/:messageId/reactions',
+    async (req, reply) => {
+      const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(req.params.id);
+      if (!conv) return reply.code(404).send({ error: '会话不存在' });
+
+      const msg = db
+        .prepare(`SELECT * FROM messages WHERE id = ? AND conversation_id = ?`)
+        .get(req.params.messageId, req.params.id);
+      if (!msg) return reply.code(404).send({ error: '消息不存在' });
+
+      const body = (req.body ?? {}) as { emoji?: string };
+      const emoji = typeof body.emoji === 'string' ? body.emoji.trim() : '';
+      if (!emoji || !EMOJI_WHITELIST_SET.has(emoji)) {
+        return reply.code(400).send({ error: '表情不在白名单' });
+      }
+
+      const existing = db
+        .prepare(
+          `SELECT 1 FROM message_reactions WHERE message_id = ? AND emoji = ? AND user_key = 'me'`
+        )
+        .get(req.params.messageId, emoji);
+
+      if (existing) {
+        db.prepare(
+          `DELETE FROM message_reactions WHERE message_id = ? AND emoji = ? AND user_key = 'me'`
+        ).run(req.params.messageId, emoji);
+      } else {
+        db.prepare(
+          `INSERT INTO message_reactions (message_id, emoji, user_key, created_at) VALUES (?, ?, 'me', ?)`
+        ).run(req.params.messageId, emoji, new Date().toISOString());
+      }
+
+      const reactions = reactionsForMessages([req.params.messageId]).get(req.params.messageId) ?? [];
+      return { ok: true, message_id: req.params.messageId, reactions };
+    }
+  );
+
 
   app.delete<{ Params: { id: string } }>('/api/conversations/:id/messages', async (req, reply) => {
     const conv = db.prepare('SELECT * FROM conversations WHERE id = ?').get(req.params.id);

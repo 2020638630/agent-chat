@@ -38,6 +38,12 @@ export type Conversation = {
   unread_count?: number;
 };
 
+export type MessageReaction = {
+  emoji: string;
+  count: number;
+  me: boolean;
+};
+
 export type ChatMessage = {
   id: string;
   conversation_id: string;
@@ -48,6 +54,7 @@ export type ChatMessage = {
   created_at: string;
   source?: 'text' | 'voice' | 'image';
   image_path?: string | null;
+  reactions?: MessageReaction[];
 };
 
 export type MomentComment = {
@@ -253,6 +260,15 @@ export const api = {
     fetch(`/api/conversations/${conversationId}/messages/${messageId}`, {
       method: 'DELETE',
     }).then((r) => json<{ ok: boolean }>(r)),
+
+  toggleMessageReaction: (conversationId: string, messageId: string, emoji: string) =>
+    fetch(`/api/conversations/${conversationId}/messages/${messageId}/reactions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emoji }),
+    }).then((r) =>
+      json<{ ok: boolean; message_id: string; reactions: MessageReaction[] }>(r)
+    ),
 
   clearMessages: (conversationId: string) =>
     fetch(`/api/conversations/${conversationId}/messages`, { method: 'DELETE' }).then((r) =>
