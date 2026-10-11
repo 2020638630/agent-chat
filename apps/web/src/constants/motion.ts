@@ -1,6 +1,6 @@
 /** UI-1 motion foundation — duration / easing tokens.
  *
- * Scene map (基础层约定；UI-2 消息入场已挂 TransitionGroup；UI-3 红点/角标已挂 Transition wx-motion-badge；UI-5 reaction chips 已挂 TransitionGroup wx-motion-react):
+ * Scene map (基础层约定；UI-2 消息入场已挂 TransitionGroup；UI-3 红点/角标已挂 Transition wx-motion-badge；UI-5 reaction chips 已挂 TransitionGroup wx-motion-react；UI-6 群聊活跃感：成员头像 ambient float + 群聊正在输入头像条，复用 sending，无新业务态):
  * - micro（hover / active / 按压反馈）→ durationFast + easingStandard
  * - panel（侧栏 tab 内容感、轻量状态切换）→ durationNormal + easingStandard
  * - overlay（确认框 / 人设编辑等 mask 显隐）→ durationNormal + easingEnter/Exit

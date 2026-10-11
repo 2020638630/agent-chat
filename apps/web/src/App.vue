@@ -7,6 +7,7 @@
  * Composables: useHoldToTalk, useMoments, usePersonaEditor, useProactiveSettings (ARCH-3),
  * useTtsPlayback (X-06), useMessageReactions (UI-5);
  * Motion tokens: constants/motion.ts + --motion-* CSS vars (UI-1 foundation);
+ * UI-6 group alive: ambient avatar float + group typing avatars (CSS; reuses sending).
  * styles in ./styles/wechat.css.
  */
 
@@ -1964,6 +1965,7 @@ onUnmounted(() => {
             <div
               v-if="collageMembers(activeConversation).length"
               class="wx-header-ava collage"
+              :class="{ 'is-alive': activeConversation?.type === 'group' && sending }"
               :data-n="collageMembers(activeConversation).length"
             >
               <span v-for="mem in collageMembers(activeConversation)" :key="mem.id">
@@ -2122,9 +2124,25 @@ onUnmounted(() => {
                     v-if="sending"
                     key="typing"
                     class="wx-typing"
+                    :class="{ 'is-group': activeConversation?.type === 'group' }"
                     aria-live="polite"
                     aria-label="正在输入"
                   >
+                    <div
+                      v-if="activeConversation?.type === 'group'"
+                      class="wx-typing-avatars"
+                      aria-hidden="true"
+                    >
+                      <span
+                        v-for="(mem, idx) in (activeConversation.members || []).slice(0, 3)"
+                        :key="mem.id"
+                        class="wx-typing-ava"
+                        :style="{ animationDelay: idx * 0.18 + 's' }"
+                      >
+                        <img v-if="mem.avatar_path" :src="mem.avatar_path" alt="" />
+                        <template v-else>{{ avatarText(mem.name) }}</template>
+                      </span>
+                    </div>
                     <span class="wx-typing-dots" aria-hidden="true"><i></i><i></i><i></i></span>
                     <span class="wx-typing-label">正在输入</span>
                   </div>
@@ -2234,18 +2252,24 @@ onUnmounted(() => {
 
             </div>
           </div>
-
-          <aside v-if="activeConversation?.type === 'group'" class="wx-members">
+          <aside
+            v-if="activeConversation?.type === 'group'"
+            class="wx-members"
+            :class="{ 'is-alive': sending }"
+          >
             <div class="wx-members-title">群成员</div>
             <div
-              v-for="mem in activeConversation.members || []"
+              v-for="(mem, mIdx) in activeConversation.members || []"
               :key="mem.id"
               class="wx-list-item"
               role="button"
               title="查看主页"
               @click.stop="openCharacterProfile(mem.id)"
             >
-              <div class="wx-avatar sm">
+              <div
+                class="wx-avatar sm wx-avatar-float"
+                :style="{ animationDelay: (mIdx % 5) * 0.35 + 's' }"
+              >
                 <img v-if="mem.avatar_path" :src="mem.avatar_path" alt="" />
                 <template v-else>{{ avatarText(mem.name) }}</template>
               </div>
