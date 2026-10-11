@@ -1,6 +1,7 @@
 /**
  * Profile overlay + appearance (theme / opacity / avatar / cover).
  * D-02 P1 extract from App.vue — behavior unchanged.
+ * D-02 P2: profileMemories owned by useMemoryUi (passed in).
  */
 import { ref, type Ref } from 'vue';
 import { api, type MemoryNote, type Moment, type Profile } from '../api/client';
@@ -25,6 +26,9 @@ export function useProfileAppearance(opts: {
   refreshCharacters: () => Promise<void>;
   refreshConversations: () => Promise<void>;
   startPrivate: (characterId: string) => Promise<void>;
+  profileMemories: Ref<MemoryNote[]>;
+  loadProfileMemories: (characterId: string) => Promise<void>;
+  clearProfileMemories: () => void;
 }) {
   const profileView = ref<ProfileView>(null);
   const profile = ref<Profile | null>(null);
@@ -37,7 +41,6 @@ export function useProfileAppearance(opts: {
   const avatarFileInput = ref<HTMLInputElement | null>(null);
   const bgFileInput = ref<HTMLInputElement | null>(null);
   const spaceBgFileInput = ref<HTMLInputElement | null>(null);
-  const profileMemories = ref<MemoryNote[]>([]);
   const profileLoading = ref(false);
   const profileEditing = ref(false);
   const editMood = ref('');
@@ -46,7 +49,7 @@ export function useProfileAppearance(opts: {
   async function closeProfile() {
     profileView.value = null;
     profile.value = null;
-    profileMemories.value = [];
+    opts.clearProfileMemories();
     profileEditing.value = false;
   }
 
@@ -264,13 +267,8 @@ export function useProfileAppearance(opts: {
     if (!id) return;
     profileLoading.value = true;
     profileView.value = { kind: 'character', id };
-    profileMemories.value = [];
-    try {
-      const mem = await api.listCharacterMemories(id);
-      profileMemories.value = (mem.memories || []).slice(0, 6);
-    } catch {
-      profileMemories.value = [];
-    }
+    opts.clearProfileMemories();
+    await opts.loadProfileMemories(id);
     profileEditing.value = false;
     try {
       const res = await api.getCharacterProfile(id);
@@ -326,7 +324,7 @@ export function useProfileAppearance(opts: {
     avatarFileInput,
     bgFileInput,
     spaceBgFileInput,
-    profileMemories,
+    profileMemories: opts.profileMemories,
     profileLoading,
     profileEditing,
     editMood,

@@ -1,7 +1,7 @@
 /**
  * Chat session: conversations list, active thread, draft/send, emoji, image bubble, msg menus.
- * D-02 P0 extract from App.vue — behavior unchanged. Voice STT orchestration stays in App
- * (uses exported refs); memory whisper callbacks stay in App via opts.
+ * D-02 P0 extract from App.vue — behavior unchanged.
+ * D-02 P2: voice STT via useVoiceInput; memory whisper via useMemoryUi (opts callbacks).
  */
 import { computed, nextTick, onUnmounted, ref, type Ref } from 'vue';
 import { api, type ChatMessage, type Conversation } from '../api/client';

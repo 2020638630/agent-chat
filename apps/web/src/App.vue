@@ -4,17 +4,17 @@
  *
  * Layout: left nav → mid list (chat / contacts / space tools) → main pane
  * (profile | moments feed | conversation). Talks to apps/server via ./api/client.
- * Composables: useHoldToTalk, useMoments, usePersonaEditor, useProactiveSettings (ARCH-3),
+ * Composables: useMoments, usePersonaEditor, useProactiveSettings (ARCH-3),
  * useTtsPlayback (X-06), useMessageReactions (UI-5), useUnread (D-02 C-03),
- * useAppShell / useChatSession (D-02 P0);
+ * useAppShell / useChatSession (D-02 P0), useProfileAppearance / useContactsImport (P1),
+ * useMemoryUi / useVoiceInput (P2);
  * Motion tokens: constants/motion.ts + --motion-* CSS vars (UI-1 foundation);
  * UI-6 group alive: ambient avatar float + group typing avatars (CSS; reuses sending).
  * styles in ./styles/wechat.css.
  */
 
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import { api, type ChatMessage, type Conversation } from './api/client';
-import { useHoldToTalk } from './composables/useHoldToTalk';
 import { useMoments } from './composables/useMoments';
 import { usePersonaEditor } from './composables/usePersonaEditor';
 import { useProactiveSettings } from './composables/useProactiveSettings';
@@ -25,16 +25,16 @@ import { useAppShell } from './composables/useAppShell';
 import { useChatSession } from './composables/useChatSession';
 import { useProfileAppearance } from './composables/useProfileAppearance';
 import { useContactsImport } from './composables/useContactsImport';
+import { useMemoryUi } from './composables/useMemoryUi';
+import { useVoiceInput } from './composables/useVoiceInput';
 import { EMOJI_WHITELIST } from './constants/emojiWhitelist';
 
 
-// D-02 P0/P1: late-bound bridges so shell/chat/profile/contacts can close over helpers below.
+// D-02 P0/P1/P2: late-bound bridges so shell/chat/profile/contacts/memory can close over helpers below.
 let openConversation!: (id: string) => Promise<void>;
 let deleteConversationById!: (id: string, title: string) => Promise<boolean>;
 let markReadOnOpen!: (conversationId: string) => void;
 let closeProfile!: () => Promise<void>;
-let scheduleMemoryWhisper!: (characterId: string, conversationId?: string) => void;
-let clearUnreadMemoryNotices!: (characterId: string, conversationId?: string) => Promise<void>;
 let conversations!: import('vue').Ref<Conversation[]>;
 let applyProfileMoments!: (list: import('./api/client').Moment[]) => void;
 let loadProactiveSettings!: () => Promise<void>;
@@ -44,20 +44,24 @@ let refreshMoments!: () => Promise<void>;
 let refreshCharacters!: () => Promise<void>;
 let activeConversationId!: import('vue').Ref<string | null>;
 let messages!: import('vue').Ref<ChatMessage[]>;
-const {
-  holding: voiceHolding,
-  recording: voiceRecording,
-  error: voiceError,
-  start: voiceStart,
-  stop: voiceStop,
-  cancel: voiceCancel,
-} = useHoldToTalk();
-const voiceActive = computed(() => voiceHolding.value || voiceRecording.value);
-const voiceBusy = ref(false);
-const voiceCancelHint = ref(false);
-let voicePointerStartY = 0;
-let voiceWillCancel = false;
+let profileView!: import('vue').Ref<import('./composables/useMoments').ProfileView>;
 const status = ref('');
+
+const {
+  profileMemories,
+  memoryWhisperText,
+  memoryWhisperVisible,
+  memoryWhisperOpaque,
+  memoryHighlightIds,
+  clearProfileMemories,
+  loadProfileMemories,
+  clearUnreadMemoryNotices,
+  scheduleMemoryWhisper,
+  disposeMemoryUi,
+} = useMemoryUi({
+  getActiveConversationId: () => activeConversationId?.value ?? null,
+  getProfileView: () => profileView?.value ?? null,
+});
 const {
   playingId: ttsPlayingId,
   loadingId: ttsLoadingId,
@@ -73,7 +77,7 @@ const setStatus = (msg: string) => {
 };
 
 const {
-  profileView,
+  profileView: profileViewRef,
   profile,
   meProfile,
   mediaBusy,
@@ -84,7 +88,6 @@ const {
   avatarFileInput,
   bgFileInput,
   spaceBgFileInput,
-  profileMemories,
   profileLoading,
   profileEditing,
   editMood,
@@ -115,7 +118,11 @@ const {
   refreshCharacters: () => refreshCharacters(),
   refreshConversations: () => refreshConversations(),
   startPrivate: (id) => startPrivate(id),
+  profileMemories,
+  loadProfileMemories,
+  clearProfileMemories,
 });
+profileView = profileViewRef;
 closeProfile = closeProfileImpl;
 
 const {
@@ -253,6 +260,29 @@ deleteConversationById = deleteConversationByIdImpl;
 refreshConversations = refreshConversationsImpl;
 startPrivate = startPrivateImpl;
 
+const {
+  voiceActive,
+  voiceBusy,
+  voiceCancelHint,
+  onVoicePointerDown,
+  onVoicePointerMove,
+  onVoicePointerUp,
+  onVoicePointerCancel,
+  isVoiceBubble,
+} = useVoiceInput({
+  sending,
+  activeConversationId,
+  activeConversation,
+  messages,
+  mentionId,
+  chatBody,
+  privatePeer,
+  scheduleMemoryWhisper,
+  refreshConversations: () => refreshConversations(),
+  setStatus,
+});
+
+
 const { totalUnread, markReadOnOpen: markReadOnOpenImpl, hasUnread, badgeText } = useUnread(conversations);
 markReadOnOpen = markReadOnOpenImpl;
 
@@ -345,17 +375,6 @@ const {
     }
   },
 });
-
-const memoryWhisperText = ref('记下了');
-const memoryWhisperVisible = ref(false);
-const memoryWhisperOpaque = ref(false);
-const memoryHighlightIds = ref<string[]>([]);
-let whisperDelayTimer: ReturnType<typeof setTimeout> | null = null;
-let whisperHideTimer: ReturnType<typeof setTimeout> | null = null;
-let whisperFadeTimer: ReturnType<typeof setTimeout> | null = null;
-let memoryHighlightTimer: ReturnType<typeof setTimeout> | null = null;
-let whisperPollTimers: ReturnType<typeof setTimeout>[] = [];
-let whisperPollGen = 0;
 
 function avatarText(name?: string) {
   return (name || '?').slice(0, 1);
@@ -486,198 +505,12 @@ function headerStatus(c: Conversation | null) {
   return '私聊';
 }
 
-
-function clearWhisperTimers() {
-  if (whisperDelayTimer) {
-    clearTimeout(whisperDelayTimer);
-    whisperDelayTimer = null;
-  }
-  if (whisperHideTimer) {
-    clearTimeout(whisperHideTimer);
-    whisperHideTimer = null;
-  }
-  if (whisperFadeTimer) {
-    clearTimeout(whisperFadeTimer);
-    whisperFadeTimer = null;
-  }
-  for (const t of whisperPollTimers) clearTimeout(t);
-  whisperPollTimers = [];
-}
-
-function showMemoryWhisper(summary?: string) {
-  const body = String(summary || '').trim() || '新的记忆';
-  memoryWhisperText.value = body;
-  memoryWhisperVisible.value = true;
-  memoryWhisperOpaque.value = false;
-  if (whisperHideTimer) {
-    clearTimeout(whisperHideTimer);
-    whisperHideTimer = null;
-  }
-  if (whisperFadeTimer) {
-    clearTimeout(whisperFadeTimer);
-    whisperFadeTimer = null;
-  }
-  // Slow fade-in (~1.5s), hold, slow fade-out (~3.5s) — total ~10s.
-  whisperFadeTimer = setTimeout(() => {
-    memoryWhisperOpaque.value = true;
-  }, 40);
-  whisperHideTimer = setTimeout(() => {
-    memoryWhisperOpaque.value = false;
-    whisperHideTimer = setTimeout(() => {
-      memoryWhisperVisible.value = false;
-      whisperHideTimer = null;
-    }, 3500);
-  }, 6500);
-}
-
-function flashMemoryHighlights(ids: string[]) {
-  if (!ids.length) return;
-  memoryHighlightIds.value = [...ids];
-  if (memoryHighlightTimer) clearTimeout(memoryHighlightTimer);
-  memoryHighlightTimer = setTimeout(() => {
-    memoryHighlightIds.value = [];
-    memoryHighlightTimer = null;
-  }, 2500);
-}
-
-/** Swallow stale unread whispers when opening a private chat (no UI). */
-clearUnreadMemoryNotices = async (characterId: string, conversationId?: string) => {
-  if (!characterId) return;
-  try {
-    await api.markCharacterMemoryNoticesRead(characterId, {
-      all: true,
-      conversation_id: conversationId,
-    });
-  } catch {
-    // best-effort
-  }
-};
-
-scheduleMemoryWhisper = (characterId: string, conversationId?: string) => {
-  if (!characterId) return;
-  for (const t of whisperPollTimers) clearTimeout(t);
-  whisperPollTimers = [];
-  if (whisperDelayTimer) {
-    clearTimeout(whisperDelayTimer);
-    whisperDelayTimer = null;
-  }
-  const gen = ++whisperPollGen;
-  const convId = conversationId || activeConversationId.value || undefined;
-  // Poll unread notices (written when extract commits) — not the full memory list.
-  const offsetsMs = [3000, 7000, 12000, 18000, 25000, 35000, 50000, 70000, 90000];
-  for (const ms of offsetsMs) {
-    const t = setTimeout(async () => {
-      if (gen !== whisperPollGen) return;
-      try {
-        const res = await api.listCharacterMemoryNotices(characterId, {
-          conversationId: convId,
-        });
-        const notices = res.notices || [];
-        if (!notices.length) return;
-        const ids = notices.map((n) => n.id);
-        const summary = notices
-          .map((n) => String(n.summary || '').trim())
-          .filter(Boolean)
-          .join('；');
-        whisperPollGen++;
-        for (const x of whisperPollTimers) clearTimeout(x);
-        whisperPollTimers = [];
-        showMemoryWhisper(summary);
-        void api.markCharacterMemoryNoticesRead(characterId, { ids }).catch(() => {});
-        if (profileView.value?.kind === 'character' && profileView.value.id === characterId) {
-          try {
-            const mem = await api.listCharacterMemories(characterId);
-            const prevIds = new Set(profileMemories.value.map((m) => m.id));
-            profileMemories.value = (mem.memories || []).slice(0, 6);
-            const newIds = profileMemories.value.map((m) => m.id).filter((id) => !prevIds.has(id));
-            flashMemoryHighlights(newIds);
-          } catch {
-            // ignore
-          }
-        }
-      } catch {
-        // silent — whisper is best-effort
-      }
-    }, ms);
-    whisperPollTimers.push(t);
-  }
-};
-
 function headerAvatar(c: Conversation | null | undefined) {
   const peer = privatePeer(c);
   if (peer?.avatar_path) return peer.avatar_path;
   return null;
 }
 
-
-async function onVoicePointerDown(e: PointerEvent) {
-  e.preventDefault();
-  if (sending.value || voiceBusy.value || !activeConversationId.value) return;
-  voicePointerStartY = e.clientY;
-  voiceWillCancel = false;
-  voiceCancelHint.value = false;
-  (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-  await voiceStart();
-}
-
-function onVoicePointerMove(e: PointerEvent) {
-  if (!voiceHolding.value && !voiceRecording.value) return;
-  const dy = e.clientY - voicePointerStartY;
-  voiceWillCancel = dy < -48;
-  voiceCancelHint.value = voiceWillCancel;
-}
-
-async function onVoicePointerUp() {
-  if (!voiceHolding.value && !voiceRecording.value) return;
-  const cancel = voiceWillCancel;
-  voiceCancelHint.value = false;
-  voiceWillCancel = false;
-  if (cancel) {
-    voiceCancel();
-    status.value = '已取消发送';
-    return;
-  }
-  const blob = await voiceStop();
-  if (voiceError.value) {
-    status.value = voiceError.value;
-    return;
-  }
-  if (!blob || !activeConversationId.value) {
-    status.value = blob ? '' : '说话时间太短，请按住再说';
-    return;
-  }
-  voiceBusy.value = true;
-  sending.value = true;
-  status.value = '识别中…';
-  try {
-    const mention = mentionId.value || undefined;
-    const res = await api.sendVoiceMessage(activeConversationId.value, blob, mention);
-    messages.value.push(res.userMessage, ...res.assistantMessages);
-    const peer = privatePeer(activeConversation.value);
-    if (peer?.id && (res.assistantMessages?.length ?? 0) > 0) {
-      scheduleMemoryWhisper(peer.id, activeConversationId.value || undefined);
-    }
-    await refreshConversations();
-    await nextTick();
-    if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight;
-    status.value = '';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    voiceBusy.value = false;
-    sending.value = false;
-  }
-}
-
-function onVoicePointerCancel() {
-  voiceCancelHint.value = false;
-  voiceWillCancel = false;
-  voiceCancel();
-}
-
-function isVoiceBubble(m: ChatMessage) {
-  return m.source === 'voice';
-}
 
 watch(tab, (t) => {
   if (t !== 'contacts') {
@@ -710,11 +543,7 @@ onUnmounted(() => {
   stopConversationsPoll();
   document.removeEventListener('pointerdown', onEmojiDocPointerDown);
   document.removeEventListener('keydown', onEmojiKeydown);
-  clearWhisperTimers();
-  if (memoryHighlightTimer) {
-    clearTimeout(memoryHighlightTimer);
-    memoryHighlightTimer = null;
-  }
+  disposeMemoryUi();
 });
 </script>
 

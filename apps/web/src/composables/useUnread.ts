@@ -2,7 +2,7 @@
  * C-03 conversation unread (nav dot + list badge).
  * D-02 partial extract: totalUnread + mark-read-on-open live here;
  * App only renders. UI-3 badge motion stays CSS (wx-motion-badge).
- * Memory whisper notices stay in App — not this composable.
+ * Memory whisper notices live in useMemoryUi — not this composable.
  */
 import type { Ref } from 'vue';
 import { computed } from 'vue';
