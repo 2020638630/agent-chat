@@ -5,7 +5,7 @@
  * Layout: left nav → mid list (chat / contacts / space tools) → main pane
  * (profile | moments feed | conversation). Talks to apps/server via ./api/client.
  * Composables: useHoldToTalk, useMoments, usePersonaEditor, useProactiveSettings (ARCH-3),
- * useTtsPlayback (X-06), useMessageReactions (UI-5);
+ * useTtsPlayback (X-06), useMessageReactions (UI-5), useUnread (D-02 C-03);
  * Motion tokens: constants/motion.ts + --motion-* CSS vars (UI-1 foundation);
  * UI-6 group alive: ambient avatar float + group typing avatars (CSS; reuses sending).
  * styles in ./styles/wechat.css.
@@ -19,6 +19,7 @@ import { usePersonaEditor } from './composables/usePersonaEditor';
 import { useProactiveSettings } from './composables/useProactiveSettings';
 import { useTtsPlayback } from './composables/useTtsPlayback';
 import { useMessageReactions } from './composables/useMessageReactions';
+import { useUnread } from './composables/useUnread';
 import { EMOJI_WHITELIST } from './constants/emojiWhitelist';
 import {
   THEME_PRESETS,
@@ -35,6 +36,7 @@ type Tab = 'chat' | 'contacts' | 'moments';
 const tab = ref<Tab>('chat');
 const characters = ref<Character[]>([]);
 const conversations = ref<Conversation[]>([]);
+const { totalUnread, markReadOnOpen, hasUnread, badgeText } = useUnread(conversations);
 const messages = ref<ChatMessage[]>([]);
 const activeConversationId = ref<string | null>(null);
 const draft = ref('');
@@ -210,10 +212,6 @@ const editBio = ref('');
 
 const activeConversation = computed(() =>
   conversations.value.find((c) => c.id === activeConversationId.value) ?? null
-);
-
-const totalUnread = computed(() =>
-  conversations.value.reduce((sum, c) => sum + (Number(c.unread_count) || 0), 0)
 );
 
 const midTitle = computed(() => {
@@ -793,14 +791,8 @@ async function openConversation(id: string) {
   if (peer?.id) void clearUnreadMemoryNotices(peer.id, id);
   const res = await api.listMessages(id);
   messages.value = res.messages;
-  // C-03: server marks read on GET messages; clear badge immediately without waiting for list refresh
-  const row = conversations.value.find((c) => c.id === id);
-  if (row) row.unread_count = 0;
-  void api.listConversations().then((listRes) => {
-    const synced = listRes.conversations.find((c) => c.id === id);
-    const live = conversations.value.find((c) => c.id === id);
-    if (live && synced) live.unread_count = synced.unread_count ?? 0;
-  }).catch(() => {});
+  // C-03: clear badge via useUnread (server marks read on GET messages)
+  markReadOnOpen(id);
   await nextTick();
   if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight;
 }
@@ -1487,7 +1479,7 @@ onUnmounted(() => {
               <div class="wx-list-sub">{{ c.last_message || (c.type === 'group' ? '群聊' : '私聊') }}</div>
             </div>
             <Transition name="wx-motion-badge">
-            <span v-if="(c.unread_count || 0) > 0" class="wx-unread-badge">{{ (c.unread_count || 0) > 99 ? '99+' : (c.unread_count || 0) }}</span>
+            <span v-if="hasUnread(c.unread_count)" class="wx-unread-badge">{{ badgeText(c.unread_count) }}</span>
           </Transition>
           </div>
         </div>
