@@ -88,6 +88,7 @@
 - **备注（收尾 2026-10-10）**：红点/未读状态（`conversations[].unread_count` + `totalUnread`）仍在 `App.vue`；未来收 D-02 时要抽 composable（UI-3 顺手发现，勿忘）。D-02 仍记**部分收口**，不追全收。
 - **备注（D-02 未读抽离 2026-10-11）：** C-03 未读已抽到 `useUnread`（`totalUnread` + `markReadOnOpen` + badge helpers）；App 只渲染；UI-3 `wx-motion-badge` 动效保留。记忆 whisper notices 仍在 App。D-02 仍记部分收口（下一段再合 `profileMoments` / `useMoments`）。
 - **备注（D-02 profileMoments 合并 2026-10-11）：** `profileMoments` 已并入 `useMoments`：主页动态与空间 feed 同一 `moments` 源；`profileMoments` 为按 `profileView` 过滤的 computed；资料接口结果经 `applyProfileMoments` upsert，无双写。未读此前已抽 `useUnread`。D-02 仍记**部分收口**（聊天/资料外观/壳层等仍在 App.vue），不追全收。
+- **备注（D-02 P0 专项 2026-10-11）：** 抽出 useAppShell（tab / menuOpen / swipe* / listCtx* / midTitle）与 useChatSession（conversations / messages / draft / sending / openConversation / 发送相关 / 会话 CRUD）。App.vue 2446→~2150 行；web build 通过。仍**部分收口**：资料/外观、通讯录与导入、记忆 whisper、语音 STT 编排仍在 App。未碰 N-02 / Gemini / UI-5/6 语义。
 
 
 ### D-03 `conversations` 路由承载业务编排

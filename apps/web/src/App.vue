@@ -5,7 +5,8 @@
  * Layout: left nav → mid list (chat / contacts / space tools) → main pane
  * (profile | moments feed | conversation). Talks to apps/server via ./api/client.
  * Composables: useHoldToTalk, useMoments, usePersonaEditor, useProactiveSettings (ARCH-3),
- * useTtsPlayback (X-06), useMessageReactions (UI-5), useUnread (D-02 C-03);
+ * useTtsPlayback (X-06), useMessageReactions (UI-5), useUnread (D-02 C-03),
+ * useAppShell / useChatSession (D-02 P0);
  * Motion tokens: constants/motion.ts + --motion-* CSS vars (UI-1 foundation);
  * UI-6 group alive: ambient avatar float + group typing avatars (CSS; reuses sending).
  * styles in ./styles/wechat.css.
@@ -20,6 +21,8 @@ import { useProactiveSettings } from './composables/useProactiveSettings';
 import { useTtsPlayback } from './composables/useTtsPlayback';
 import { useMessageReactions } from './composables/useMessageReactions';
 import { useUnread } from './composables/useUnread';
+import { useAppShell } from './composables/useAppShell';
+import { useChatSession } from './composables/useChatSession';
 import { EMOJI_WHITELIST } from './constants/emojiWhitelist';
 import {
   THEME_PRESETS,
@@ -31,19 +34,17 @@ import {
   type ThemeId,
 } from './constants/themes';
 
-type Tab = 'chat' | 'contacts' | 'moments';
 
-const tab = ref<Tab>('chat');
 const characters = ref<Character[]>([]);
-const conversations = ref<Conversation[]>([]);
-const { totalUnread, markReadOnOpen, hasUnread, badgeText } = useUnread(conversations);
-const messages = ref<ChatMessage[]>([]);
-const activeConversationId = ref<string | null>(null);
-const draft = ref('');
-const draftInput = ref<HTMLTextAreaElement | null>(null);
-const emojiOpen = ref(false);
-const emojiPopover = ref<HTMLElement | null>(null);
-const sending = ref(false);
+
+// D-02 P0: late-bound bridges so shell/chat can close over App helpers defined below.
+let openConversation!: (id: string) => Promise<void>;
+let deleteConversationById!: (id: string, title: string) => Promise<boolean>;
+let markReadOnOpen!: (conversationId: string) => void;
+let closeProfile!: () => Promise<void>;
+let scheduleMemoryWhisper!: (characterId: string, conversationId?: string) => void;
+let clearUnreadMemoryNotices!: (characterId: string, conversationId?: string) => Promise<void>;
+let conversations!: import('vue').Ref<Conversation[]>;
 const {
   holding: voiceHolding,
   recording: voiceRecording,
@@ -68,33 +69,14 @@ const {
     status.value = msg;
   },
 });
-const { REACTION_QUICK, toggleReaction } = useMessageReactions(
-  messages,
-  activeConversationId,
-  (msg) => {
-    status.value = msg;
-  },
-);
 const selectedForGroup = ref<string[]>([]);
 const creatingGroup = ref(false);
 const groupTitleDraft = ref('');
 const groupSearch = ref('');
 const contactMenuId = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
-const chatBody = ref<HTMLElement | null>(null);
-const mentionId = ref<string>('');
-const menuOpen = ref(false);
-const msgMenuId = ref<string | null>(null);
-const pendingDeleteMessage = ref<ChatMessage | null>(null);
 const pendingOverwriteImport = ref<{ file: File; name: string } | null>(null);
 const pendingDeleteCharacter = ref<{ id: string; name: string } | null>(null);
-const listCtxId = ref<string | null>(null);
-const listCtxPos = ref({ x: 0, y: 0 });
-const swipeId = ref<string | null>(null);
-const swipeX = ref(0);
-let swipeStartX = 0;
-let swipeActiveId: string | null = null;
-let swipeMoved = false;
 
 type ProfileView = null | { kind: 'user' } | { kind: 'character'; id: string };
 const profileView = ref<ProfileView>(null);
@@ -108,12 +90,106 @@ const appearanceBusy = ref(false);
 const avatarFileInput = ref<HTMLInputElement | null>(null);
 const bgFileInput = ref<HTMLInputElement | null>(null);
 const spaceBgFileInput = ref<HTMLInputElement | null>(null);
-const chatImageInput = ref<HTMLInputElement | null>(null);
-const imageBusy = ref(false);
-const lightboxUrl = ref<string | null>(null);
 const setStatus = (msg: string) => {
   status.value = msg;
 };
+
+const {
+  tab,
+  menuOpen,
+  listCtxId,
+  listCtxPos,
+  swipeId,
+  swipeX,
+  midTitle,
+  switchTab,
+  onListContextMenu,
+  onListCtxDelete,
+  deleteFromList,
+  onSwipeStart,
+  onSwipeMove,
+  onSwipeEnd,
+  swipeStyle,
+  onListItemClick,
+} = useAppShell({
+  creatingGroup,
+  hasProfile: () => !!profileView.value,
+  closeProfile: () => closeProfile(),
+  openConversation: (id) => openConversation(id),
+  deleteConversationById: (id, title) => deleteConversationById(id, title),
+  findConversation: (id) => conversations.value.find((c) => c.id === id),
+});
+
+const {
+  conversations: conversationsRef,
+  messages,
+  activeConversationId,
+  activeConversation,
+  draft,
+  draftInput,
+  emojiOpen,
+  emojiPopover,
+  sending,
+  chatBody,
+  mentionId,
+  msgMenuId,
+  pendingDeleteMessage,
+  chatImageInput,
+  imageBusy,
+  lightboxUrl,
+  privatePeer,
+  refreshConversations,
+  openConversation: openConversationImpl,
+  startPrivate,
+  toggleEmojiPicker,
+  closeEmojiPicker,
+  insertEmoji,
+  onEmojiDocPointerDown,
+  onEmojiKeydown,
+  send,
+  onChatImageChange,
+  openChatImagePicker,
+  openLightbox,
+  closeLightbox,
+  onKeydown,
+  renameGroup,
+  deleteConversationById: deleteConversationByIdImpl,
+  dissolveGroup,
+  clearChat,
+  deleteOneMessage,
+  cancelDeleteMessage,
+  confirmDeleteMessage,
+  toggleMsgMenu,
+  startConversationsPoll,
+  stopConversationsPoll,
+  scrollChatToBottom,
+} = useChatSession({
+  tab,
+  menuOpen,
+  setStatus,
+  closeProfile: () => closeProfile(),
+  markReadOnOpen: (id) => markReadOnOpen(id),
+  scheduleMemoryWhisper: (characterId, conversationId) =>
+    scheduleMemoryWhisper(characterId, conversationId),
+  clearUnreadMemoryNotices: (characterId, conversationId) =>
+    clearUnreadMemoryNotices(characterId, conversationId),
+  isVoiceActive: () => voiceActive.value,
+});
+conversations = conversationsRef;
+openConversation = openConversationImpl;
+deleteConversationById = deleteConversationByIdImpl;
+
+const { totalUnread, markReadOnOpen: markReadOnOpenImpl, hasUnread, badgeText } = useUnread(conversations);
+markReadOnOpen = markReadOnOpenImpl;
+
+const { REACTION_QUICK, toggleReaction } = useMessageReactions(
+  messages,
+  activeConversationId,
+  (msg) => {
+    status.value = msg;
+  },
+);
+
 
 const {
   proactiveEnabled,
@@ -209,15 +285,6 @@ const profileEditing = ref(false);
 const editMood = ref('');
 const editBio = ref('');
 
-const activeConversation = computed(() =>
-  conversations.value.find((c) => c.id === activeConversationId.value) ?? null
-);
-
-const midTitle = computed(() => {
-  if (tab.value === 'chat') return '消息';
-  if (tab.value === 'contacts') return creatingGroup.value ? '创建群聊' : '通讯录';
-  return '空间';
-});
 
 
 const groupPickableCharacters = computed(() => {
@@ -360,20 +427,12 @@ function headerStatus(c: Conversation | null) {
 }
 
 
-async function closeProfile() {
+closeProfile = async () => {
   profileView.value = null;
   profile.value = null;
   profileMemories.value = [];
   profileEditing.value = false;
-}
-
-/** Leave profile overlay when switching side nav tabs. */
-async function switchTab(next: 'chat' | 'contacts' | 'moments') {
-  if (profileView.value) await closeProfile();
-  tab.value = next;
-}
-
-
+};
 
 function applyAppearanceToDom() {
   document.documentElement.setAttribute('data-theme', uiTheme.value);
@@ -565,10 +624,6 @@ async function clearSpaceBg() {
   }
 }
 
-function privatePeer(c: Conversation | null | undefined) {
-  if (!c || c.type !== 'private') return null;
-  return (c.members && c.members[0]) || null;
-}
 
 function clearWhisperTimers() {
   if (whisperDelayTimer) {
@@ -624,7 +679,7 @@ function flashMemoryHighlights(ids: string[]) {
 }
 
 /** Swallow stale unread whispers when opening a private chat (no UI). */
-async function clearUnreadMemoryNotices(characterId: string, conversationId?: string) {
+clearUnreadMemoryNotices = async (characterId: string, conversationId?: string) => {
   if (!characterId) return;
   try {
     await api.markCharacterMemoryNoticesRead(characterId, {
@@ -634,9 +689,9 @@ async function clearUnreadMemoryNotices(characterId: string, conversationId?: st
   } catch {
     // best-effort
   }
-}
+};
 
-function scheduleMemoryWhisper(characterId: string, conversationId?: string) {
+scheduleMemoryWhisper = (characterId: string, conversationId?: string) => {
   if (!characterId) return;
   for (const t of whisperPollTimers) clearTimeout(t);
   whisperPollTimers = [];
@@ -684,7 +739,7 @@ function scheduleMemoryWhisper(characterId: string, conversationId?: string) {
     }, ms);
     whisperPollTimers.push(t);
   }
-}
+};
 
 function headerAvatar(c: Conversation | null | undefined) {
   const peer = privatePeer(c);
@@ -770,43 +825,6 @@ function onMsgAvatarClick(m: ChatMessage) {
 async function refreshCharacters() {
   const res = await api.listCharacters();
   characters.value = res.characters;
-}
-
-async function refreshConversations() {
-  const res = await api.listConversations();
-  conversations.value = res.conversations;
-}
-
-async function openConversation(id: string) {
-  await closeProfile();
-  activeConversationId.value = id;
-  tab.value = 'chat';
-  mentionId.value = '';
-  menuOpen.value = false;
-  msgMenuId.value = null;
-  const conv = conversations.value.find((c) => c.id === id) ?? null;
-  const peer = privatePeer(conv);
-  if (peer?.id) void clearUnreadMemoryNotices(peer.id, id);
-  const res = await api.listMessages(id);
-  messages.value = res.messages;
-  // C-03: clear badge via useUnread (server marks read on GET messages)
-  markReadOnOpen(id);
-  await nextTick();
-  if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight;
-}
-
-async function startPrivate(characterId: string) {
-  await refreshConversations();
-  const existing = conversations.value.find(
-    (c) => c.type === 'private' && c.members?.length === 1 && c.members[0].id === characterId
-  );
-  if (existing) {
-    await openConversation(existing.id);
-    return;
-  }
-  const { conversation } = await api.createConversation([characterId], undefined, 'private');
-  await refreshConversations();
-  await openConversation(conversation.id);
 }
 
 function openGroupCreator() {
@@ -942,116 +960,6 @@ async function confirmOverwriteImport() {
 }
 
 
-function toggleEmojiPicker() {
-  emojiOpen.value = !emojiOpen.value;
-}
-
-function closeEmojiPicker() {
-  emojiOpen.value = false;
-}
-
-function insertEmoji(emoji: string) {
-  const el = draftInput.value;
-  const cur = draft.value;
-  if (!el) {
-    draft.value = cur + emoji;
-    return;
-  }
-  const start = el.selectionStart ?? cur.length;
-  const end = el.selectionEnd ?? cur.length;
-  draft.value = cur.slice(0, start) + emoji + cur.slice(end);
-  void nextTick(() => {
-    const pos = start + emoji.length;
-    el.focus();
-    el.setSelectionRange(pos, pos);
-  });
-}
-
-function onEmojiDocPointerDown(e: PointerEvent) {
-  if (!emojiOpen.value) return;
-  const target = e.target as Node | null;
-  if (!target) return;
-  if (emojiPopover.value?.contains(target)) return;
-  const btn = (target as HTMLElement).closest?.('.wx-emoji-btn');
-  if (btn) return;
-  closeEmojiPicker();
-}
-
-function onEmojiKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && emojiOpen.value) {
-    e.preventDefault();
-    closeEmojiPicker();
-  }
-}
-
-async function send() {
-  closeEmojiPicker();
-
-  const text = draft.value.trim();
-  if (!text || !activeConversationId.value || sending.value) return;
-  sending.value = true;
-  status.value = '发送中…';
-  try {
-    const mention = mentionId.value || undefined;
-    const res = await api.sendMessage(activeConversationId.value, text, mention);
-    draft.value = '';
-    messages.value.push(res.userMessage, ...res.assistantMessages);
-    const peer = privatePeer(activeConversation.value);
-    if (peer?.id && (res.assistantMessages?.length ?? 0) > 0) {
-      scheduleMemoryWhisper(peer.id, activeConversationId.value || undefined);
-    }
-    await refreshConversations();
-    await nextTick();
-    if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight;
-    status.value = '';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    sending.value = false;
-  }
-}
-
-
-
-async function onChatImageChange(ev: Event) {
-  const input = ev.target as HTMLInputElement;
-  const file = input.files?.[0];
-  input.value = '';
-  if (!file || !activeConversationId.value || sending.value || imageBusy.value) return;
-  imageBusy.value = true;
-  sending.value = true;
-  status.value = '发送图片…';
-  try {
-    const res = await api.sendChatImage(activeConversationId.value, file);
-    messages.value.push(res.userMessage);
-    await refreshConversations();
-    await nextTick();
-    if (chatBody.value) chatBody.value.scrollTop = chatBody.value.scrollHeight;
-    status.value = '';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  } finally {
-    imageBusy.value = false;
-    sending.value = false;
-  }
-}
-
-function openChatImagePicker() {
-  if (sending.value || imageBusy.value || voiceActive.value || !activeConversationId.value) {
-    status.value = !activeConversationId.value ? '请先打开会话' : '请稍候…';
-    return;
-  }
-  chatImageInput.value?.click();
-}
-
-function openLightbox(url: string) {
-  lightboxUrl.value = url;
-}
-
-function closeLightbox() {
-  lightboxUrl.value = null;
-}
-
 async function onVoicePointerDown(e: PointerEvent) {
   e.preventDefault();
   if (sending.value || voiceBusy.value || !activeConversationId.value) return;
@@ -1121,193 +1029,6 @@ function isVoiceBubble(m: ChatMessage) {
   return m.source === 'voice';
 }
 
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    void send();
-  }
-}
-
-async function renameGroup() {
-  menuOpen.value = false;
-  const conv = activeConversation.value;
-  if (!conv || conv.type !== 'group') return;
-  const next = window.prompt('修改群名称', conv.title);
-  if (next == null) return;
-  const title = next.trim();
-  if (!title) {
-    status.value = '群名称不能为空';
-    return;
-  }
-  try {
-    await api.renameConversation(conv.id, title);
-    await refreshConversations();
-    status.value = '';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
-async function deleteConversationById(id: string, title: string) {
-  const ok = window.confirm(`确定删除会话「${title}」？\n会话与其中消息将删除，角色与空间不受影响。`);
-  if (!ok) return false;
-  try {
-    await api.deleteConversation(id);
-    if (activeConversationId.value === id) {
-      activeConversationId.value = null;
-      messages.value = [];
-    }
-    await refreshConversations();
-    if (!activeConversationId.value && conversations.value.length) {
-      await openConversation(conversations.value[0].id);
-    }
-    status.value = '会话已删除';
-    return true;
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-    return false;
-  }
-}
-
-async function dissolveGroup() {
-  menuOpen.value = false;
-  const conv = activeConversation.value;
-  if (!conv) return;
-  const label = conv.type === 'group' ? '解散并删除群' : '删除会话';
-  const ok = window.confirm(
-    conv.type === 'group'
-      ? `确定${label}「${conv.title}」？\n群消息与成员关系将删除，角色与其它会话不受影响。`
-      : `确定删除会话「${conv.title}」？\n会话与其中消息将删除，角色与空间不受影响。`
-  );
-  if (!ok) return;
-  try {
-    await api.deleteConversation(conv.id);
-    activeConversationId.value = null;
-    messages.value = [];
-    await refreshConversations();
-    if (conversations.value.length) {
-      await openConversation(conversations.value[0].id);
-    }
-    status.value = conv.type === 'group' ? '群已解散' : '会话已删除';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
-function onListContextMenu(e: MouseEvent, c: Conversation) {
-  e.preventDefault();
-  listCtxId.value = c.id;
-  listCtxPos.value = { x: e.clientX, y: e.clientY };
-  swipeId.value = null;
-  swipeX.value = 0;
-}
-
-async function onListCtxDelete() {
-  const c = conversations.value.find((x) => x.id === listCtxId.value);
-  if (!c) { listCtxId.value = null; return; }
-  await deleteFromList(c);
-}
-
-async function deleteFromList(c: Conversation) {
-  listCtxId.value = null;
-  swipeId.value = null;
-  swipeX.value = 0;
-  await deleteConversationById(c.id, c.title);
-}
-
-function onSwipeStart(e: PointerEvent, id: string) {
-  if (e.pointerType === 'mouse' && e.button !== 0) return;
-  swipeActiveId = id;
-  swipeStartX = e.clientX;
-  swipeMoved = false;
-  (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-}
-
-function onSwipeMove(e: PointerEvent) {
-  if (!swipeActiveId) return;
-  const dx = e.clientX - swipeStartX;
-  if (Math.abs(dx) > 6) swipeMoved = true;
-  if (dx < 0) {
-    swipeId.value = swipeActiveId;
-    swipeX.value = Math.max(dx, -72);
-  } else if (swipeId.value === swipeActiveId) {
-    swipeX.value = Math.min(0, dx);
-  }
-}
-
-function onSwipeEnd() {
-  if (!swipeActiveId) return;
-  if (swipeId.value === swipeActiveId && swipeX.value < -36) {
-    swipeX.value = -72;
-  } else {
-    swipeId.value = null;
-    swipeX.value = 0;
-  }
-  swipeActiveId = null;
-}
-
-function swipeStyle(id: string) {
-  if (swipeId.value !== id) return undefined;
-  return { transform: `translateX(${swipeX.value}px)` };
-}
-
-function onListItemClick(c: Conversation) {
-  if (swipeMoved) {
-    swipeMoved = false;
-    return;
-  }
-  if (swipeId.value && swipeId.value !== c.id) {
-    swipeId.value = null;
-    swipeX.value = 0;
-  }
-  listCtxId.value = null;
-  void openConversation(c.id);
-}
-
-async function clearChat() {
-  menuOpen.value = false;
-  const conv = activeConversation.value;
-  if (!conv) return;
-  const ok = window.confirm('清空当前会话的全部聊天记录？此操作不可恢复。');
-  if (!ok) return;
-  try {
-    await api.clearMessages(conv.id);
-    messages.value = [];
-    await refreshConversations();
-    status.value = '已清空聊天记录';
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
-function deleteOneMessage(m: ChatMessage) {
-  msgMenuId.value = null;
-  if (!activeConversationId.value) return;
-  pendingDeleteMessage.value = m;
-}
-
-function cancelDeleteMessage() {
-  pendingDeleteMessage.value = null;
-}
-
-async function confirmDeleteMessage() {
-  const m = pendingDeleteMessage.value;
-  if (!m || !activeConversationId.value) return;
-  try {
-    await api.deleteMessage(activeConversationId.value, m.id);
-    messages.value = messages.value.filter((x) => x.id !== m.id);
-    await refreshConversations();
-    pendingDeleteMessage.value = null;
-  } catch (err) {
-    status.value = err instanceof Error ? err.message : String(err);
-  }
-}
-
-function toggleMsgMenu(id: string) {
-  msgMenuId.value = msgMenuId.value === id ? null : id;
-}
-
-
 watch(tab, (t) => {
   if (t !== 'contacts') {
     creatingGroup.value = false;
@@ -1321,22 +1042,6 @@ watch(tab, (t) => {
   if (t === 'chat') void refreshConversations();
 });
 
-
-let conversationsPollTimer: ReturnType<typeof setInterval> | null = null;
-function startConversationsPoll() {
-  stopConversationsPoll();
-  conversationsPollTimer = setInterval(() => {
-    if (document.visibilityState !== "visible") return;
-    // Keep sidebar unread dot fresh even when not on the chat tab.
-    void refreshConversations();
-  }, 20_000);
-}
-function stopConversationsPoll() {
-  if (conversationsPollTimer) {
-    clearInterval(conversationsPollTimer);
-    conversationsPollTimer = null;
-  }
-}
 
 onMounted(async () => {
   document.addEventListener('pointerdown', onEmojiDocPointerDown);
