@@ -101,9 +101,10 @@
 - **类型**：前端工程 / 壳层重组（**非**状态管理债）
 - **现象**：D-02 状态迁出后仍剩壳模板、composable 胶水、status、消息展示辅助（avatarText/dayLabel/formatTime/collage 等）、emoji 接线
 - **影响**：继续硬抽边际收益递减，可能拆散壳层、增加耦合
-- **建议动作**：独立债；拍板暂不继续抽；节奏另定
+- **建议动作**：独立债；抽展示辅助/status/emoji 接线即可；**壳模板大拆 / late-bound 胶水重组刻意不做**（避免耦合）
 - **建议阶段**：P3 / 视 UI 线节奏
 - **状态（2026-10-11）**：待处理；与 D-02 状态债分离，不挂 D-02
+- **状态（2026-10-13 BF）**：**已处理（关单）**。抽出 `useStatusBar`、`useMessageDisplay`；emoji document 监听与 conversations poll 生命周期收进 `useChatSession`。App.vue 1664→1527。行为不变；web build 通。刻意残留：大块壳模板、composable late-bound 编排胶水（不拆以免耦合）。未动 N-02 / Gemini / X05-D2～D6。
 
 ### D-03 `conversations` 路由承载业务编排
 - **位置**：`apps/server/src/routes/conversations.ts`（约 864 行）

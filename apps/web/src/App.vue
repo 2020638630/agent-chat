@@ -8,6 +8,7 @@
  * useTtsPlayback (X-06), useMessageReactions (UI-5), useUnread (D-02 C-03),
  * useAppShell / useChatSession (D-02 P0), useProfileAppearance / useContactsImport (P1),
  * useMemoryUi / useVoiceInput (P2);
+ * useStatusBar / useMessageDisplay (D-02b shell helpers);
  * Motion tokens: constants/motion.ts + --motion-* CSS vars (UI-1 foundation);
  * UI-6 group alive: ambient avatar float + group typing avatars (CSS; reuses sending).
  * styles in ./styles/wechat.css.
@@ -27,6 +28,8 @@ import { useProfileAppearance } from './composables/useProfileAppearance';
 import { useContactsImport } from './composables/useContactsImport';
 import { useMemoryUi } from './composables/useMemoryUi';
 import { useVoiceInput } from './composables/useVoiceInput';
+import { useStatusBar } from './composables/useStatusBar';
+import { useMessageDisplay } from './composables/useMessageDisplay';
 import { EMOJI_WHITELIST } from './constants/emojiWhitelist';
 
 
@@ -45,7 +48,7 @@ let refreshCharacters!: () => Promise<void>;
 let activeConversationId!: import('vue').Ref<string | null>;
 let messages!: import('vue').Ref<ChatMessage[]>;
 let profileView!: import('vue').Ref<import('./composables/useMoments').ProfileView>;
-const status = ref('');
+const { status, setStatus } = useStatusBar();
 
 const {
   profileMemories,
@@ -67,14 +70,7 @@ const {
   loadingId: ttsLoadingId,
   progressRatio: ttsProgressRatio,
   play: playTts,
-} = useTtsPlayback({
-  setStatus: (msg) => {
-    status.value = msg;
-  },
-});
-const setStatus = (msg: string) => {
-  status.value = msg;
-};
+} = useTtsPlayback({ setStatus });
 
 const {
   profileView: profileViewRef,
@@ -221,8 +217,6 @@ const {
   toggleEmojiPicker,
   closeEmojiPicker,
   insertEmoji,
-  onEmojiDocPointerDown,
-  onEmojiKeydown,
   send,
   sendQuickText,
   onChatImageChange,
@@ -238,8 +232,6 @@ const {
   cancelDeleteMessage,
   confirmDeleteMessage,
   toggleMsgMenu,
-  startConversationsPoll,
-  stopConversationsPoll,
   scrollChatToBottom,
 } = useChatSession({
   tab,
@@ -290,9 +282,7 @@ markReadOnOpen = markReadOnOpenImpl;
 const { REACTION_QUICK, toggleReaction } = useMessageReactions(
   messages,
   activeConversationId,
-  (msg) => {
-    status.value = msg;
-  },
+  setStatus,
 );
 
 
@@ -377,154 +367,31 @@ const {
   },
 });
 
-function avatarText(name?: string) {
-  return (name || '?').slice(0, 1);
-}
 
-type CollageMember = { id: string; name: string; avatar_path?: string | null };
-
-function collageMembers(c: Conversation | null | undefined): CollageMember[] {
-  if (!c || c.type !== 'group') return [];
-  const me: CollageMember = {
-    id: 'me',
-    name: meProfile.value?.name || '旅人',
-    avatar_path: meProfile.value?.avatar_path || null,
-  };
-  const chars = (c.members || []).map((m) => ({
-    id: m.id,
-    name: m.name,
-    avatar_path: m.avatar_path ?? null,
-  }));
-  // user counts as one seat; fill remaining with characters (max 4 tiles)
-  return [me, ...chars].slice(0, 4);
-}
-
-function speakerKey(m: ChatMessage) {
-  if (m.role === 'user') return 'user';
-  return `assistant:${m.character_id || m.character_name || 'unknown'}`;
-}
-
-function isContinued(i: number) {
-  if (i <= 0) return false;
-  const prev = messages.value[i - 1];
-  const cur = messages.value[i];
-  if (!prev || !cur) return false;
-  if (speakerKey(prev) !== speakerKey(cur)) return false;
-  return dayKey(prev.created_at) === dayKey(cur.created_at);
-}
-
-function dayKey(iso?: string) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso.slice(0, 10);
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-}
-
-function dayLabel(iso?: string) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const now = new Date();
-  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const startMsg = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const diffDays = Math.round((startToday.getTime() - startMsg.getTime()) / 86400000);
-  if (diffDays === 0) return '今天';
-  if (diffDays === 1) return '昨天';
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const da = String(d.getDate()).padStart(2, '0');
-  if (d.getFullYear() === now.getFullYear()) return `${mo}-${da}`;
-  return `${d.getFullYear()}-${mo}-${da}`;
-}
-
-function showDayDivider(i: number) {
-  if (i === 0) return true;
-  const prev = messages.value[i - 1];
-  const cur = messages.value[i];
-  if (!prev || !cur) return false;
-  return dayKey(prev.created_at) !== dayKey(cur.created_at);
-}
-
-function formatTime(iso?: string) {
-  if (!iso) return '';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  const now = new Date();
-  if (d.toDateString() === now.toDateString()) return `${hh}:${mm}`;
-  const mo = String(d.getMonth() + 1).padStart(2, '0');
-  const da = String(d.getDate()).padStart(2, '0');
-  if (d.getFullYear() === now.getFullYear()) return `${mo}-${da}`;
-  return `${d.getFullYear()}-${mo}-${da}`;
-}
-
-
-function isMemoryConfirmPending(m: ChatMessage, index: number) {
-  if (m.role !== 'assistant' || m.source !== 'memory_confirm') return false;
-  for (let j = index + 1; j < messages.value.length; j++) {
-    if (messages.value[j].role === 'user') return false;
-  }
-  return true;
-}
-
-function onMemoryConfirmChoice(choice: '改' | '不改') {
-  if (sending.value) return;
-  void sendQuickText(choice);
-}
-
-function speakerName(m: ChatMessage) {
-  if (m.role === 'user') return '我';
-  return m.character_name || activeConversation.value?.title || '角色';
-}
-
-/** Same avatar source as contacts / timeline: uploaded path, else letter circle. */
-function messageAvatarUrl(m: ChatMessage): string | null {
-  if (m.role === 'user') return meProfile.value?.avatar_path || null;
-  if (m.character_id) {
-    const fromList = characters.value.find((c) => c.id === m.character_id);
-    if (fromList?.avatar_path) return fromList.avatar_path;
-    const fromMembers = activeConversation.value?.members?.find((mem) => mem.id === m.character_id);
-    if (fromMembers?.avatar_path) return fromMembers.avatar_path;
-  }
-  const peer = privatePeer(activeConversation.value);
-  if (peer?.avatar_path && activeConversation.value?.type === 'private') return peer.avatar_path;
-  return null;
-}
-
-function messageAvatarLetter(m: ChatMessage) {
-  if (m.role === 'user') return avatarText(meProfile.value?.name || '我');
-  return avatarText(m.character_name || activeConversation.value?.title || '?');
-}
-
-function escapeHtml(s: string) {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
-function mentionHtml(text: string) {
-  return escapeHtml(text).replace(
-    /@[\w\u4e00-\u9fff·\-\.]+/g,
-    '<span class="wx-mention">$&</span>'
-  );
-}
-
-function headerStatus(c: Conversation | null) {
-  if (!c) return '';
-  if (c.type === 'group') {
-    const n = c.members?.length || 0;
-    return n ? `${n} 位成员` : '群聊';
-  }
-  return '私聊';
-}
-
-function headerAvatar(c: Conversation | null | undefined) {
-  const peer = privatePeer(c);
-  if (peer?.avatar_path) return peer.avatar_path;
-  return null;
-}
+const {
+  avatarText,
+  collageMembers,
+  isContinued,
+  dayLabel,
+  showDayDivider,
+  formatTime,
+  isMemoryConfirmPending,
+  onMemoryConfirmChoice,
+  speakerName,
+  messageAvatarUrl,
+  messageAvatarLetter,
+  mentionHtml,
+  headerStatus,
+  headerAvatar,
+} = useMessageDisplay({
+  messages,
+  activeConversation,
+  meProfile,
+  characters,
+  privatePeer,
+  sending,
+  sendQuickText,
+});
 
 
 watch(tab, (t) => {
@@ -541,8 +408,6 @@ watch(tab, (t) => {
 
 
 onMounted(async () => {
-  document.addEventListener('pointerdown', onEmojiDocPointerDown);
-  document.addEventListener('keydown', onEmojiKeydown);
   await refreshMeProfile();
   try {
     const h = await api.health();
@@ -555,9 +420,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
-  stopConversationsPoll();
-  document.removeEventListener('pointerdown', onEmojiDocPointerDown);
-  document.removeEventListener('keydown', onEmojiKeydown);
+  // emoji listeners + conversations poll disposed inside useChatSession
   disposeMemoryUi();
 });
 </script>

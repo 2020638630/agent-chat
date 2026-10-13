@@ -3,7 +3,7 @@
  * D-02 P0 extract from App.vue — behavior unchanged.
  * D-02 P2: voice STT via useVoiceInput; memory whisper via useMemoryUi (opts callbacks).
  */
-import { computed, nextTick, onUnmounted, ref, type Ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, type Ref } from 'vue';
 import { api, type ChatMessage, type Conversation } from '../api/client';
 import type { Tab } from './useAppShell';
 
@@ -399,9 +399,18 @@ export function useChatSession(opts: {
     confirmRefreshGen++;
   }
 
+  onMounted(() => {
+    // D-02b: emoji dismiss + conversations list poll live with session shell
+    document.addEventListener('pointerdown', onEmojiDocPointerDown);
+    document.addEventListener('keydown', onEmojiKeydown);
+    startConversationsPoll();
+  });
+
   onUnmounted(() => {
     stopConversationsPoll();
     disposeChatSessionExtras();
+    document.removeEventListener('pointerdown', onEmojiDocPointerDown);
+    document.removeEventListener('keydown', onEmojiKeydown);
   });
 
   return {
