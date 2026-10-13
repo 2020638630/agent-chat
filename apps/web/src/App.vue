@@ -52,12 +52,14 @@ const { status, setStatus } = useStatusBar();
 
 const {
   profileMemories,
+  profilePendingMemories,
   memoryWhisperText,
   memoryWhisperVisible,
   memoryWhisperOpaque,
   memoryHighlightIds,
   clearProfileMemories,
   loadProfileMemories,
+  discardPendingMemory,
   clearUnreadMemoryNotices,
   scheduleMemoryWhisper,
   disposeMemoryUi,
@@ -367,6 +369,14 @@ const {
   },
 });
 
+
+async function onDiscardPendingMemory(memoryId: string) {
+  const id = profileView.value?.kind === 'character' ? profileView.value.id : '';
+  if (!id || !memoryId) return;
+  const ok = await discardPendingMemory(id, memoryId);
+  setStatus(ok ? '已丢弃待确认记忆' : '丢弃失败');
+  if (ok) setTimeout(() => setStatus(''), 1600);
+}
 
 const {
   avatarText,
@@ -846,7 +856,10 @@ onUnmounted(() => {
               </template>
             </div>
           </div>
-          <div v-if="profileView?.kind === 'character' && profileMemories.length" class="wx-profile-memories">
+          <div
+            v-if="profileView?.kind === 'character' && (profileMemories.length || profilePendingMemories.length)"
+            class="wx-profile-memories"
+          >
             <div class="wx-profile-label">记得的事</div>
             <ul class="wx-memory-list">
               <li
@@ -855,6 +868,20 @@ onUnmounted(() => {
                 :class="{ 'wx-memory-new': memoryHighlightIds.includes(m.id) }"
               >{{ m.content }}</li>
             </ul>
+            <div v-if="profilePendingMemories.length" class="wx-memory-pending-block">
+              <div class="wx-profile-label wx-memory-pending-label">待确认</div>
+              <ul class="wx-memory-list pending">
+                <li v-for="m in profilePendingMemories" :key="m.id" class="wx-memory-pending-item">
+                  <span class="wx-memory-pending-text">{{ m.content }}</span>
+                  <button
+                    type="button"
+                    class="wx-memory-discard"
+                    title="丢弃此待确认记忆"
+                    @click="onDiscardPendingMemory(m.id)"
+                  >丢弃</button>
+                </li>
+              </ul>
+            </div>
           </div>
           <div class="wx-profile-moments">
             <div class="wx-profile-label-row">
@@ -1119,7 +1146,7 @@ onUnmounted(() => {
                           <span class="wx-voice-label">语音</span>
                           <span class="wx-voice-transcript">{{ m.content }}</span>
                         </button>
-                        <div v-else class="wx-bubble" v-html="mentionHtml(m.content)"></div>
+                        <div v-else class="wx-bubble" :class="{ 'wx-msg-debug': m.source === 'memory_debug' }" v-html="mentionHtml(m.content)"></div>
                         <div class="wx-msg-actions" @click.stop>
                           <button
                             v-if="!isVoiceBubble(m) && !m.image_path"

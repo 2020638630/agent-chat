@@ -2774,3 +2774,46 @@ button.wx-space-filter-item {
   }
 }
 
+
+/* X05-D2: pending memories on profile */
+.wx-memory-pending-block {
+  margin-top: 10px;
+}
+.wx-memory-pending-label {
+  opacity: 0.72;
+  font-size: 12px;
+}
+.wx-memory-list.pending {
+  margin-top: 4px;
+}
+.wx-memory-pending-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  justify-content: space-between;
+}
+.wx-memory-pending-text {
+  flex: 1;
+  min-width: 0;
+  opacity: 0.85;
+}
+.wx-memory-discard {
+  flex: 0 0 auto;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.8);
+  color: var(--text-2, #666);
+  font-size: 12px;
+  cursor: pointer;
+}
+.wx-memory-discard:hover {
+  color: var(--accent-deep, #2f6b4f);
+  border-color: color-mix(in srgb, var(--accent-deep, #2f6b4f) 35%, transparent);
+}
+.wx-msg-debug {
+  opacity: 0.7;
+  font-size: 12px;
+  font-style: italic;
+}

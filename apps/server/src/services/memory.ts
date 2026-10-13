@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { db } from '../db/index.js';
 import { chatCompletion } from './llm.js';
 import { gateExtractOps } from './memoryGate.js';
+import { env, envInt } from '../config/env.js';
 
 export type MemoryType = 'fact' | 'preference' | 'promise' | 'habit';
 export type MemoryStatus = 'active' | 'pending' | 'superseded' | 'user_hidden';
@@ -25,6 +26,111 @@ const INJECT_MAX = 8;
 const INJECT_MIN_CONF = 0.6;
 const EXTRACT_HISTORY = 12;
 const EXTRACT_ACTIVE_CAP = 20;
+
+/** X05-D2: pending confirm TTL. Default 7 days; override with MEMORY_PENDING_TTL_DAYS. */
+export function pendingTtlDays(): number {
+  const n = envInt('MEMORY_PENDING_TTL_DAYS', 7);
+  return n > 0 ? n : 7;
+}
+
+/**
+ * X05-D2: supersede stale pending memories (updated_at older than TTL).
+ * Using updated_at so a re-asked / refreshed pending resets the clock.
+ * Returns number of rows superseded.
+ */
+export function expireStalePendingMemories(characterId?: string): number {
+  const days = pendingTtlDays();
+  const cutoff = new Date(Date.now() - days * 86_400_000).toISOString();
+  const at = nowIso();
+  if (characterId) {
+    const r = db
+      .prepare(
+        `UPDATE memories SET status = 'superseded', updated_at = ?
+         WHERE character_id = ? AND status = 'pending' AND updated_at < ?`,
+      )
+      .run(at, characterId, cutoff);
+    if (r.changes > 0) {
+      console.log(
+        `[memory.obs] ${JSON.stringify({
+          event: 'memory.pending_ttl',
+          characterId,
+          superseded: r.changes,
+          ttlDays: days,
+          cutoff,
+          ts: at,
+        })}`,
+      );
+    }
+    return r.changes;
+  }
+  const r = db
+    .prepare(
+      `UPDATE memories SET status = 'superseded', updated_at = ?
+       WHERE status = 'pending' AND updated_at < ?`,
+    )
+    .run(at, cutoff);
+  if (r.changes > 0) {
+    console.log(
+      `[memory.obs] ${JSON.stringify({
+        event: 'memory.pending_ttl',
+        superseded: r.changes,
+        ttlDays: days,
+        cutoff,
+        ts: at,
+      })}`,
+    );
+  }
+  return r.changes;
+}
+
+/** X05-D2 optional: user discards one pending memory (→ superseded). */
+export function discardPendingMemory(characterId: string, memoryId: string): boolean {
+  expireStalePendingMemories(characterId);
+  const at = nowIso();
+  const r = db
+    .prepare(
+      `UPDATE memories SET status = 'superseded', updated_at = ?
+       WHERE id = ? AND character_id = ? AND status = 'pending'`,
+    )
+    .run(at, memoryId, characterId);
+  return r.changes > 0;
+}
+
+/** X05-D5: in-process extract metrics (no secrets). */
+const extractMetrics: Record<string, number> = {
+  start: 0,
+  ok: 0,
+  empty: 0,
+  fail_llm: 0,
+  fail_parse: 0,
+  fail_apply: 0,
+  fail_after_turn: 0,
+  confirm: 0,
+};
+
+export function getMemoryExtractMetrics(): Readonly<Record<string, number>> {
+  return { ...extractMetrics };
+}
+
+function memoryExtractDebugEnabled(): boolean {
+  const v = env('MEMORY_EXTRACT_DEBUG', '').toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
+/** X05-D5 debug: insert a quiet assistant line (source=memory_debug). */
+function insertExtractDebugHint(conversationId: string, characterId: string, status: string): void {
+  if (!memoryExtractDebugEnabled()) return;
+  if (!String(status).startsWith('fail')) return;
+  const id = randomUUID();
+  const at = nowIso();
+  const content = '（调试）这次没记下';
+  db.prepare(
+    `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at, source)
+     VALUES (?, ?, 'assistant', ?, ?, ?, 'memory_debug')`,
+  ).run(id, conversationId, characterId, content, at);
+  db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(at, conversationId);
+}
+
 
 function nowIso() {
   return new Date().toISOString();
@@ -51,6 +157,7 @@ export function listActiveMemories(
 }
 
 export function listMemoriesForApi(characterId: string, status: MemoryStatus | 'all' = 'active') {
+  expireStalePendingMemories(characterId);
   if (status === 'all') {
     return db
       .prepare(
@@ -518,6 +625,7 @@ type ApplyResult = {
 export function applyOps(characterId: string, ops: ExtractOp[]): ApplyResult {
   const empty: ApplyResult = { activatedContents: [], newPendings: [] };
   if (!ops.length) return empty;
+  expireStalePendingMemories(characterId);
   const at = nowIso();
   const getActiveSame = db.prepare(
     `SELECT id FROM memories WHERE character_id = ? AND status = 'active' AND trim(content) = ? LIMIT 1`,
@@ -648,19 +756,44 @@ export function logMemoryExtract(payload: {
   detail?: string;
   ask?: string;
 }): void {
+  // X05-D5 metrics (always): bump in-process counters for greppable / health scrape
+  if (payload.status in extractMetrics) {
+    extractMetrics[payload.status] = (extractMetrics[payload.status] || 0) + 1;
+  }
   const row: Record<string, unknown> = {
     event: 'memory.extract',
     status: payload.status,
     ts: new Date().toISOString(),
+    metric: 'memory_extract',
   };
   if (payload.conversationId) row.conversationId = payload.conversationId;
   if (payload.characterId) row.characterId = payload.characterId;
   if (payload.n != null) row.n = payload.n;
   if (payload.detail) row.detail = String(payload.detail).slice(0, 240);
   if (payload.ask) row.ask = String(payload.ask).slice(0, 120);
+  if (payload.status.startsWith('fail')) {
+    row.counts = {
+      fail_llm: extractMetrics.fail_llm,
+      fail_parse: extractMetrics.fail_parse,
+      fail_apply: extractMetrics.fail_apply,
+      fail_after_turn: extractMetrics.fail_after_turn,
+    };
+  }
   const line = JSON.stringify(row);
   if (payload.status.startsWith('fail')) console.error(`[memory.obs] ${line}`);
   else console.log(`[memory.obs] ${line}`);
+  // X05-D5 debug light hint (off by default): quiet chat line, no production toast
+  if (
+    payload.conversationId &&
+    payload.characterId &&
+    payload.status.startsWith('fail')
+  ) {
+    try {
+      insertExtractDebugHint(payload.conversationId, payload.characterId, payload.status);
+    } catch {
+      // never break extract path for debug UI
+    }
+  }
 }
 
 export async function extractMemoriesAfterTurn(opts: {
@@ -668,6 +801,7 @@ export async function extractMemoriesAfterTurn(opts: {
   conversationId: string;
 }): Promise<void> {
   const { characterId, conversationId } = opts;
+  expireStalePendingMemories(characterId);
   logMemoryExtract({ status: 'start', conversationId, characterId });
   const history = db
     .prepare(
@@ -863,6 +997,7 @@ export function resolvePendingMemoryConfirm(
   conversationId: string,
   userText: string,
 ): boolean {
+  expireStalePendingMemories(characterId);
   const t = String(userText || '').trim();
   if (!t) return false;
   if (/^(嗯|好|哦|噢|额|唔)[。.!！？]?$/.test(t)) return false;

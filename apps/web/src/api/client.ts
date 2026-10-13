@@ -52,7 +52,7 @@ export type ChatMessage = {
   character_name?: string | null;
   content: string;
   created_at: string;
-  source?: 'text' | 'voice' | 'image' | 'memory_confirm';
+  source?: 'text' | 'voice' | 'image' | 'memory_confirm' | 'memory_debug';
   image_path?: string | null;
   reactions?: MessageReaction[];
 };
@@ -416,6 +416,11 @@ export const api = {
     fetch(`/api/characters/${id}/memories${status ? `?status=${encodeURIComponent(status)}` : ''}`).then((r) =>
       json<{ memories: MemoryNote[] }>(r)
     ),
+
+  discardCharacterMemory: (id: string, memoryId: string) =>
+    fetch(`/api/characters/${id}/memories/${encodeURIComponent(memoryId)}/discard`, {
+      method: 'POST',
+    }).then((r) => json<{ ok: boolean }>(r)),
 
   listCharacterMemoryNotices: (id: string, opts?: { conversationId?: string }) => {
     const q = new URLSearchParams();

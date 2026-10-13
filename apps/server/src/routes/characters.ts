@@ -8,6 +8,7 @@ import { db, getUploadsDir } from '../db/index.js';
 import { extractPngCharacterCard, parseCharacterJson } from '../utils/characterCard.js';
 import {
   listMemoriesForApi,
+  discardPendingMemory,
   listUnreadMemoryNotices,
   markAllMemoryNoticesRead,
   markMemoryNoticesRead,
@@ -135,11 +136,28 @@ export async function characterRoutes(app: FastifyInstance) {
       if (!character) return reply.code(404).send({ error: '角色不存在' });
       const raw = String(req.query?.status || 'active');
       const status =
-        raw === 'all' || raw === 'superseded' || raw === 'user_hidden' || raw === 'active'
-          ? (raw as 'all' | 'active' | 'superseded' | 'user_hidden')
+        raw === 'all' ||
+        raw === 'superseded' ||
+        raw === 'user_hidden' ||
+        raw === 'pending' ||
+        raw === 'active'
+          ? (raw as 'all' | 'active' | 'pending' | 'superseded' | 'user_hidden')
           : 'active';
       const memories = listMemoriesForApi(character.id, status);
       return { memories };
+    },
+  );
+
+  app.post<{ Params: { id: string; memoryId: string } }>(
+    '/api/characters/:id/memories/:memoryId/discard',
+    async (req, reply) => {
+      const character = db.prepare('SELECT id FROM characters WHERE id = ?').get(req.params.id) as
+        | { id: string }
+        | undefined;
+      if (!character) return reply.code(404).send({ error: '角色不存在' });
+      const ok = discardPendingMemory(character.id, req.params.memoryId);
+      if (!ok) return reply.code(404).send({ error: '待确认记忆不存在或已处理' });
+      return { ok: true };
     },
   );
 

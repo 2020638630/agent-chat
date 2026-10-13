@@ -13,6 +13,8 @@ export function useMemoryUi(opts: {
   getProfileView: () => ProfileView;
 }) {
   const profileMemories = ref<MemoryNote[]>([]);
+  /** X05-D2: pending confirm memories for profile discard UI */
+  const profilePendingMemories = ref<MemoryNote[]>([]);
   const memoryWhisperText = ref('记下了');
   const memoryWhisperVisible = ref(false);
   const memoryWhisperOpaque = ref(false);
@@ -80,18 +82,36 @@ export function useMemoryUi(opts: {
 
   function clearProfileMemories() {
     profileMemories.value = [];
+    profilePendingMemories.value = [];
   }
 
   async function loadProfileMemories(characterId: string) {
     if (!characterId) {
       profileMemories.value = [];
+      profilePendingMemories.value = [];
       return;
     }
     try {
-      const mem = await api.listCharacterMemories(characterId);
+      const [mem, pending] = await Promise.all([
+        api.listCharacterMemories(characterId),
+        api.listCharacterMemories(characterId, 'pending'),
+      ]);
       profileMemories.value = (mem.memories || []).slice(0, 6);
+      profilePendingMemories.value = (pending.memories || []).slice(0, 6);
     } catch {
       profileMemories.value = [];
+      profilePendingMemories.value = [];
+    }
+  }
+
+  async function discardPendingMemory(characterId: string, memoryId: string) {
+    if (!characterId || !memoryId) return false;
+    try {
+      await api.discardCharacterMemory(characterId, memoryId);
+      profilePendingMemories.value = profilePendingMemories.value.filter((m) => m.id !== memoryId);
+      return true;
+    } catch {
+      return false;
     }
   }
 
@@ -173,12 +193,14 @@ export function useMemoryUi(opts: {
 
   return {
     profileMemories,
+    profilePendingMemories,
     memoryWhisperText,
     memoryWhisperVisible,
     memoryWhisperOpaque,
     memoryHighlightIds,
     clearProfileMemories,
     loadProfileMemories,
+    discardPendingMemory,
     clearUnreadMemoryNotices,
     scheduleMemoryWhisper,
     disposeMemoryUi,
