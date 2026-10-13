@@ -106,6 +106,8 @@
 - **状态（2026-10-11）**：待处理；与 D-02 状态债分离，不挂 D-02
 - **状态（2026-10-13 BF）**：**已处理（关单）**。抽出 `useStatusBar`、`useMessageDisplay`；emoji document 监听与 conversations poll 生命周期收进 `useChatSession`。App.vue 1664→1527。行为不变；web build 通。刻意残留：大块壳模板、composable late-bound 编排胶水（不拆以免耦合）。未动 N-02 / Gemini / X05-D2～D6。
 
+
+- **计分行（2026-10-13 BF，含 D-02b）**：App.vue 累计 **2446 → 1527（−919 行）**（P0–P2→~1629；D-02b→1527）。D-02 仍部分收口；D-02b 已关。
 ### D-03 `conversations` 路由承载业务编排
 - **位置**：`apps/server/src/routes/conversations.ts`（约 864 行）
 - **类型**：后端架构 / 路由耦合

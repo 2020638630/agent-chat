@@ -3,7 +3,8 @@
 ## 结论
 - **ARCH-2**：此前已关单（管道 Provider+.env+D-05）。本刀是验收试跑线复跑，非重开 ARCH-2。
 - **N-02**：仍不动。
-- **Gemini TTS**：缺 GEMINI_API_KEY，挂债不阻塞（B-04d / API 试跑线续债）。
+- **DeepSeek 官方文本+识图**：**已通**（2026-10-13 BF；`api.deepseek.com` / `deepseek-flash`；超出原仅文本计划）。
+- **Gemini TTS**：仍缺 GEMINI_API_KEY，挂债不阻塞（B-04d / API 试跑线续债）。
 
 ## 环境
 - 机器：HY（D:\Agent-chat\agent-chat）
@@ -38,6 +39,6 @@
 | Gemini TTS | **挂债** | 仍缺 GEMINI_API_KEY（N-02 不动） |
 
 ## 备注（续）
-- 密钥优先 OS 环境变量；勿提交 .env 真值
-- X05-D1（冲突确认快捷按钮）在 BF/origin **未落地**（预期 SHA a151f0b 不存在；HY 离线无法核验本机未推提交）— 不伪造关闭
-- D-02b 抽取待 X05-D1 关闭后再开；本回合未启动
+- 密钥优先 OS 环境变量；勿提交 `.env` 真值
+- **拍板同步（2026-10-13）**：DeepSeek 官方试跑线由挂债改为 **已通**——文本 + 识图均走 `api.deepseek.com`（`deepseek-flash` 原生多模态；官方识图超出原「仅文本」计划）。Gemini TTS 仍缺 `GEMINI_API_KEY` 挂债；**N-02 不动**。
+- 后续已关：X05-D1（`b851189`，口径=本次新做）、D-02b（`ecc0910`）。本文件只记账试跑口径，不重开 ARCH-2。
