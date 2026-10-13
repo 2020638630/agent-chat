@@ -42,3 +42,9 @@
 - 密钥优先 OS 环境变量；勿提交 `.env` 真值
 - **拍板同步（2026-10-13）**：DeepSeek 官方试跑线由挂债改为 **已通**——文本 + 识图均走 `api.deepseek.com`（`deepseek-flash` 原生多模态；官方识图超出原「仅文本」计划）。Gemini TTS 仍缺 `GEMINI_API_KEY` 挂债；**N-02 不动**。
 - 后续已关：X05-D1（`b851189`，口径=本次新做）、D-02b（`ecc0910`）。本文件只记账试跑口径，不重开 ARCH-2。
+
+## B-04d（2026-10-13 BF）
+
+- **结论**：已关。坏 `IMAGE_GEN_API_KEY` 实打上游 401；聊天气泡人话，无上游 JSON。
+- **补丁**：`formatImageGenUserError`；HTTP 失败 throw 仅 `生图失败 <status>`，body 只进服务端 log。
+- Gemini TTS 仍挂 Key；N-02 不动。

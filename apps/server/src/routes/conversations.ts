@@ -9,7 +9,7 @@ import { buildSystemPrompt } from '../utils/characterCard.js';
 import { emojiConstraintForPrompt, hasEmojiToken, sanitizeAssistantEmoji, EMOJI_WHITELIST_SET } from '../constants/emojiWhitelist.js';
 import { shouldAssistantUseVoice } from '../utils/voiceRequest.js';
 import { chatCompletion, resolveVisionModel } from '../services/llm.js';
-import { wantsImageGeneration, buildImagePrompt, generateChatImage } from '../services/imageGen.js';
+import { wantsImageGeneration, buildImagePrompt, generateChatImage, formatImageGenUserError } from '../services/imageGen.js';
 import { appendMemoryBlock, memoryStickyReminder, resolvePendingMemoryConfirm, scheduleMemoryExtractAfterTurn } from '../services/memory.js';
 import { onPrivateUserMessage } from '../services/proactive.js';
 import {
@@ -499,7 +499,8 @@ export async function conversationRoutes(app: FastifyInstance) {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         console.log(`[image-gen] conv=${conversationId} fail ${msg}`);
-        replyText = `（这张图没画成：${msg.slice(0, 160)}。文字还能继续聊；也可检查本机 IMAGE_GEN_API_KEY / IMAGE_GEN_MODEL。）`;
+        const hint = formatImageGenUserError(e);
+        replyText = `（这张图没画成：${hint}。文字还能继续聊。）`;
       }
 
       const recentAssistants = db

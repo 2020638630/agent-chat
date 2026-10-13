@@ -38,6 +38,41 @@ export type GeneratedImage = {
   model: string;
 };
 
+
+/**
+ * B-04d: map image-gen failures to a short user-facing Chinese hint.
+ * Never forward raw upstream JSON/stack to the chat bubble.
+ */
+export function formatImageGenUserError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err || '');
+  const lower = raw.toLowerCase();
+  const statusMatch = raw.match(/生图失败\s+(\d{3})/);
+  const status = statusMatch ? Number(statusMatch[1]) : 0;
+
+  if (status === 401 || status === 403 || /token is invalid|invalid.?api.?key|unauthorized|forbidden/i.test(raw)) {
+    return '密钥无效或没有权限，请检查本机 IMAGE_GEN_API_KEY';
+  }
+  if (status === 429 || /rate.?limit|too many/i.test(raw)) {
+    return '请求太频繁，稍后再试';
+  }
+  if (status === 400 || /invalid.?request/i.test(raw)) {
+    return '生图请求不被接受，可换个说法再试';
+  }
+  if (status >= 500 || /502|503|504/.test(String(status))) {
+    return '生图服务暂时不可用，稍后再试';
+  }
+  if (/timeout|aborted|fetch failed|econnrefused|enotfound|network/i.test(lower)) {
+    return '连不上生图服务，请检查网络或 IMAGE_GEN_BASE_URL';
+  }
+  if (/未配置 IMAGE_GEN_API_KEY/.test(raw)) {
+    return '未配置 IMAGE_GEN_API_KEY，请在本机 .env 填写';
+  }
+  if (/生图返回为空|生图结果无 url/.test(raw)) {
+    return '生图服务没有返回图片，请稍后再试';
+  }
+  return '生图失败，请稍后再试（可检查 IMAGE_GEN_API_KEY / IMAGE_GEN_MODEL）';
+}
+
 export async function generateChatImage(prompt: string): Promise<GeneratedImage> {
   const cfg = getImageGenConfig();
 
@@ -58,7 +93,9 @@ export async function generateChatImage(prompt: string): Promise<GeneratedImage>
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`生图失败 ${res.status}: ${text.slice(0, 400)}`);
+    // Keep status for formatImageGenUserError; log body server-side only (truncated).
+    console.log(`[image-gen] upstream HTTP ${res.status}: ${text.slice(0, 240)}`);
+    throw new Error(`生图失败 ${res.status}`);
   }
 
   const data = (await res.json()) as {
