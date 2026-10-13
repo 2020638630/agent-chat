@@ -98,6 +98,13 @@ export type MemoryNotice = {
   read_at: string | null;
 };
 
+export type CharRefImage = {
+  id: string;
+  path: string;
+  sort_order: number;
+  created_at: string;
+};
+
 export type Profile = {
   id: string;
   kind: 'user' | 'character';
@@ -107,6 +114,7 @@ export type Profile = {
   avatar_path?: string | null;
   bg_path?: string | null;
   space_bg_path?: string | null;
+  ref_images?: CharRefImage[];
   theme?: ThemeId;
   bg_opacity?: number;
   space_bg_opacity?: number;
@@ -355,6 +363,23 @@ export const api = {
       json<{ moment: Moment }>(r)
     );
   },
+
+
+  listCharacterRefs: (id: string) =>
+    fetch(`/api/profiles/characters/${id}/refs`).then((r) => json<{ refs: CharRefImage[] }>(r)),
+
+  uploadCharacterRef: async (id: string, file: File) => {
+    const fd = new FormData();
+    fd.append('file', file);
+    return fetch(`/api/profiles/characters/${id}/refs`, { method: 'POST', body: fd }).then((r) =>
+      json<{ profile: Profile; ref: CharRefImage }>(r)
+    );
+  },
+
+  deleteCharacterRef: (id: string, refId: string) =>
+    fetch(`/api/profiles/characters/${id}/refs/${encodeURIComponent(refId)}`, { method: 'DELETE' }).then((r) =>
+      json<{ profile: Profile }>(r)
+    ),
 
   generateMoment: (characterId: string) =>
     fetch('/api/moments/generate', {

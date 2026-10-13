@@ -86,6 +86,7 @@ const {
   avatarFileInput,
   bgFileInput,
   spaceBgFileInput,
+  refFileInput,
   profileLoading,
   profileEditing,
   editMood,
@@ -101,6 +102,8 @@ const {
   onAvatarFileChange,
   onBgFileChange,
   onSpaceBgFileChange,
+  onRefFileChange,
+  removeRefImage,
   clearAvatar,
   clearBg,
   clearSpaceBg,
@@ -515,6 +518,14 @@ onUnmounted(() => {
         style="display: none"
         @change="onSpaceBgFileChange"
       />
+
+      <input
+        ref="refFileInput"
+        type="file"
+        accept="image/jpeg,image/jpg,image/png,image/webp"
+        class="wx-file-hidden"
+        @change="onRefFileChange"
+      />
       <input
         ref="chatImageInput"
         type="file"
@@ -783,7 +794,31 @@ onUnmounted(() => {
               >恢复默认头像</button>
             </div>
 
-            <div v-if="profileView.kind === 'user'" class="wx-appearance">
+            <div 
+            <div v-if="profileView.kind === 'character'" class="wx-ref-images">
+              <div class="wx-ref-images-title">人设参考图 <span class="wx-ref-images-hint">1～3 张 · 不影响头像</span></div>
+              <div class="wx-ref-grid">
+                <div v-for="r in profile?.ref_images || []" :key="r.id" class="wx-ref-thumb">
+                  <img :src="r.path" alt="" />
+                  <button
+                    type="button"
+                    class="wx-ref-del"
+                    :disabled="mediaBusy"
+                    title="删除"
+                    @click="removeRefImage(r.id)"
+                  >×</button>
+                </div>
+                <button
+                  v-if="(profile?.ref_images?.length || 0) < 3"
+                  type="button"
+                  class="wx-ref-add"
+                  :disabled="mediaBusy"
+                  @click="refFileInput?.click()"
+                >+</button>
+              </div>
+            </div>
+
+v-if="profileView.kind === 'user'" class="wx-appearance">
               <div class="wx-appearance-title">外观</div>
               <div class="wx-theme-grid">
                 <button

@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 /**
  * User & character profiles, homepage/space backgrounds, and avatar uploads (U-05).
+ * X-02: character reference images under uploads/char-refs (DB path only).
  */
 import type { FastifyInstance } from 'fastify';
 import { db } from '../db/index.js';
@@ -7,6 +9,7 @@ import {
   readImageFromRequest,
   saveImageBuffer,
   unlinkUploadPublicPath,
+  saveCharacterRefImage,
 } from '../services/uploadImage.js';
 
 type UserProfileRow = {
@@ -164,6 +167,20 @@ function userProfileDto(row: UserProfileRow) {
   };
 }
 
+
+type RefImageRow = { id: string; character_id: string; path: string; sort_order: number; created_at: string };
+
+function listCharacterRefImages(characterId: string): Array<{ id: string; path: string; sort_order: number; created_at: string }> {
+  const rows = db
+    .prepare(
+      `SELECT id, path, sort_order, created_at FROM character_ref_images
+       WHERE character_id = ?
+       ORDER BY sort_order ASC, created_at ASC, rowid ASC`
+    )
+    .all(characterId) as Array<{ id: string; path: string; sort_order: number; created_at: string }>;
+  return rows;
+}
+
 function characterProfileDto(character: CharacterRow) {
   return {
     id: character.id,
@@ -173,6 +190,7 @@ function characterProfileDto(character: CharacterRow) {
     bio: assembleBio(character.description, character.personality),
     avatar_path: character.avatar_path ?? null,
     bg_path: character.bg_path ?? null,
+    ref_images: listCharacterRefImages(character.id),
   };
 }
 
@@ -368,4 +386,86 @@ export async function profileRoutes(app: FastifyInstance) {
     const updated = db.prepare('SELECT * FROM characters WHERE id = ?').get(character.id) as CharacterRow;
     return { profile: characterProfileDto(updated) };
   });
+
+  // ---- X-02 character reference images (uploads + path; not avatar) ----
+  const REF_MAX = 3;
+
+  app.get<{ Params: { id: string } }>('/api/profiles/characters/:id/refs', async (req, reply) => {
+    const character = db.prepare('SELECT id FROM characters WHERE id = ?').get(req.params.id) as
+      | { id: string }
+      | undefined;
+    if (!character) return reply.code(404).send({ error: '角色不存在' });
+    return { refs: listCharacterRefImages(character.id) };
+  });
+
+  app.post<{ Params: { id: string } }>('/api/profiles/characters/:id/refs', async (req, reply) => {
+    try {
+      const character = db.prepare('SELECT id FROM characters WHERE id = ?').get(req.params.id) as
+        | { id: string }
+        | undefined;
+      if (!character) return reply.code(404).send({ error: '角色不存在' });
+
+      const { buffer, mime } = await readImageFromRequest(req, { maxBytes: 2 * 1024 * 1024, maxLabel: '2MB' });
+      // tighter 2MB gate also inside saveCharacterRefImage
+      const saved = await saveCharacterRefImage(buffer, mime, character.id);
+
+      const countRow = db
+        .prepare(`SELECT COUNT(*) AS n FROM character_ref_images WHERE character_id = ?`)
+        .get(character.id) as { n: number };
+      let n = Number(countRow?.n || 0);
+
+      // If full, drop oldest then insert (replace-oldest).
+      if (n >= REF_MAX) {
+        const oldest = db
+          .prepare(
+            `SELECT id, path FROM character_ref_images
+             WHERE character_id = ?
+             ORDER BY sort_order ASC, created_at ASC, rowid ASC
+             LIMIT 1`
+          )
+          .get(character.id) as { id: string; path: string } | undefined;
+        if (oldest) {
+          unlinkUploadPublicPath(oldest.path);
+          db.prepare(`DELETE FROM character_ref_images WHERE id = ?`).run(oldest.id);
+          n -= 1;
+        }
+      }
+
+      const maxSort = db
+        .prepare(
+          `SELECT COALESCE(MAX(sort_order), -1) AS m FROM character_ref_images WHERE character_id = ?`
+        )
+        .get(character.id) as { m: number };
+      const sort_order = Number(maxSort?.m ?? -1) + 1;
+      const id = randomUUID();
+      const created_at = new Date().toISOString();
+      db.prepare(
+        `INSERT INTO character_ref_images (id, character_id, path, sort_order, created_at)
+         VALUES (?, ?, ?, ?, ?)`
+      ).run(id, character.id, saved.publicPath, sort_order, created_at);
+
+      const full = db.prepare('SELECT * FROM characters WHERE id = ?').get(character.id) as CharacterRow;
+      return { profile: characterProfileDto(full), ref: { id, path: saved.publicPath, sort_order, created_at } };
+    } catch (e) {
+      return httpError(e, reply);
+    }
+  });
+
+  app.delete<{ Params: { id: string; refId: string } }>(
+    '/api/profiles/characters/:id/refs/:refId',
+    async (req, reply) => {
+      const character = db.prepare('SELECT * FROM characters WHERE id = ?').get(req.params.id) as
+        | CharacterRow
+        | undefined;
+      if (!character) return reply.code(404).send({ error: '角色不存在' });
+      const row = db
+        .prepare(`SELECT id, path FROM character_ref_images WHERE id = ? AND character_id = ?`)
+        .get(req.params.refId, character.id) as { id: string; path: string } | undefined;
+      if (!row) return reply.code(404).send({ error: '参考图不存在' });
+      unlinkUploadPublicPath(row.path);
+      db.prepare(`DELETE FROM character_ref_images WHERE id = ?`).run(row.id);
+      return { profile: characterProfileDto(character) };
+    }
+  );
+
 }

@@ -86,6 +86,22 @@ export function defaultInitiativeTier(name: string): 'restrained' | 'calm' | 'ou
   return 'calm';
 }
 
+
+export function ensureCharacterRefImagesTable(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS character_ref_images (
+      id TEXT PRIMARY KEY,
+      character_id TEXT NOT NULL,
+      path TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_char_ref_images_char
+      ON character_ref_images(character_id, sort_order, created_at);
+  `);
+}
+
 export function ensureProactiveColumns(db: Database.Database) {
   const userCols = db.prepare(`PRAGMA table_info(user_profile)`).all() as Array<{ name: string }>;
   if (!userCols.some((c) => c.name === 'proactive_enabled')) {
@@ -368,6 +384,7 @@ export function migrate(db: Database.Database) {
   ensureThemeAppearanceColumns(db);
   ensureMomentAuthorColumns(db);
   ensureProactiveColumns(db);
+  ensureCharacterRefImagesTable(db);
   ensureMemoriesTable(db);
   ensureMemoryNoticesTable(db);
   ensureMessageReactionsTable(db);

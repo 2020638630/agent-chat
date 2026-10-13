@@ -344,6 +344,11 @@ app.post('/api/characters/import', async (req, reply) => {
 
     unlinkUploadPublicPath(character.avatar_path);
     unlinkUploadPublicPath(character.bg_path);
+    const refRows = db
+      .prepare(`SELECT path FROM character_ref_images WHERE character_id = ?`)
+      .all(character.id) as Array<{ path: string }>;
+    for (const r of refRows) unlinkUploadPublicPath(r.path);
+    db.prepare(`DELETE FROM character_ref_images WHERE character_id = ?`).run(character.id);
 
     return { ok: true, deletedId: character.id, name: character.name };
   });

@@ -36,10 +36,19 @@ await app.register(multipart, {
 
 // static uploads
 const uploadsDir = getUploadsDir();
-app.get('/uploads/:name', async (req, reply) => {
-  const name = (req.params as { name: string }).name;
-  const file = path.join(uploadsDir, path.basename(name));
-  if (!fs.existsSync(file)) return reply.code(404).send({ error: 'not found' });
+// Flat /uploads/:name and nested /uploads/char-refs/... (X-02)
+app.get('/uploads/*', async (req, reply) => {
+  const wildcard = (req.params as { '*': string })['*'] || '';
+  const rel = String(wildcard).replace(/\\/g, '/');
+  if (!rel || rel.includes('..')) return reply.code(400).send({ error: 'bad path' });
+  const file = path.resolve(uploadsDir, rel);
+  const root = path.resolve(uploadsDir);
+  if (file !== root && !file.startsWith(root + path.sep)) {
+    return reply.code(400).send({ error: 'bad path' });
+  }
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    return reply.code(404).send({ error: 'not found' });
+  }
   return reply.send(fs.createReadStream(file));
 });
 

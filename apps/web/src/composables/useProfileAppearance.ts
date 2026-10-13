@@ -41,6 +41,7 @@ export function useProfileAppearance(opts: {
   const avatarFileInput = ref<HTMLInputElement | null>(null);
   const bgFileInput = ref<HTMLInputElement | null>(null);
   const spaceBgFileInput = ref<HTMLInputElement | null>(null);
+  const refFileInput = ref<HTMLInputElement | null>(null);
   const profileLoading = ref(false);
   const profileEditing = ref(false);
   const editMood = ref('');
@@ -229,6 +230,38 @@ export function useProfileAppearance(opts: {
     }
   }
 
+
+  async function onRefFileChange(ev: Event) {
+    const input = ev.target as HTMLInputElement;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file || profileView.value?.kind !== 'character') return;
+    mediaBusy.value = true;
+    try {
+      const res = await api.uploadCharacterRef(profileView.value.id, file);
+      await applyProfileMedia(res.profile);
+      opts.setStatus('已上传人设参考图');
+    } catch (e) {
+      opts.setStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      mediaBusy.value = false;
+    }
+  }
+
+  async function removeRefImage(refId: string) {
+    if (profileView.value?.kind !== 'character') return;
+    mediaBusy.value = true;
+    try {
+      const res = await api.deleteCharacterRef(profileView.value.id, refId);
+      await applyProfileMedia(res.profile);
+      opts.setStatus('已删除参考图');
+    } catch (e) {
+      opts.setStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      mediaBusy.value = false;
+    }
+  }
+
   async function clearSpaceBg() {
     mediaBusy.value = true;
     try {
@@ -324,6 +357,7 @@ export function useProfileAppearance(opts: {
     avatarFileInput,
     bgFileInput,
     spaceBgFileInput,
+    refFileInput,
     profileMemories: opts.profileMemories,
     profileLoading,
     profileEditing,
@@ -342,6 +376,8 @@ export function useProfileAppearance(opts: {
     onAvatarFileChange,
     onBgFileChange,
     onSpaceBgFileChange,
+    onRefFileChange,
+    removeRefImage,
     clearAvatar,
     clearBg,
     clearSpaceBg,
