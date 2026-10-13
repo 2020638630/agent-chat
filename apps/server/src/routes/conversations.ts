@@ -46,16 +46,35 @@ type MessageRow = {
   created_at: string;
 };
 
-function pickGroupResponder(
+/** X-04: without @, speak at most once every N user messages since last assistant. */
+const GROUP_UNMENTIONED_EVERY = 3;
+
+function resolveGroupMention(
   members: CharacterRow[],
-  conversationId: string,
+  text: string,
   mentionCharacterId?: string
-): CharacterRow {
+): CharacterRow | undefined {
   if (mentionCharacterId) {
     const hit = members.find((m) => m.id === mentionCharacterId);
     if (hit) return hit;
   }
+  const sorted = [...members].sort((a, b) => b.name.length - a.name.length);
+  for (const m of sorted) {
+    const tag = `@${m.name}`;
+    if (
+      text === tag ||
+      text.startsWith(`${tag} `) ||
+      text.includes(` ${tag} `) ||
+      text.endsWith(` ${tag}`) ||
+      text.includes(`${tag} `)
+    ) {
+      return m;
+    }
+  }
+  return undefined;
+}
 
+function nextGroupRoundRobin(members: CharacterRow[], conversationId: string): CharacterRow {
   const lastAssistant = db
     .prepare(
       `SELECT character_id FROM messages
@@ -72,6 +91,56 @@ function pickGroupResponder(
   const idx = members.findIndex((m) => m.id === lastAssistant.character_id);
   if (idx < 0) return members[0];
   return members[(idx + 1) % members.length];
+}
+
+/**
+ * X-04 group turn pick:
+ * - @ / mention -> that character always speaks
+ * - else -> speak only every GROUP_UNMENTIONED_EVERY user msgs since last assistant;
+ *   who speaks uses stable membership round-robin (no same-turn scramble)
+ * Returns null to skip assistant reply (user bubble still stored).
+ */
+function pickGroupResponder(
+  members: CharacterRow[],
+  conversationId: string,
+  mentionCharacterId?: string,
+  userText?: string
+): CharacterRow | null {
+  const mentioned = resolveGroupMention(members, userText ?? "", mentionCharacterId);
+  if (mentioned) return mentioned;
+
+  const lastAssistant = db
+    .prepare(
+      `SELECT rowid AS rid FROM messages
+       WHERE conversation_id = ? AND role = 'assistant' AND character_id IS NOT NULL
+       ORDER BY created_at DESC, rowid DESC
+       LIMIT 1`
+    )
+    .get(conversationId) as { rid: number } | undefined;
+
+  const sinceRow = (
+    lastAssistant
+      ? db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM messages
+             WHERE conversation_id = ? AND role = 'user' AND rowid > ?`
+          )
+          .get(conversationId, lastAssistant.rid)
+      : db
+          .prepare(
+            `SELECT COUNT(*) AS n FROM messages
+             WHERE conversation_id = ? AND role = 'user'`
+          )
+          .get(conversationId)
+  ) as { n: number };
+
+  const userSince = Number(sinceRow?.n || 0);
+  // Speak on the Nth, 2N-th, ... unmentioned user message since last assistant.
+  if (userSince < GROUP_UNMENTIONED_EVERY || userSince % GROUP_UNMENTIONED_EVERY !== 0) {
+    return null;
+  }
+
+  return nextGroupRoundRobin(members, conversationId);
 }
 
 function loadMembers(conversationId: string) {
@@ -450,8 +519,8 @@ export async function conversationRoutes(app: FastifyInstance) {
 
     let storedContent = trimmed;
     let mentioned: CharacterRow | undefined;
-    if (conv.type === 'group' && mentionCharacterId) {
-      mentioned = members.find((m) => m.id === mentionCharacterId);
+    if (conv.type === 'group') {
+      mentioned = resolveGroupMention(members, trimmed, mentionCharacterId);
       if (mentioned) {
         const tag = `@${mentioned.name}`;
         const already =
@@ -472,11 +541,32 @@ export async function conversationRoutes(app: FastifyInstance) {
        VALUES (?, ?, 'user', NULL, ?, ?, ?)`
     ).run(userMsgId, conversationId, storedContent, now, source);
 
-    let character: CharacterRow;
+    let character: CharacterRow | null;
     if (conv.type === 'private') {
       character = members[0];
     } else {
-      character = pickGroupResponder(members, conversationId, mentionCharacterId);
+      character = pickGroupResponder(
+        members,
+        conversationId,
+        mentioned?.id ?? mentionCharacterId,
+        trimmed
+      );
+    }
+
+    // X-04: unmentioned group turns may skip assistant reply (user bubble kept).
+    if (conv.type === 'group' && !character) {
+      db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(now, conversationId);
+      markConversationRead(conversationId);
+      const userMessage = db.prepare('SELECT * FROM messages WHERE id = ?').get(userMsgId);
+      return {
+        userMessage,
+        assistantMessages: [] as unknown[],
+        transcript: source === 'voice' ? trimmed : undefined,
+      };
+    }
+
+    if (!character) {
+      return reply.code(400).send({ error: '会话没有角色成员' });
     }
 
     let pendingResolved = false;
@@ -569,7 +659,7 @@ export async function conversationRoutes(app: FastifyInstance) {
 3. 不要替其他角色说话，不要去叫其他角色的名字演戏；
 4. 可以知道群里还有谁（${otherNames.join('、') || '无'}），但默认把「你」理解成用户；
 5. 不必复读 @。`;
-      } else if (!mentionCharacterId) {
+      } else if (!mentioned) {
         system += `\n\n【轮询发言】你是${character.name}，这次轮到你简短发言。优先回应用户最后一句，而不是角色互聊；不要替别人说话。`;
       }
     }
