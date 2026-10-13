@@ -70,3 +70,5 @@ HY：待运维Bot回填键名（本机曾离线）。云侧 `.env.example` 与�
 
 ## 4. HY（待填）
 _运维Bot 回报后补表。_
+
+关闭 tip：`bccadb9`（含 D-22 smoke 迁移）。
