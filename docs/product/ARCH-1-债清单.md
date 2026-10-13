@@ -128,6 +128,8 @@
 - **建议动作**：明确产品规则后对齐 M-01 与 M-07；考虑把「空间闸」与「私聊主动闸」配置拆字段或显式注释契约测试。
 - **建议阶段**：**已挪出 ARCH** → 功能池（与 **C-06 同组，P2**；C-06 遗留：M-01 仍吃私聊 `daily_cap`）。不再进 ARCH-2/ARCH-3。
 
+- **状态（2026-10-13 BF）**：**已处理**。M-01 `settleAuthorReplyToUserComment` 不再检查 `sent_today>=daily_cap`，与 C-06/M-07 对齐；总开关+静默仍生效；私聊 `runProactiveTick` 仍受 daily_cap。产品参数 TTL 7d、静默 23:00–08:00 仍为默认，**待用户明确**。池内仍挂：D-11 双机 .env 差、D-22 `smoke_*.py`（本刀不实现）。
+
 ### D-05 记忆链路失败与空泡（extract→filter→pending→honor）
 - **状态**：ARCH-2 可观测已交（**纯日志**；用户侧无失败信号）；关单随 ARCH-2 试跑线
 - **位置**：`services/memory.ts`（`extractMemoriesAfterTurn` / `scheduleMemoryExtractAfterTurn`）；`memoryGate.ts`；`routes/conversations.ts` 调用点；前端 `scheduleMemoryWhisper`

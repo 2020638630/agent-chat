@@ -277,9 +277,8 @@ export async function settleAuthorReplyToUserComment(
   if (inQuietHours(new Date(), settings.quiet_start, settings.quiet_end)) {
     return { skipped: 'quiet_hours', comment: null };
   }
-  if (settings.sent_today >= settings.daily_cap) {
-    return { skipped: 'daily_cap', comment: null };
-  }
+  // D-04 / align C-06: author reply on space is NOT gated by private proactive daily_cap.
+  // Master switch + quiet hours still apply; private tick still checks daily_cap.
   if (recentProactiveFired()) {
     return { skipped: 'c05_recent', comment: null };
   }
