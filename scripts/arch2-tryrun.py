@@ -1,7 +1,8 @@
 """
 ARCH-2 try-run (acceptance, not a separate knife).
-Proves provider pipe can hit: DeepSeek text / local Ollama VLM (preferred) / Gemini TTS.
-Cloud VLM is fallback only. Never prints API keys. Reads .env + process env.
+Proves provider pipe can hit: official DeepSeek text+vision / local Ollama VLM / Gemini TTS.
+When DEEPSEEK_API_KEY is set, vision uses api.deepseek.com (deepseek-flash), not SiliconFlow.
+Never prints API keys. Reads .env + process env.
 """
 from __future__ import annotations
 
@@ -94,6 +95,7 @@ def run_deepseek(file_env: dict[str, str]) -> dict:
                 {"role": "user", "content": "ARCH-2试跑：1+1等于几？只答数字。"},
             ],
             "temperature": 0.2,
+            "thinking": {"type": "disabled"},
             "max_tokens": 64,
             "stream": False,
         },
@@ -112,6 +114,77 @@ def run_deepseek(file_env: dict[str, str]) -> dict:
         "reason": "通" if ok else f"空回复或非200 status={status}",
     }
 
+
+
+def run_deepseek_vision(file_env: dict[str, str]) -> dict:
+    """Official DeepSeek multimodal (deepseek-flash) via DEEPSEEK_API_KEY."""
+    ds_key = secret("DEEPSEEK_API_KEY", file_env)
+    if not ds_key:
+        return {
+            "ok": False,
+            "reason": "缺 DEEPSEEK_API_KEY（系统环境变量或本地 .env）",
+            "need_keys": ["DEEPSEEK_API_KEY"],
+        }
+    img_path = find_test_image()
+    if not img_path:
+        return {"ok": False, "reason": "无测试图片"}
+
+    raw = img_path.read_bytes()
+    b64 = base64.b64encode(raw).decode("ascii")
+    mime = "image/jpeg" if img_path.suffix.lower() in {".jpg", ".jpeg"} else "image/png"
+    if img_path.suffix.lower() == ".webp":
+        mime = "image/webp"
+    data_url = f"data:{mime};base64,{b64}"
+    model = "deepseek-flash"
+    url = "https://api.deepseek.com/chat/completions"
+    t0 = time.time()
+    try:
+        status, data, _ = http_json(
+            url,
+            method="POST",
+            headers={"Authorization": f"Bearer {ds_key}"},
+            body={
+                "model": model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "用中文一句话描述图中主要物体，不要加标点外废话。"},
+                            {"type": "image_url", "image_url": {"url": data_url}},
+                        ],
+                    }
+                ],
+                "temperature": 0.2,
+                "thinking": {"type": "disabled"},
+                "max_tokens": 128,
+                "stream": False,
+            },
+            timeout=180,
+        )
+    except Exception as e:
+        return {
+            "ok": False,
+            "source": "official+DEEPSEEK_API_KEY",
+            "model": model,
+            "reason": f"请求失败: {str(e)[:180]}",
+        }
+    content = ((data or {}).get("choices") or [{}])[0].get("message", {}).get("content", "")
+    content = (content or "").strip()
+    ms = int((time.time() - t0) * 1000)
+    ok = status == 200 and bool(content)
+    try:
+        rel = str(img_path.relative_to(ROOT))
+    except Exception:
+        rel = str(img_path)
+    return {
+        "ok": ok,
+        "source": "official+DEEPSEEK_API_KEY",
+        "model": model,
+        "image": rel,
+        "ms": ms,
+        "reply_preview": content[:120],
+        "reason": "通" if ok else f"空回复或非200 status={status}",
+    }
 
 def find_test_image() -> Path | None:
     preferred = [
@@ -342,11 +415,18 @@ def probe_b04d(file_env: dict[str, str]) -> dict:
 
 def main() -> int:
     file_env = load_dotenv(ROOT / ".env")
-    vlm = run_vlm(file_env)
+    ds_text = run_deepseek(file_env)
+    ds_vision = run_deepseek_vision(file_env)
+    # Skip slow local/Silicon VLM when official DeepSeek vision already passes
+    if ds_vision.get("ok") and (os.environ.get("TRYRUN_VLM") or "").strip().lower() not in {"force", "local", "silicon", "siliconflow", "cloud"}:
+        vlm = {"ok": False, "reason": "skipped_local_silicon_because_official_deepseek_vision_ok", "skipped": True}
+    else:
+        vlm = run_vlm(file_env)
     results = {
-        "deepseek_text": run_deepseek(file_env),
+        "deepseek_text": ds_text,
+        "deepseek_vision": ds_vision,
         "local_vlm": vlm,
-        "official_vlm": vlm,  # backward-compat alias (now local-first)
+        "official_vlm": ds_vision if ds_vision.get("ok") else vlm,
         "gemini_tts": run_gemini_tts(file_env),
         "b04d_probe": probe_b04d(file_env),
     }
@@ -360,7 +440,9 @@ def main() -> int:
     gemini_hang = (not gemini.get("ok")) and (
         "GEMINI_API_KEY" in reason or "GOOGLE_API_KEY" in reason or "未配置" in reason
     )
-    oks_core = [results["deepseek_text"].get("ok"), results["local_vlm"].get("ok")]
+    # Close when official DeepSeek text+vision both pass; Gemini TTS may hang as debt
+    vision_ok = results["deepseek_vision"].get("ok") or results["local_vlm"].get("ok")
+    oks_core = [results["deepseek_text"].get("ok"), vision_ok]
     if all(oks_core) and (gemini.get("ok") or gemini_hang):
         return 0
     return 2

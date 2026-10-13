@@ -20,3 +20,24 @@
 ## 备注
 - 密钥只进本机 .env，不入库不进表。
 - D-02 定「部分收口」；新建 D-02b 壳层/辅助清理；不再继续抽 App.vue。
+
+---
+
+## 续跑（2026-10-13 BF）
+
+- 机器：BF（D:\\Program Files (x86)\\agent-chat）；HY 离线
+- tip：续跑前已 ff 至 origin/main（1825c30）
+- Key：系统环境变量 DEEPSEEK_API_KEY 已配置（不写仓库 .env）；GEMINI/GOOGLE 仍空
+- 代码：providers.ts 在 LLM_PROVIDER=deepseek（或 baseUrl 含 deepseek.com）且 LLM_API_KEY 为空时，回落读取进程环境 DEEPSEEK_API_KEY
+- 试跑：scripts/arch2-tryrun.py 增加官方 DeepSeek 识图；smoke 关闭 thinking（避免 reasoning 吃光 max_tokens）
+
+| 项 | 结果 | 说明 |
+| -- | ---- | ---- |
+| DeepSeek 官方文本 | **通** | model=deepseek-flash，source=official+DEEPSEEK_API_KEY |
+| DeepSeek 官方识图 | **通** | 同 model 原生多模态；不再用 SiliconFlow 顶替 |
+| Gemini TTS | **挂债** | 仍缺 GEMINI_API_KEY（N-02 不动） |
+
+## 备注（续）
+- 密钥优先 OS 环境变量；勿提交 .env 真值
+- X05-D1（冲突确认快捷按钮）在 BF/origin **未落地**（预期 SHA a151f0b 不存在；HY 离线无法核验本机未推提交）— 不伪造关闭
+- D-02b 抽取待 X05-D1 关闭后再开；本回合未启动

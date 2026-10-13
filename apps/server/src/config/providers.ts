@@ -40,17 +40,31 @@ function stripSlash(url: string): string {
   return url.replace(/\/$/, '');
 }
 
+function resolveLlmApiKey(baseUrl: string, providerHint: string): string {
+  const explicit = env('LLM_API_KEY');
+  if (explicit) return explicit;
+  const provider = providerHint.toLowerCase();
+  const deepseekTarget =
+    provider === 'deepseek' || /deepseek\.com/i.test(baseUrl);
+  if (deepseekTarget) {
+    const ds = env('DEEPSEEK_API_KEY');
+    if (ds) return ds;
+  }
+  return 'ollama';
+}
+
 /** LLM chat completions (text). */
 export function getLlmConfig(modelOverride?: string): ProviderConfig {
   const baseUrl = stripSlash(env('LLM_BASE_URL', DEFAULT_LLM_BASE));
-  const apiKey = env('LLM_API_KEY', 'ollama');
+  const provider = env('LLM_PROVIDER').toLowerCase() || undefined;
+  const apiKey = resolveLlmApiKey(baseUrl, provider || '');
   const model = (modelOverride?.trim() || env('LLM_MODEL', DEFAULT_LLM_MODEL));
   return {
     kind: 'llm',
     baseUrl,
     apiKey,
     model,
-    provider: env('LLM_PROVIDER').toLowerCase() || undefined,
+    provider,
   };
 }
 
