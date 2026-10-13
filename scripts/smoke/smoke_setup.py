@@ -1,7 +1,10 @@
+from pathlib import Path
 import json, urllib.request, urllib.error, time, os, io, struct, wave, math
 
 BASE = "http://127.0.0.1:8787"
-OUT = r"C:\Users\Administrator\smoke_results.json"
+OUT_DIR = Path(__file__).resolve().parent / "_out"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+OUT = OUT_DIR / "smoke_results.json"
 results = {}
 
 def req(method, path, data=None, headers=None, timeout=180, raw=False):
@@ -81,10 +84,11 @@ else:
     grp_id = grp["id"]
     mention_id = c1
 
-with open(OUT.replace("results","setup"), "w", encoding="utf-8") as f:
+SETUP_OUT = OUT_DIR / "smoke_setup.json"
+with open(SETUP_OUT, "w", encoding="utf-8") as f:
     json.dump({
         "priv_id": priv_id, "priv_char": priv_char, "priv_name": char_names.get(priv_char),
         "grp_id": grp_id, "mention_id": mention_id, "mention_name": char_names.get(mention_id),
         "chars": [{"id":c["id"],"name":c["name"]} for c in chars],
     }, f, ensure_ascii=False, indent=2)
-print("SETUP_OK", priv_id, grp_id)
+print("SETUP_OK", priv_id, grp_id, "->", SETUP_OUT)

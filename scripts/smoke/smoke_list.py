@@ -1,3 +1,4 @@
+from pathlib import Path
 import json, urllib.request, urllib.error
 
 def get(url):
@@ -10,7 +11,9 @@ def dump(path, obj):
 
 chars = get("http://127.0.0.1:8787/api/characters")["characters"]
 convs = get("http://127.0.0.1:8787/api/conversations")
-dump(r"C:\Users\Administrator\smoke_state.json", {"characters": chars, "conversations": convs})
+OUT_DIR = Path(__file__).resolve().parent / "_out"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+dump(OUT_DIR / "smoke_state.json", {"characters": chars, "conversations": convs})
 print("CHARS", len(chars))
 for c in chars:
     print(c["id"], "|", c["name"])

@@ -3,10 +3,10 @@ import json, urllib.request, urllib.error, time
 from pathlib import Path
 
 BASE = "http://127.0.0.1:8787"
-setup = json.loads(Path(r"C:\Users\Administrator\smoke_setup.json").read_text(encoding="utf-8"))
+setup = json.loads((Path(__file__).resolve().parent / "_out" / "smoke_setup.json").read_text(encoding="utf-8"))
 PRIV = setup["priv_id"]
 MID = "dbe4b21c-74be-4fb8-be73-0f1dfdea5ccf"
-prev = json.loads(Path(r"C:\Users\Administrator\smoke_results.json").read_text(encoding="utf-8"))
+prev = json.loads(Path(str(Path(__file__).resolve().parent / "_out" / "smoke_results.json")).read_text(encoding="utf-8"))
 
 def req(method, path, data=None, timeout=300):
     url = BASE + path
@@ -83,7 +83,7 @@ v = prev["results"]["5_vision"]
 print("vision reply:", (v.get("assistants") or [{}])[0].get("content"))
 print("vision user_image:", v.get("user_image"))
 
-Path(r"C:\Users\Administrator\smoke_results.json").write_text(
+Path(str(Path(__file__).resolve().parent / "_out" / "smoke_results.json")).write_text(
     json.dumps(prev, ensure_ascii=False, indent=2), encoding="utf-8"
 )
 print("SUMMARY", json.dumps(prev["summary"], ensure_ascii=False))

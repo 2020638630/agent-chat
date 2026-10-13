@@ -15,3 +15,10 @@ docs/*待优化点*.md
 
 # ARCH-2 try-run local outputs (may contain audio bytes)
 scripts/_tryrun_out/
+
+# D-22 smoke local outputs
+scripts/smoke/_out/
+
+__pycache__/
+*.py[cod]
+

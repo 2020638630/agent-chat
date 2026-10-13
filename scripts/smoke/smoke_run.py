@@ -3,8 +3,10 @@ import json, urllib.request, urllib.error, time, os, io, wave, math, struct, uui
 from pathlib import Path
 
 BASE = "http://127.0.0.1:8787"
-OUT = Path(r"C:\Users\Administrator\smoke_results.json")
-setup = json.loads(Path(r"C:\Users\Administrator\smoke_setup.json").read_text(encoding="utf-8"))
+OUT_DIR = Path(__file__).resolve().parent / "_out"
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+OUT = OUT_DIR / "smoke_results.json"
+setup = json.loads((Path(__file__).resolve().parent / "_out" / "smoke_setup.json").read_text(encoding="utf-8"))
 PRIV = setup["priv_id"]
 PRIV_CHAR = setup["priv_char"]
 GRP = setup["grp_id"]
