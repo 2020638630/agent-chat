@@ -27,6 +27,15 @@ function parseHm(s: string): { h: number; m: number } {
   return { h: Math.min(23, Number(m[1])), m: Math.min(59, Number(m[2])) };
 }
 
+/** X-03: persist quiet times as HH:MM; invalid → fallback. */
+function normalizeHm(s: string, fallback: string): string {
+  const m = String(s || '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return fallback;
+  const h = Math.min(23, Math.max(0, Number(m[1])));
+  const min = Math.min(59, Math.max(0, Number(m[2])));
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
 /** Quiet window may span midnight (e.g. 23:00-08:00). */
 export function inQuietHours(now = new Date(), start = '23:00', end = '08:00'): boolean {
   const a = parseHm(start);
@@ -99,9 +108,13 @@ export function patchProactiveSettings(body: {
   const cur = getProactiveSettings();
   const enabled = body.enabled !== undefined ? (body.enabled ? 1 : 0) : cur.enabled ? 1 : 0;
   const quiet_start =
-    body.quiet_start !== undefined ? String(body.quiet_start).trim() || '23:00' : cur.quiet_start;
+    body.quiet_start !== undefined
+      ? normalizeHm(String(body.quiet_start), cur.quiet_start || '23:00')
+      : cur.quiet_start;
   const quiet_end =
-    body.quiet_end !== undefined ? String(body.quiet_end).trim() || '08:00' : cur.quiet_end;
+    body.quiet_end !== undefined
+      ? normalizeHm(String(body.quiet_end), cur.quiet_end || '08:00')
+      : cur.quiet_end;
   let daily_cap = cur.daily_cap;
   if (body.daily_cap !== undefined) {
     daily_cap = Math.min(8, Math.max(1, Math.round(Number(body.daily_cap))));

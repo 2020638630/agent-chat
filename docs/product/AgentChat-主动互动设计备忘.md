@@ -140,3 +140,8 @@
 语言与栈：继续 Vite + Vue3 + Fastify + SQLite。单机、全场每拍至多一人，调度不是瓶颈。不为记忆 / 主动引入 Python、Go、Rust、Celery、Temporal。真要 embedding，用现有 Node 调 HTTP，不换运行时。
 
 C-05 / M-07 仍按本文 §2–§6，默认不开发。
+
+## X-03（2026-10-13 BF）
+
+- 用户可在主页调整 `daily_cap`（1–8）与静默 `quiet_start`/`quiet_end`。
+- 默认仍为 cap=3、23:00–08:00；调度 `runProactiveTick` 继续尊重设置。

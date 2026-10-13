@@ -1,6 +1,6 @@
 /**
- * Proactive messaging settings (enable toggle + quiet/cap snapshot).
- * Extracted from App.vue for ARCH-3 (D-02); no product logic change.
+ * Proactive messaging settings (enable + X-03 editable daily_cap / quiet hours).
+ * Extracted from App.vue for ARCH-3 (D-02); X-03 adds limit editors.
  */
 import { ref } from 'vue';
 import { api } from '../api/client';
@@ -53,6 +53,53 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
     }
   }
 
+  /** X-03: persist daily_cap / quiet hours; server clamps cap to 1..8. */
+  async function updateProactiveLimits(patch: {
+    daily_cap?: number;
+    quiet_start?: string;
+    quiet_end?: string;
+  }) {
+    proactiveBusy.value = true;
+    try {
+      const body: {
+        daily_cap?: number;
+        quiet_start?: string;
+        quiet_end?: string;
+      } = {};
+      if (patch.daily_cap !== undefined) {
+        const n = Math.round(Number(patch.daily_cap));
+        body.daily_cap = Number.isFinite(n) ? n : proactiveDailyCap.value;
+      }
+      if (patch.quiet_start !== undefined) body.quiet_start = String(patch.quiet_start);
+      if (patch.quiet_end !== undefined) body.quiet_end = String(patch.quiet_end);
+      const res = await api.updateProactiveSettings(body);
+      applyProactiveSettings(res.settings);
+      opts.setStatus('主动设置已保存');
+      setTimeout(() => opts.setStatus(''), 1400);
+    } catch (err) {
+      opts.setStatus(err instanceof Error ? err.message : String(err));
+      await loadProactiveSettings();
+    } finally {
+      proactiveBusy.value = false;
+    }
+  }
+
+  function onDailyCapChange(ev: Event) {
+    const el = ev.target as HTMLInputElement;
+    const n = Math.round(Number(el.value));
+    void updateProactiveLimits({ daily_cap: n });
+  }
+
+  function onQuietStartChange(ev: Event) {
+    const el = ev.target as HTMLInputElement;
+    void updateProactiveLimits({ quiet_start: el.value });
+  }
+
+  function onQuietEndChange(ev: Event) {
+    const el = ev.target as HTMLInputElement;
+    void updateProactiveLimits({ quiet_end: el.value });
+  }
+
   return {
     proactiveEnabled,
     proactiveBusy,
@@ -64,5 +111,9 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
     applyProactiveSettings,
     loadProactiveSettings,
     toggleProactiveEnabled,
+    updateProactiveLimits,
+    onDailyCapChange,
+    onQuietStartChange,
+    onQuietEndChange,
   };
 }

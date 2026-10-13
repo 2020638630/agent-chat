@@ -298,6 +298,9 @@ const {
   proactiveQuietEnd,
   loadProactiveSettings: loadProactiveSettingsImpl,
   toggleProactiveEnabled,
+  onDailyCapChange,
+  onQuietStartChange,
+  onQuietEndChange,
 } = useProactiveSettings({ setStatus });
 loadProactiveSettings = loadProactiveSettingsImpl;
 
@@ -842,7 +845,40 @@ onUnmounted(() => {
                   今日主动 {{ proactiveSentToday }} / {{ proactiveDailyCap }}
                   <span v-if="proactiveInQuiet" class="wx-proactive-quiet"> · 静默中（{{ proactiveQuietStart }}–{{ proactiveQuietEnd }}）</span>
                 </p>
-                <p class="wx-proactive-hint">满后只停私聊先开口，不挡空间赞评。关闭开关则两者都停。</p>
+                <div class="wx-proactive-edit" aria-label="主动日上限与静默时段">
+                  <label class="wx-proactive-field">
+                    <span class="wx-proactive-field-label">每日上限</span>
+                    <input
+                      class="wx-proactive-input"
+                      type="number"
+                      min="1"
+                      max="8"
+                      step="1"
+                      :value="proactiveDailyCap"
+                      :disabled="proactiveBusy"
+                      @change="onDailyCapChange"
+                    />
+                  </label>
+                  <label class="wx-proactive-field">
+                    <span class="wx-proactive-field-label">静默</span>
+                    <input
+                      class="wx-proactive-input time"
+                      type="time"
+                      :value="proactiveQuietStart"
+                      :disabled="proactiveBusy"
+                      @change="onQuietStartChange"
+                    />
+                    <span class="wx-proactive-sep">–</span>
+                    <input
+                      class="wx-proactive-input time"
+                      type="time"
+                      :value="proactiveQuietEnd"
+                      :disabled="proactiveBusy"
+                      @change="onQuietEndChange"
+                    />
+                  </label>
+                </div>
+                <p class="wx-proactive-hint">满后只停私聊先开口，不挡空间赞评。关闭开关则两者都停。静默可跨午夜（如 23:00–08:00）。</p>
               </div>
             </div>
 
