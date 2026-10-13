@@ -1188,6 +1188,58 @@ select {
   color: var(--accent-deep);
 }
 
+
+/* X05-D1: memory conflict confirm shortcut chips */
+.wx-memory-confirm-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  max-width: min(280px, 72vw);
+}
+
+.wx-memory-confirm-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 52px;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  color: var(--text-1, #1f1f1f);
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1;
+  transition:
+    background var(--motion-duration-fast, 150ms) var(--motion-easing-standard, ease),
+    border-color var(--motion-duration-fast, 150ms) var(--motion-easing-standard, ease),
+    transform var(--motion-duration-fast, 150ms) var(--motion-easing-standard, ease),
+    opacity var(--motion-duration-fast, 150ms) var(--motion-easing-standard, ease);
+}
+
+.wx-memory-confirm-chip:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.98);
+  transform: translateY(-1px);
+}
+
+.wx-memory-confirm-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wx-memory-confirm-chip.accept {
+  border-color: color-mix(in srgb, var(--accent-deep, #2f6b4f) 35%, transparent);
+  background: color-mix(in srgb, var(--accent-deep, #2f6b4f) 12%, #fff);
+  color: var(--accent-deep, #2f6b4f);
+}
+
+.wx-memory-confirm-chip.reject {
+  color: var(--text-2, #666);
+}
+
+
 .wx-react-emoji {
   font-size: 14px;
   line-height: 1;

@@ -29,6 +29,8 @@ export function useChatSession(opts: {
   const mentionId = ref<string>('');
   const msgMenuId = ref<string | null>(null);
   const pendingDeleteMessage = ref<ChatMessage | null>(null);
+  let confirmRefreshTimers: ReturnType<typeof setTimeout>[] = [];
+  let confirmRefreshGen = 0;
   const chatImageInput = ref<HTMLInputElement | null>(null);
   const imageBusy = ref(false);
   const lightboxUrl = ref<string | null>(null);
@@ -125,6 +127,74 @@ export function useChatSession(opts: {
     }
   }
 
+
+  function clearConfirmRefreshTimers() {
+    for (const t of confirmRefreshTimers) clearTimeout(t);
+    confirmRefreshTimers = [];
+  }
+
+  /** X05-D1: after extract may insert memory_confirm async — poll listMessages briefly. */
+  function scheduleConfirmMessageRefresh() {
+    const id = activeConversationId.value;
+    if (!id) return;
+    clearConfirmRefreshTimers();
+    const gen = ++confirmRefreshGen;
+    const offsetsMs = [2500, 6000, 11000, 18000, 28000, 42000];
+    for (const ms of offsetsMs) {
+      const t = setTimeout(async () => {
+        if (gen !== confirmRefreshGen) return;
+        if (activeConversationId.value !== id) return;
+        try {
+          const res = await api.listMessages(id);
+          const next = res.messages || [];
+          const prevLen = messages.value.length;
+          const hasNewConfirm =
+            next.length > prevLen &&
+            next.slice(prevLen).some((m) => m.source === 'memory_confirm');
+          const grew = next.length > prevLen;
+          if (grew) {
+            messages.value = next;
+            if (hasNewConfirm) {
+              await scrollChatToBottom();
+              // stop further polls once confirm landed
+              confirmRefreshGen++;
+              clearConfirmRefreshTimers();
+            }
+          }
+        } catch {
+          // best-effort
+        }
+      }, ms);
+      confirmRefreshTimers.push(t);
+    }
+  }
+
+  /** X05-D1: send chip text (改/不改) without touching the composer draft. */
+  async function sendQuickText(text: string) {
+    closeEmojiPicker();
+    const trimmed = String(text || '').trim();
+    if (!trimmed || !activeConversationId.value || sending.value) return;
+    sending.value = true;
+    opts.setStatus('发送中…');
+    try {
+      const mention = mentionId.value || undefined;
+      const res = await api.sendMessage(activeConversationId.value, trimmed, mention);
+      messages.value.push(res.userMessage, ...res.assistantMessages);
+      const peer = privatePeer(activeConversation.value);
+      if (peer?.id && (res.assistantMessages?.length ?? 0) > 0) {
+        opts.scheduleMemoryWhisper(peer.id, activeConversationId.value || undefined);
+        scheduleConfirmMessageRefresh();
+      }
+      await refreshConversations();
+      await scrollChatToBottom();
+      opts.setStatus('');
+    } catch (err) {
+      opts.setStatus(err instanceof Error ? err.message : String(err));
+    } finally {
+      sending.value = false;
+    }
+  }
+
   async function send() {
     closeEmojiPicker();
 
@@ -140,6 +210,7 @@ export function useChatSession(opts: {
       const peer = privatePeer(activeConversation.value);
       if (peer?.id && (res.assistantMessages?.length ?? 0) > 0) {
         opts.scheduleMemoryWhisper(peer.id, activeConversationId.value || undefined);
+        scheduleConfirmMessageRefresh();
       }
       await refreshConversations();
       await scrollChatToBottom();
@@ -323,8 +394,14 @@ export function useChatSession(opts: {
     }
   }
 
+  function disposeChatSessionExtras() {
+    clearConfirmRefreshTimers();
+    confirmRefreshGen++;
+  }
+
   onUnmounted(() => {
     stopConversationsPoll();
+    disposeChatSessionExtras();
   });
 
   return {
@@ -354,6 +431,7 @@ export function useChatSession(opts: {
     onEmojiDocPointerDown,
     onEmojiKeydown,
     send,
+    sendQuickText,
     onChatImageChange,
     openChatImagePicker,
     openLightbox,

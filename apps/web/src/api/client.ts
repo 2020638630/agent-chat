@@ -52,7 +52,7 @@ export type ChatMessage = {
   character_name?: string | null;
   content: string;
   created_at: string;
-  source?: 'text' | 'voice' | 'image';
+  source?: 'text' | 'voice' | 'image' | 'memory_confirm';
   image_path?: string | null;
   reactions?: MessageReaction[];
 };

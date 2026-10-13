@@ -224,6 +224,7 @@ const {
   onEmojiDocPointerDown,
   onEmojiKeydown,
   send,
+  sendQuickText,
   onChatImageChange,
   openChatImagePicker,
   openLightbox,
@@ -455,6 +456,20 @@ function formatTime(iso?: string) {
   const da = String(d.getDate()).padStart(2, '0');
   if (d.getFullYear() === now.getFullYear()) return `${mo}-${da}`;
   return `${d.getFullYear()}-${mo}-${da}`;
+}
+
+
+function isMemoryConfirmPending(m: ChatMessage, index: number) {
+  if (m.role !== 'assistant' || m.source !== 'memory_confirm') return false;
+  for (let j = index + 1; j < messages.value.length; j++) {
+    if (messages.value[j].role === 'user') return false;
+  }
+  return true;
+}
+
+function onMemoryConfirmChoice(choice: '改' | '不改') {
+  if (sending.value) return;
+  void sendQuickText(choice);
 }
 
 function speakerName(m: ChatMessage) {
@@ -1268,6 +1283,26 @@ onUnmounted(() => {
                             <button class="danger" @click="deleteOneMessage(m)">删除</button>
                           </div>
                         </div>
+                      </div>
+
+                      <div
+                        v-if="isMemoryConfirmPending(m, i)"
+                        class="wx-memory-confirm-row"
+                        role="group"
+                        aria-label="记忆冲突确认"
+                      >
+                        <button
+                          type="button"
+                          class="wx-memory-confirm-chip accept"
+                          :disabled="sending"
+                          @click.stop="onMemoryConfirmChoice('改')"
+                        >改</button>
+                        <button
+                          type="button"
+                          class="wx-memory-confirm-chip reject"
+                          :disabled="sending"
+                          @click.stop="onMemoryConfirmChoice('不改')"
+                        >不改</button>
                       </div>
                       <TransitionGroup
                         v-if="m.reactions && m.reactions.length"
