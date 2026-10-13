@@ -71,6 +71,8 @@ export type ProactiveSettings = {
   quiet_start: string;
   quiet_end: string;
   daily_cap: number;
+  space_like_max?: number;
+  space_comment_max?: number;
   sent_today: number;
   in_quiet?: boolean;
 };
@@ -388,6 +390,8 @@ export const api = {
     quiet_start?: string;
     quiet_end?: string;
     daily_cap?: number;
+    space_like_max?: number;
+    space_comment_max?: number;
   }) =>
     fetch("/api/proactive", {
       method: "PATCH",

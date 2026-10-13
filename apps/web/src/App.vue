@@ -296,11 +296,15 @@ const {
   proactiveInQuiet,
   proactiveQuietStart,
   proactiveQuietEnd,
+  proactiveSpaceLikeMax,
+  proactiveSpaceCommentMax,
   loadProactiveSettings: loadProactiveSettingsImpl,
   toggleProactiveEnabled,
   onDailyCapChange,
   onQuietStartChange,
   onQuietEndChange,
+  onSpaceLikeMaxChange,
+  onSpaceCommentMaxChange,
 } = useProactiveSettings({ setStatus });
 loadProactiveSettings = loadProactiveSettingsImpl;
 
@@ -877,8 +881,34 @@ onUnmounted(() => {
                       @change="onQuietEndChange"
                     />
                   </label>
+                  <label class="wx-proactive-field">
+                    <span class="wx-proactive-field-label">空间赞上限</span>
+                    <input
+                      class="wx-proactive-input"
+                      type="number"
+                      min="0"
+                      max="3"
+                      step="1"
+                      :value="proactiveSpaceLikeMax"
+                      :disabled="proactiveBusy"
+                      @change="onSpaceLikeMaxChange"
+                    />
+                  </label>
+                  <label class="wx-proactive-field">
+                    <span class="wx-proactive-field-label">空间评上限</span>
+                    <input
+                      class="wx-proactive-input"
+                      type="number"
+                      min="0"
+                      max="1"
+                      step="1"
+                      :value="proactiveSpaceCommentMax"
+                      :disabled="proactiveBusy"
+                      @change="onSpaceCommentMaxChange"
+                    />
+                  </label>
                 </div>
-                <p class="wx-proactive-hint">满后只停私聊先开口，不挡空间赞评。关闭开关则两者都停。静默可跨午夜（如 23:00–08:00）。</p>
+                <p class="wx-proactive-hint">满后只停私聊先开口，不挡空间赞评。关闭开关则两者都停。静默可跨午夜（如 23:00–08:00）。空间赞/评上限控制发动态后角色互动强度（默认赞 0～2、评 0～1）。</p>
               </div>
             </div>
 

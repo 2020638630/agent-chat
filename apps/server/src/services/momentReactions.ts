@@ -152,23 +152,29 @@ export async function settleMomentReactions(momentId: string): Promise<MomentRea
   const chars = listCharacters();
   if (!chars.length) return { skipped: 'no_characters', likes: [], comment: null };
 
+  // X-07: intensity from settings (defaults match design memo 0..2 likes / 0..1 comment).
+  const likeMax = Math.min(3, Math.max(0, Number(settings.space_like_max ?? 2)));
+  const commentMax = Math.min(1, Math.max(0, Number(settings.space_comment_max ?? 1)));
+
   const pool = shuffle(chars);
-  const likeCount = Math.floor(Math.random() * 3); // 0..2
+  const likeCount = Math.floor(Math.random() * (likeMax + 1)); // 0..likeMax
   const likes: string[] = [];
   for (const c of pool.slice(0, likeCount)) {
     if (insertLike(momentId, c.id)) likes.push(c.name);
   }
 
   let comment: { author: string; content: string } | null = null;
-  for (const c of shuffle(chars)) {
-    const ok = await writeCharacterComment(momentId, moment.content, c);
-    if (ok) {
-      comment = db
-        .prepare(
-          `SELECT author, content FROM moment_comments WHERE moment_id = ? AND author = ? ORDER BY created_at DESC LIMIT 1`,
-        )
-        .get(momentId, c.name) as { author: string; content: string };
-      break;
+  if (commentMax > 0) {
+    for (const c of shuffle(chars)) {
+      const ok = await writeCharacterComment(momentId, moment.content, c);
+      if (ok) {
+        comment = db
+          .prepare(
+            `SELECT author, content FROM moment_comments WHERE moment_id = ? AND author = ? ORDER BY created_at DESC LIMIT 1`,
+          )
+          .get(momentId, c.name) as { author: string; content: string };
+        break;
+      }
     }
   }
 

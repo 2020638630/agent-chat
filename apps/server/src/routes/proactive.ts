@@ -16,6 +16,8 @@ export async function proactiveRoutes(app: FastifyInstance) {
       quiet_start?: string;
       quiet_end?: string;
       daily_cap?: number;
+      space_like_max?: number;
+      space_comment_max?: number;
     };
     return { settings: patchProactiveSettings(body) };
   });

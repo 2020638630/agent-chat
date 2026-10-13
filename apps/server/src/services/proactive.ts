@@ -73,6 +73,10 @@ export type ProactiveSettings = {
   quiet_start: string;
   quiet_end: string;
   daily_cap: number;
+  /** X-07: max likes per user-moment settle (0..3); random picks 0..max. Default 2. */
+  space_like_max: number;
+  /** X-07: max short comments per user-moment settle (0..1). Default 1. */
+  space_comment_max: number;
   sent_today: number;
   in_quiet: boolean;
 };
@@ -84,9 +88,13 @@ export function getProactiveSettings(): ProactiveSettings {
         proactive_quiet_start?: string;
         proactive_quiet_end?: string;
         proactive_daily_cap?: number;
+        proactive_space_like_max?: number;
+        proactive_space_comment_max?: number;
       }
     | undefined;
   const cap = Number(row?.proactive_daily_cap ?? 3);
+  const likeMaxRaw = Number(row?.proactive_space_like_max ?? 2);
+  const commentMaxRaw = Number(row?.proactive_space_comment_max ?? 1);
   const quiet_start = row?.proactive_quiet_start || '23:00';
   const quiet_end = row?.proactive_quiet_end || '08:00';
   return {
@@ -94,6 +102,14 @@ export function getProactiveSettings(): ProactiveSettings {
     quiet_start,
     quiet_end,
     daily_cap: Math.min(8, Math.max(1, Number.isFinite(cap) ? cap : 3)),
+    space_like_max: Math.min(
+      3,
+      Math.max(0, Number.isFinite(likeMaxRaw) ? Math.round(likeMaxRaw) : 2),
+    ),
+    space_comment_max: Math.min(
+      1,
+      Math.max(0, Number.isFinite(commentMaxRaw) ? Math.round(commentMaxRaw) : 1),
+    ),
     sent_today: countProactiveToday(),
     in_quiet: inQuietHours(new Date(), quiet_start, quiet_end),
   };
@@ -104,6 +120,8 @@ export function patchProactiveSettings(body: {
   quiet_start?: string;
   quiet_end?: string;
   daily_cap?: number;
+  space_like_max?: number;
+  space_comment_max?: number;
 }): ProactiveSettings {
   const cur = getProactiveSettings();
   const enabled = body.enabled !== undefined ? (body.enabled ? 1 : 0) : cur.enabled ? 1 : 0;
@@ -119,15 +137,27 @@ export function patchProactiveSettings(body: {
   if (body.daily_cap !== undefined) {
     daily_cap = Math.min(8, Math.max(1, Math.round(Number(body.daily_cap))));
   }
+  let space_like_max = cur.space_like_max;
+  if (body.space_like_max !== undefined) {
+    space_like_max = Math.min(3, Math.max(0, Math.round(Number(body.space_like_max))));
+    if (!Number.isFinite(space_like_max)) space_like_max = cur.space_like_max;
+  }
+  let space_comment_max = cur.space_comment_max;
+  if (body.space_comment_max !== undefined) {
+    space_comment_max = Math.min(1, Math.max(0, Math.round(Number(body.space_comment_max))));
+    if (!Number.isFinite(space_comment_max)) space_comment_max = cur.space_comment_max;
+  }
   db.prepare(
     `UPDATE user_profile SET
       proactive_enabled = ?,
       proactive_quiet_start = ?,
       proactive_quiet_end = ?,
       proactive_daily_cap = ?,
+      proactive_space_like_max = ?,
+      proactive_space_comment_max = ?,
       updated_at = ?
      WHERE id = 'me'`
-  ).run(enabled, quiet_start, quiet_end, daily_cap, nowIso());
+  ).run(enabled, quiet_start, quiet_end, daily_cap, space_like_max, space_comment_max, nowIso());
   return getProactiveSettings();
 }
 

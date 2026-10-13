@@ -1,6 +1,6 @@
 /**
- * Proactive messaging settings (enable + X-03 editable daily_cap / quiet hours).
- * Extracted from App.vue for ARCH-3 (D-02); X-03 adds limit editors.
+ * Proactive messaging settings (enable + X-03 daily_cap/quiet + X-07 space intensity).
+ * Extracted from App.vue for ARCH-3 (D-02).
  */
 import { ref } from 'vue';
 import { api } from '../api/client';
@@ -10,6 +10,8 @@ export type ProactiveSettingsSnapshot = {
   quiet_start?: string;
   quiet_end?: string;
   daily_cap?: number;
+  space_like_max?: number;
+  space_comment_max?: number;
   sent_today?: number;
   in_quiet?: boolean;
 };
@@ -22,6 +24,8 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
   const proactiveInQuiet = ref(false);
   const proactiveQuietStart = ref('23:00');
   const proactiveQuietEnd = ref('08:00');
+  const proactiveSpaceLikeMax = ref(2);
+  const proactiveSpaceCommentMax = ref(1);
 
   function applyProactiveSettings(settings: ProactiveSettingsSnapshot) {
     proactiveEnabled.value = !!settings.enabled;
@@ -30,6 +34,8 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
     proactiveQuietStart.value = settings.quiet_start || '23:00';
     proactiveQuietEnd.value = settings.quiet_end || '08:00';
     proactiveInQuiet.value = !!settings.in_quiet;
+    proactiveSpaceLikeMax.value = Number(settings.space_like_max ?? 2);
+    proactiveSpaceCommentMax.value = Number(settings.space_comment_max ?? 1);
   }
 
   async function loadProactiveSettings() {
@@ -53,11 +59,13 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
     }
   }
 
-  /** X-03: persist daily_cap / quiet hours; server clamps cap to 1..8. */
+  /** X-03 / X-07: persist limits; server clamps. */
   async function updateProactiveLimits(patch: {
     daily_cap?: number;
     quiet_start?: string;
     quiet_end?: string;
+    space_like_max?: number;
+    space_comment_max?: number;
   }) {
     proactiveBusy.value = true;
     try {
@@ -65,6 +73,8 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
         daily_cap?: number;
         quiet_start?: string;
         quiet_end?: string;
+        space_like_max?: number;
+        space_comment_max?: number;
       } = {};
       if (patch.daily_cap !== undefined) {
         const n = Math.round(Number(patch.daily_cap));
@@ -72,6 +82,14 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
       }
       if (patch.quiet_start !== undefined) body.quiet_start = String(patch.quiet_start);
       if (patch.quiet_end !== undefined) body.quiet_end = String(patch.quiet_end);
+      if (patch.space_like_max !== undefined) {
+        const n = Math.round(Number(patch.space_like_max));
+        body.space_like_max = Number.isFinite(n) ? n : proactiveSpaceLikeMax.value;
+      }
+      if (patch.space_comment_max !== undefined) {
+        const n = Math.round(Number(patch.space_comment_max));
+        body.space_comment_max = Number.isFinite(n) ? n : proactiveSpaceCommentMax.value;
+      }
       const res = await api.updateProactiveSettings(body);
       applyProactiveSettings(res.settings);
       opts.setStatus('主动设置已保存');
@@ -100,6 +118,18 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
     void updateProactiveLimits({ quiet_end: el.value });
   }
 
+  function onSpaceLikeMaxChange(ev: Event) {
+    const el = ev.target as HTMLInputElement;
+    const n = Math.round(Number(el.value));
+    void updateProactiveLimits({ space_like_max: n });
+  }
+
+  function onSpaceCommentMaxChange(ev: Event) {
+    const el = ev.target as HTMLInputElement;
+    const n = Math.round(Number(el.value));
+    void updateProactiveLimits({ space_comment_max: n });
+  }
+
   return {
     proactiveEnabled,
     proactiveBusy,
@@ -108,6 +138,8 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
     proactiveInQuiet,
     proactiveQuietStart,
     proactiveQuietEnd,
+    proactiveSpaceLikeMax,
+    proactiveSpaceCommentMax,
     applyProactiveSettings,
     loadProactiveSettings,
     toggleProactiveEnabled,
@@ -115,5 +147,7 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
     onDailyCapChange,
     onQuietStartChange,
     onQuietEndChange,
+    onSpaceLikeMaxChange,
+    onSpaceCommentMaxChange,
   };
 }

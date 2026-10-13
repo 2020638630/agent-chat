@@ -100,6 +100,13 @@ export function ensureProactiveColumns(db: Database.Database) {
   if (!userCols.some((c) => c.name === 'proactive_daily_cap')) {
     db.exec(`ALTER TABLE user_profile ADD COLUMN proactive_daily_cap INTEGER NOT NULL DEFAULT 3`);
   }
+  // X-07: M-07 space intensity (separate from private daily_cap; C-06/D-04).
+  if (!userCols.some((c) => c.name === 'proactive_space_like_max')) {
+    db.exec(`ALTER TABLE user_profile ADD COLUMN proactive_space_like_max INTEGER NOT NULL DEFAULT 2`);
+  }
+  if (!userCols.some((c) => c.name === 'proactive_space_comment_max')) {
+    db.exec(`ALTER TABLE user_profile ADD COLUMN proactive_space_comment_max INTEGER NOT NULL DEFAULT 1`);
+  }
 
   const charCols = db.prepare(`PRAGMA table_info(characters)`).all() as Array<{ name: string }>;
   if (!charCols.some((c) => c.name === 'initiative_tier')) {
