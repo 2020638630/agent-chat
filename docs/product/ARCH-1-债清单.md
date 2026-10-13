@@ -108,6 +108,7 @@
 
 
 - **计分行（2026-10-13 BF，含 D-02b）**：App.vue 累计 **2446 → 1527（−919 行）**（P0–P2→~1629；D-02b→1527）。D-02 仍部分收口；D-02b 已关。
+- **计分行（2026-10-13 BF 续）**：App.vue **2446 → 1527（D-02b）→ 1554（X05-D2+D5）**。D2+D5 的 +27 主要为资料页 pending 丢弃**模板** + 薄胶水；`profilePendingMemories` 状态在 `useMemoryUi`，**未**在 App 新堆业务 ref。TTL=7d 为 agent 默认，**产品参数待用户明确**。
 ### D-03 `conversations` 路由承载业务编排
 - **位置**：`apps/server/src/routes/conversations.ts`（约 864 行）
 - **类型**：后端架构 / 路由耦合
