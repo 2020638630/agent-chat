@@ -54,6 +54,24 @@ function normalizeTier(v: unknown, name = ''): InitiativeTier {
   return defaultInitiativeTier(name);
 }
 
+
+function countMomentImagesToday(): number {
+  const rows = db
+    .prepare(
+      `SELECT created_at FROM moments
+       WHERE author_kind = 'character' AND image_path IS NOT NULL AND image_path != ''`,
+    )
+    .all() as Array<{ created_at: string }>;
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  return rows.filter((r) => {
+    const ts = new Date(r.created_at).getTime();
+    return ts >= start.getTime() && ts <= end.getTime();
+  }).length;
+}
+
 function countProactiveToday(): number {
   const rows = db
     .prepare(`SELECT created_at FROM messages WHERE source = 'proactive'`)
@@ -77,6 +95,12 @@ export type ProactiveSettings = {
   space_like_max: number;
   /** X-07: max short comments per user-moment settle (0..1). Default 1. */
   space_comment_max: number;
+  /** M-05b: allow Kolors image on 「让 TA 发动态」. Default off. */
+  moment_image_enabled: boolean;
+  /** M-05b: max character moments with image per local day (0..3). Default 1. */
+  moment_image_daily_cap: number;
+  /** M-05b: character moments with image created today. */
+  moment_image_sent_today: number;
   sent_today: number;
   in_quiet: boolean;
 };
@@ -90,11 +114,14 @@ export function getProactiveSettings(): ProactiveSettings {
         proactive_daily_cap?: number;
         proactive_space_like_max?: number;
         proactive_space_comment_max?: number;
+        proactive_moment_image_enabled?: number;
+        proactive_moment_image_daily_cap?: number;
       }
     | undefined;
   const cap = Number(row?.proactive_daily_cap ?? 3);
   const likeMaxRaw = Number(row?.proactive_space_like_max ?? 2);
   const commentMaxRaw = Number(row?.proactive_space_comment_max ?? 1);
+  const momentCapRaw = Number(row?.proactive_moment_image_daily_cap ?? 1);
   const quiet_start = row?.proactive_quiet_start || '23:00';
   const quiet_end = row?.proactive_quiet_end || '08:00';
   return {
@@ -110,6 +137,12 @@ export function getProactiveSettings(): ProactiveSettings {
       1,
       Math.max(0, Number.isFinite(commentMaxRaw) ? Math.round(commentMaxRaw) : 1),
     ),
+    moment_image_enabled: Number(row?.proactive_moment_image_enabled ?? 0) === 1,
+    moment_image_daily_cap: Math.min(
+      3,
+      Math.max(0, Number.isFinite(momentCapRaw) ? Math.round(momentCapRaw) : 1),
+    ),
+    moment_image_sent_today: countMomentImagesToday(),
     sent_today: countProactiveToday(),
     in_quiet: inQuietHours(new Date(), quiet_start, quiet_end),
   };
@@ -122,6 +155,8 @@ export function patchProactiveSettings(body: {
   daily_cap?: number;
   space_like_max?: number;
   space_comment_max?: number;
+  moment_image_enabled?: boolean;
+  moment_image_daily_cap?: number;
 }): ProactiveSettings {
   const cur = getProactiveSettings();
   const enabled = body.enabled !== undefined ? (body.enabled ? 1 : 0) : cur.enabled ? 1 : 0;
@@ -147,6 +182,19 @@ export function patchProactiveSettings(body: {
     space_comment_max = Math.min(1, Math.max(0, Math.round(Number(body.space_comment_max))));
     if (!Number.isFinite(space_comment_max)) space_comment_max = cur.space_comment_max;
   }
+  const moment_image_enabled =
+    body.moment_image_enabled !== undefined
+      ? body.moment_image_enabled
+        ? 1
+        : 0
+      : cur.moment_image_enabled
+        ? 1
+        : 0;
+  let moment_image_daily_cap = cur.moment_image_daily_cap;
+  if (body.moment_image_daily_cap !== undefined) {
+    moment_image_daily_cap = Math.min(3, Math.max(0, Math.round(Number(body.moment_image_daily_cap))));
+    if (!Number.isFinite(moment_image_daily_cap)) moment_image_daily_cap = cur.moment_image_daily_cap;
+  }
   db.prepare(
     `UPDATE user_profile SET
       proactive_enabled = ?,
@@ -155,9 +203,21 @@ export function patchProactiveSettings(body: {
       proactive_daily_cap = ?,
       proactive_space_like_max = ?,
       proactive_space_comment_max = ?,
+      proactive_moment_image_enabled = ?,
+      proactive_moment_image_daily_cap = ?,
       updated_at = ?
      WHERE id = 'me'`
-  ).run(enabled, quiet_start, quiet_end, daily_cap, space_like_max, space_comment_max, nowIso());
+  ).run(
+    enabled,
+    quiet_start,
+    quiet_end,
+    daily_cap,
+    space_like_max,
+    space_comment_max,
+    moment_image_enabled,
+    moment_image_daily_cap,
+    nowIso(),
+  );
   return getProactiveSettings();
 }
 

@@ -5,6 +5,8 @@ import { buildSystemPrompt } from '../utils/characterCard.js';
 import { chatCompletion } from '../services/llm.js';
 import { scheduleMomentReactions, scheduleAuthorReplyToUserComment } from '../services/momentReactions.js';
 import { saveImageBuffer, unlinkUploadPublicPath } from '../services/uploadImage.js';
+import { generateChatImage } from '../services/imageGen.js';
+import { getProactiveSettings } from '../services/proactive.js';
 
 const MOMENT_SELECT = `
   SELECT m.*,
@@ -210,12 +212,31 @@ export async function momentRoutes(app: FastifyInstance) {
       content = `（今天心情一般。LLM 不可用：${msg}）`;
     }
 
+    // M-05b: optional Kolors image — gated; never hard-fail the text post.
+    let imagePath: string | null = null;
+    const gate = getProactiveSettings();
+    const underCap = gate.moment_image_sent_today < gate.moment_image_daily_cap;
+    if (gate.moment_image_enabled && underCap && gate.moment_image_daily_cap > 0) {
+      const prompt =
+        `Friends-circle style illustration for a social post. Soft lighting, clean composition, no watermark, no UI chrome, no text overlay. ` +
+        `Fits persona "${character.name}". Post mood: ${String(content).slice(0, 200)}. ` +
+        `anime illustration, clean lines, character-consistent, tasteful`;
+      try {
+        const img = await generateChatImage(prompt);
+        imagePath = img.publicPath;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.log(`[moments/generate] image skipped: ${msg.slice(0, 160)}`);
+        imagePath = null;
+      }
+    }
+
     const id = uuid();
     const created_at = new Date().toISOString();
     db.prepare(
       `INSERT INTO moments (id, character_id, author_kind, content, image_path, created_at)
-       VALUES (?, ?, 'character', ?, NULL, ?)`
-    ).run(id, character.id, content, created_at);
+       VALUES (?, ?, 'character', ?, ?, ?)`
+    ).run(id, character.id, content, imagePath, created_at);
 
     return { moment: enrichMoment(getMomentRow(id)) };
   });

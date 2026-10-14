@@ -308,6 +308,11 @@ const {
   onQuietEndChange,
   onSpaceLikeMaxChange,
   onSpaceCommentMaxChange,
+  proactiveMomentImageEnabled,
+  proactiveMomentImageDailyCap,
+  proactiveMomentImageSentToday,
+  toggleMomentImageEnabled,
+  onMomentImageDailyCapChange,
 } = useProactiveSettings({ setStatus });
 loadProactiveSettings = loadProactiveSettingsImpl;
 
@@ -942,8 +947,31 @@ v-if="profileView.kind === 'user'" class="wx-appearance">
                       @change="onSpaceCommentMaxChange"
                     />
                   </label>
+                  <label class="wx-proactive-field">
+                    <span class="wx-proactive-field-label">动态配图</span>
+                    <input
+                      type="checkbox"
+                      :checked="proactiveMomentImageEnabled"
+                      :disabled="proactiveBusy"
+                      @change="toggleMomentImageEnabled(($event.target as HTMLInputElement).checked)"
+                    />
+                    <span class="wx-proactive-sep">今日 {{ proactiveMomentImageSentToday }}/{{ proactiveMomentImageDailyCap }}</span>
+                  </label>
+                  <label class="wx-proactive-field">
+                    <span class="wx-proactive-field-label">配图日上限</span>
+                    <input
+                      class="wx-proactive-input"
+                      type="number"
+                      min="0"
+                      max="3"
+                      step="1"
+                      :value="proactiveMomentImageDailyCap"
+                      :disabled="proactiveBusy || !proactiveMomentImageEnabled"
+                      @change="onMomentImageDailyCapChange"
+                    />
+                  </label>
                 </div>
-                <p class="wx-proactive-hint">满后只停私聊先开口，不挡空间赞评。关闭开关则两者都停。静默可跨午夜（如 23:00–08:00）。空间赞/评上限控制发动态后角色互动强度（默认赞 0～2、评 0～1）。</p>
+                <p class="wx-proactive-hint">满后只停私聊先开口，不挡空间赞评。关闭开关则两者都停。静默可跨午夜（如 23:00–08:00）。空间赞/评上限控制发动态后角色互动强度（默认赞 0～2、评 0～1）。「让 TA 发动态」配图默认关，日上限 0～3；关或达上限仍发纯文，用户发帖仍走上传。</p>
               </div>
             </div>
 

@@ -18,6 +18,8 @@ export async function proactiveRoutes(app: FastifyInstance) {
       daily_cap?: number;
       space_like_max?: number;
       space_comment_max?: number;
+      moment_image_enabled?: boolean;
+      moment_image_daily_cap?: number;
     };
     return { settings: patchProactiveSettings(body) };
   });

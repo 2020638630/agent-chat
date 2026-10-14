@@ -73,6 +73,10 @@ export type ProactiveSettings = {
   daily_cap: number;
   space_like_max?: number;
   space_comment_max?: number;
+  /** M-05b */
+  moment_image_enabled?: boolean;
+  moment_image_daily_cap?: number;
+  moment_image_sent_today?: number;
   sent_today: number;
   in_quiet?: boolean;
 };
@@ -417,6 +421,8 @@ export const api = {
     daily_cap?: number;
     space_like_max?: number;
     space_comment_max?: number;
+    moment_image_enabled?: boolean;
+    moment_image_daily_cap?: number;
   }) =>
     fetch("/api/proactive", {
       method: "PATCH",

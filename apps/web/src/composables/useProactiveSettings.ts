@@ -12,6 +12,9 @@ export type ProactiveSettingsSnapshot = {
   daily_cap?: number;
   space_like_max?: number;
   space_comment_max?: number;
+  moment_image_enabled?: boolean;
+  moment_image_daily_cap?: number;
+  moment_image_sent_today?: number;
   sent_today?: number;
   in_quiet?: boolean;
 };
@@ -26,6 +29,9 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
   const proactiveQuietEnd = ref('08:00');
   const proactiveSpaceLikeMax = ref(2);
   const proactiveSpaceCommentMax = ref(1);
+  const proactiveMomentImageEnabled = ref(false);
+  const proactiveMomentImageDailyCap = ref(1);
+  const proactiveMomentImageSentToday = ref(0);
 
   function applyProactiveSettings(settings: ProactiveSettingsSnapshot) {
     proactiveEnabled.value = !!settings.enabled;
@@ -36,6 +42,9 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
     proactiveInQuiet.value = !!settings.in_quiet;
     proactiveSpaceLikeMax.value = Number(settings.space_like_max ?? 2);
     proactiveSpaceCommentMax.value = Number(settings.space_comment_max ?? 1);
+    proactiveMomentImageEnabled.value = !!settings.moment_image_enabled;
+    proactiveMomentImageDailyCap.value = Number(settings.moment_image_daily_cap ?? 1);
+    proactiveMomentImageSentToday.value = Number(settings.moment_image_sent_today ?? 0);
   }
 
   async function loadProactiveSettings() {
@@ -66,6 +75,8 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
     quiet_end?: string;
     space_like_max?: number;
     space_comment_max?: number;
+    moment_image_enabled?: boolean;
+    moment_image_daily_cap?: number;
   }) {
     proactiveBusy.value = true;
     try {
@@ -75,6 +86,8 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
         quiet_end?: string;
         space_like_max?: number;
         space_comment_max?: number;
+        moment_image_enabled?: boolean;
+        moment_image_daily_cap?: number;
       } = {};
       if (patch.daily_cap !== undefined) {
         const n = Math.round(Number(patch.daily_cap));
@@ -89,6 +102,15 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
       if (patch.space_comment_max !== undefined) {
         const n = Math.round(Number(patch.space_comment_max));
         body.space_comment_max = Number.isFinite(n) ? n : proactiveSpaceCommentMax.value;
+      }
+      if (patch.moment_image_enabled !== undefined) {
+        body.moment_image_enabled = !!patch.moment_image_enabled;
+      }
+      if (patch.moment_image_daily_cap !== undefined) {
+        const n = Math.round(Number(patch.moment_image_daily_cap));
+        body.moment_image_daily_cap = Number.isFinite(n)
+          ? n
+          : proactiveMomentImageDailyCap.value;
       }
       const res = await api.updateProactiveSettings(body);
       applyProactiveSettings(res.settings);
@@ -130,6 +152,16 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
     void updateProactiveLimits({ space_comment_max: n });
   }
 
+  function toggleMomentImageEnabled(next: boolean) {
+    void updateProactiveLimits({ moment_image_enabled: next });
+  }
+
+  function onMomentImageDailyCapChange(ev: Event) {
+    const el = ev.target as HTMLInputElement;
+    const n = Math.round(Number(el.value));
+    void updateProactiveLimits({ moment_image_daily_cap: n });
+  }
+
   return {
     proactiveEnabled,
     proactiveBusy,
@@ -140,6 +172,9 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
     proactiveQuietEnd,
     proactiveSpaceLikeMax,
     proactiveSpaceCommentMax,
+    proactiveMomentImageEnabled,
+    proactiveMomentImageDailyCap,
+    proactiveMomentImageSentToday,
     applyProactiveSettings,
     loadProactiveSettings,
     toggleProactiveEnabled,
@@ -149,5 +184,7 @@ export function useProactiveSettings(opts: { setStatus: (msg: string) => void })
     onQuietEndChange,
     onSpaceLikeMaxChange,
     onSpaceCommentMaxChange,
+    toggleMomentImageEnabled,
+    onMomentImageDailyCapChange,
   };
 }
