@@ -11,7 +11,8 @@ const DEFAULT_IMAGE_STYLE =
 export function wantsImageGeneration(text: string): boolean {
   const t = String(text || '').trim();
   if (!t) return false;
-  return /画一[张个幅]|画个|画张|帮我画|给我画|生成一[张个]图|生成图片|来一[张个]图|出一[张个]图|画张图|draw (me )?(a|an)|generate (an? )?image/i.test(
+  // B-04c: bare 「画一只猫」 etc. — widen classifiers beyond 张/个/幅; keep chat false-negatives out.
+  return /画一[张个幅只条匹头本朵棵座]|画个|画张|画只|画条|帮我画|给我画|生成一[张个]图|生成图片|来一[张个]图|出一[张个]图|画张图|draw (me )?(a|an)|generate (an? )?image/i.test(
     t,
   );
 }
@@ -20,7 +21,7 @@ export function wantsImageGeneration(text: string): boolean {
 export function buildImagePrompt(userText: string, characterName: string): string {
   let subject = String(userText || '').trim();
   subject = subject
-    .replace(/^(请|麻烦|帮我|给我)?(画一[张个幅]|画个|画张|生成一[张个]图|生成图片|来一[张个]图|出一[张个]图)/, '')
+    .replace(/^(请|麻烦|帮我|给我)?(画一[张个幅只条匹头本朵棵座]|画个|画张|画只|画条|生成一[张个]图|生成图片|来一[张个]图|出一[张个]图)/, '')
     .replace(/^(please\s+)?(draw|generate)\s+(me\s+)?(a|an)?\s*/i, '')
     .trim();
   if (!subject) subject = userText.trim();
