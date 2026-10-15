@@ -157,7 +157,7 @@
 - **影响**：**阻断 W-02/W-03**（presence / life_events / idle / ETA）。
 - **建议动作**：统一为单一显式 UTC 格式；**必须含存量归一化迁移**——仿 `moments__m06`：建临时表 → 回填转换历史行 → DROP 旧表 → `ALTER … RENAME`；不能只改 DEFAULT/写入路径而不迁存量。
 - **建议阶段**：W 系列前置（高）
-- **状态（2026-10-15）**：**已处理**（BF tip `24ba36c`）：`utils/time.ts#nowIso` / `toUtcIso`；DEFAULT → `strftime('%Y-%m-%dT%H:%M:%fZ','now')`；`ensureUtcIsoTimestamps` 仿 moments__m06 重建归一；characters 显式写 created_at
+- **状态（2026-10-15）**：**已处理**（BF tip `5f31a5a`）：`utils/time.ts#nowIso` / `toUtcIso`；DEFAULT → `strftime('%Y-%m-%dT%H:%M:%fZ','now')`；`ensureUtcIsoTimestamps` 仿 moments__m06 重建归一；characters 显式写 created_at
 
 ---
 
