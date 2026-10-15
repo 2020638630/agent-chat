@@ -148,7 +148,7 @@
 - **影响**：**阻断 W-01**（世界真实感最小闭环）。
 - **建议动作**：先补按 token 裁剪的注入器；改动须封在注入函数内部，满足记忆合同第 3/5 条「调用方不变」。
 - **建议阶段**：W 系列前置（高）；可与注入层改造同刀
-- **状态（2026-10-15）**：新立；二期新增 / 待排期
+- **状态（2026-10-15）**：**已处理**（BF tip `8d89f09`）：`services/promptInject.ts`（estimateTokens / packWithinTokenBudget / takeRecentWithinTokenBudget）；`appendMemoryBlock` 内按 `PROMPT_INJECT_TOKEN_BUDGET`（默认 512）裁剪，INJECT_MAX=8 第二闸；主聊天/读图 history 接 `PROMPT_HISTORY_TOKEN_BUDGET`（默认 3072）；调用方签名不变
 
 ### D-26 `created_at` 双格式混用 + 存量归一化迁移
 - **位置**：建表 DEFAULT `datetime('now')`（UTC、`YYYY-MM-DD HH:MM:SS`）vs JS 写入 `toISOString()`（`...T...Z`）；多表 `created_at`
