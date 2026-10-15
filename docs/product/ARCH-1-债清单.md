@@ -110,13 +110,15 @@
 - **计分行（2026-10-13 BF，含 D-02b）**：App.vue 累计 **2446 → 1527（−919 行）**（P0–P2→~1629；D-02b→1527）。D-02 仍部分收口；D-02b 已关。
 - **计分行（2026-10-13 BF 续）**：App.vue **2446 → 1527（D-02b）→ 1554（X05-D2+D5）→ … → 1655（X-02）→ 1683（M-05b +28，非 D-02 回涨）**。D2+D5 的 +27 主要为资料页 pending 丢弃**模板** + 薄胶水；`profilePendingMemories` 状态在 `useMemoryUi`，**未**在 App 新堆业务 ref。TTL=7d 已与产品参数对齐（见 `PARAMS-2026-10-14.md`）。
 ### D-03 `conversations` 路由承载业务编排
-- **位置**：pps/server/src/routes/conversations.ts（约 **1034** 行；原基线 864→1034，含生图/读图/TTS/记忆等接线增长）
+- **位置**：`apps/server/src/routes/conversations.ts`；编排 `apps/server/src/services/chatTurn.ts`
 - **类型**：后端架构 / 路由耦合
-- **现象**：同一文件含会话 CRUD、`handleUserMessage`（文本/语音）、生图分支、读图多模态、TTS 静态缓存、记忆 schedule、主动 `onPrivateUserMessage`、表情后处理。读图路径与文本路径 prompt/历史拼装重复。
+- **现象**：同一文件曾含会话 CRUD、`handleUserMessage`（文本/语音）、生图分支、读图多模态、TTS 静态缓存、记忆 schedule、主动 `onPrivateUserMessage`、表情后处理。读图路径与文本路径 prompt/历史拼装重复。
 - **影响**：改一条链路易伤多能力；ARCH-2 换模型时改动点集中却难隔离。
 - **建议动作**：路由只做校验与 I/O；编排下沉 `services/chatTurn.ts`（及 image/voice 子模块）。
 - **建议阶段**：ARCH-3（可与 ARCH-2 模型封装前后衔接）
 - **计分行（2026-10-14）**：conversations.ts 基线 **864→1034**。App.vue **1655→1683**（M-05b 配图闸门 UI +28，非 D-02 回涨）。
+- **状态（D-03-a 2026-10-15 BF）**：`handleUserMessage` 主体（prompt/历史/LLM/落库/记忆 schedule/主动钩子）+ X-04 群聊轮询 helper 下沉 `services/chatTurn.ts`；`conversations.ts` **1034→651**（读图 multipart / TTS / 会话 CRUD 仍留路由，待 D-03-b/c/d）；行为零变化；不引新依赖；不改 API。tip 48cc22d（见问题表 D-03-a）。
+
 ### D-04 主动 / 空间结算路径耦合不一致（C-05 / M-07 / C-06 / M-01） · **【已挪出 ARCH / 进功能池】**
 - **位置**：`services/proactive.ts`；`services/momentReactions.ts`；`routes/moments.ts`；`index.ts` 定时 tick
 - **类型**：业务耦合
