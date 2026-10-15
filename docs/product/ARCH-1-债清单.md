@@ -402,7 +402,7 @@
 ## 阶段顺序修订（2026-10-10 20:30 CST）
 
 下一顺序**补 Gemini 钥再跑试跑线 → ARCH-3 → UI-1**。
-试跑线 2026-10-10：DeepSeek 通 / 硅基 VLM 通 / Gemini TTS 不通（缺钥）；ARCH-2 真关单否（2/3）。N-02 不动；B-04d 仍暂缓。
+试跑线 2026-10-10：DeepSeek 通 / 硅基 VLM 通 / Gemini TTS 不通（缺钥）；ARCH-2 真关单否（2/3）。N-02 不动；B-04d 2026-10-15 云验已关。
 O-03 stash 已 drop → 已处理。ARCH-2 / ARCH-3 问题表改为「待处理」（ARCH-2：管道已交，关单待试跑线）。
 
 
@@ -415,7 +415,7 @@ O-03 stash 已 drop → 已处理。ARCH-2 / ARCH-3 问题表改为「待处理�
 | DeepSeek 文本 | **通** | 官方 `api.deepseek.com` + 进程环境 `DEEPSEEK_API_KEY`，模型 `deepseek-flash`，约 0.8s |
 | 官方/云 VLM 读图 | **通（硅基）** | 本机无 OpenAI/厂商官网 VLM Key；用硅基 `Qwen/Qwen3-VL-8B-Instruct` 读图验证管道（本地 7b 假多模态债可对照） |
 | Gemini TTS | **不通** | 未配置 `GEMINI_API_KEY` / `GOOGLE_API_KEY`；端点见 `.env.example` |
-| B-04d | **仍暂缓** | 坏 Key 上游返回 HTTP 401 `Token is invalid`；产品侧失败回流人话路径未在本刀改代码实打 |
+| B-04d | **已处理** | 2026-10-15 云侧坏 Key 实打过：人话错误、无上游 JSON；`.env` 已恢复（代码 tip 6263381；云验基 bff4424） |
 
 **ARCH-2 真关单：否（2/3）。** 管道债 D-01/D-09/D-13/D-05 仍保持已收；真关单阻塞项=补 `GEMINI_API_KEY` 后再跑通 Gemini TTS。N-02 不动。
 
