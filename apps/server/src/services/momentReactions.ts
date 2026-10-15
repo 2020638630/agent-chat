@@ -8,9 +8,47 @@ import { nowIso } from '../utils/time.js';
 const DELAY_MS = 45_000;
 const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
+/** Job kinds persisted in moment_reaction_due (D-15). */
+export const JOB_M07_SETTLE = 'm07_settle';
+export const JOB_M01_AUTHOR_REPLY = 'm01_author_reply';
+type DueKind = typeof JOB_M07_SETTLE | typeof JOB_M01_AUTHOR_REPLY;
+
 /** True if any M-07 delayed settlement is still waiting. */
 export function hasPendingMomentReactions(): boolean {
   return pendingTimers.size > 0;
+}
+
+function dueAtFromDelay(delayMs: number): string {
+  return new Date(Date.now() + Math.max(0, delayMs)).toISOString();
+}
+
+function upsertDue(kind: DueKind, momentId: string, dueAt: string, payload: string | null) {
+  db.prepare(
+    `INSERT INTO moment_reaction_due (kind, moment_id, due_at, payload, created_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(kind, moment_id) DO UPDATE SET
+       due_at = excluded.due_at,
+       payload = excluded.payload,
+       created_at = excluded.created_at`,
+  ).run(kind, momentId, dueAt, payload, nowIso());
+}
+
+function deleteDue(kind: DueKind, momentId: string) {
+  db.prepare(`DELETE FROM moment_reaction_due WHERE kind = ? AND moment_id = ?`).run(kind, momentId);
+}
+
+function armM07Timer(momentId: string, delayMs: number) {
+  const prev = pendingTimers.get(momentId);
+  if (prev) clearTimeout(prev);
+  const t = setTimeout(() => {
+    pendingTimers.delete(momentId);
+    deleteDue(JOB_M07_SETTLE, momentId);
+    void settleMomentReactions(momentId).catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[moment-react] settle error:', msg);
+    });
+  }, Math.max(0, delayMs));
+  pendingTimers.set(momentId, t);
 }
 
 
@@ -182,19 +220,12 @@ export async function settleMomentReactions(momentId: string): Promise<MomentRea
   return { likes, comment };
 }
 
-/** Schedule delayed settlement after user posts a moment. Fixed ~45s. */
+/** Schedule delayed settlement after user posts a moment. Fixed ~45s. Persists due_at (D-15). */
 export function scheduleMomentReactions(momentId: string) {
-  const prev = pendingTimers.get(momentId);
-  if (prev) clearTimeout(prev);
-  const t = setTimeout(() => {
-    pendingTimers.delete(momentId);
-    void settleMomentReactions(momentId).catch((e) => {
-      const msg = e instanceof Error ? e.message : String(e);
-      console.error('[moment-react] settle error:', msg);
-    });
-  }, DELAY_MS);
-  pendingTimers.set(momentId, t);
-  console.log(`[moment-react] scheduled moment=${momentId} in ${DELAY_MS}ms`);
+  const dueAt = dueAtFromDelay(DELAY_MS);
+  upsertDue(JOB_M07_SETTLE, momentId, dueAt, null);
+  armM07Timer(momentId, DELAY_MS);
+  console.log(`[moment-react] scheduled moment=${momentId} in ${DELAY_MS}ms due=${dueAt}`);
 }
 
 // ----- M-01: character author replies once to user comments on their moment -----
@@ -312,7 +343,7 @@ export async function settleAuthorReplyToUserComment(
   return { comment };
 }
 
-/** After user comments on a character moment: delay 5–15s, author replies once. Gated by proactive master switch. */
+/** After user comments on a character moment: delay 5–15s, author replies once. Gated by proactive master switch. Persists due_at (D-15). */
 export function scheduleAuthorReplyToUserComment(momentId: string, userComment: string) {
   if (authorReplyScheduled.has(momentId) || authorReplyTimers.has(momentId)) {
     console.log(`[moment-author-reply] skip schedule (once) moment=${momentId}`);
@@ -340,14 +371,92 @@ export function scheduleAuthorReplyToUserComment(momentId: string, userComment: 
 
   authorReplyScheduled.add(momentId);
   const commentSnapshot = String(userComment || '').slice(0, 200);
+  const dueAt = dueAtFromDelay(delay);
+  upsertDue(
+    JOB_M01_AUTHOR_REPLY,
+    momentId,
+    dueAt,
+    JSON.stringify({ userComment: commentSnapshot }),
+  );
+  armM01Timer(momentId, delay, commentSnapshot);
+  console.log(`[moment-author-reply] scheduled moment=${momentId} in ${delay}ms due=${dueAt}`);
+}
+
+function armM01Timer(momentId: string, delayMs: number, commentSnapshot: string) {
+  const prev = authorReplyTimers.get(momentId);
+  if (prev) clearTimeout(prev);
   const t = setTimeout(() => {
     authorReplyTimers.delete(momentId);
+    deleteDue(JOB_M01_AUTHOR_REPLY, momentId);
     void settleAuthorReplyToUserComment(momentId, commentSnapshot).catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
       console.error('[moment-author-reply] settle error:', msg);
     });
-  }, delay);
+  }, Math.max(0, delayMs));
   authorReplyTimers.set(momentId, t);
-  console.log(`[moment-author-reply] scheduled moment=${momentId} in ${delay}ms`);
 }
 
+type DueRow = {
+  kind: string;
+  moment_id: string;
+  due_at: string;
+  payload: string | null;
+};
+
+/**
+ * On process start: reload unfinished M-07 / M-01 jobs from SQLite and re-arm timers.
+ * Overdue jobs run immediately (delay 0). Drops rows whose moment no longer exists.
+ */
+export function recoverMomentReactionJobs(): void {
+  let rows: DueRow[] = [];
+  try {
+    rows = db
+      .prepare(`SELECT kind, moment_id, due_at, payload FROM moment_reaction_due`)
+      .all() as DueRow[];
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error('[moment-react] recover read fail:', msg);
+    return;
+  }
+
+  const now = Date.now();
+  let armed = 0;
+  for (const row of rows) {
+    const momentExists = db
+      .prepare(`SELECT 1 AS ok FROM moments WHERE id = ?`)
+      .get(row.moment_id) as { ok: number } | undefined;
+    if (!momentExists) {
+      deleteDue(row.kind as DueKind, row.moment_id);
+      continue;
+    }
+
+    const dueMs = new Date(row.due_at).getTime();
+    const delay = Number.isFinite(dueMs) ? Math.max(0, dueMs - now) : 0;
+
+    if (row.kind === JOB_M07_SETTLE) {
+      armM07Timer(row.moment_id, delay);
+      armed += 1;
+      console.log(`[moment-react] recovered moment=${row.moment_id} in ${delay}ms`);
+      continue;
+    }
+
+    if (row.kind === JOB_M01_AUTHOR_REPLY) {
+      let commentSnapshot = '';
+      try {
+        const parsed = row.payload ? (JSON.parse(row.payload) as { userComment?: string }) : {};
+        commentSnapshot = String(parsed.userComment || '').slice(0, 200);
+      } catch {
+        commentSnapshot = '';
+      }
+      authorReplyScheduled.add(row.moment_id);
+      armM01Timer(row.moment_id, delay, commentSnapshot);
+      armed += 1;
+      console.log(`[moment-author-reply] recovered moment=${row.moment_id} in ${delay}ms`);
+      continue;
+    }
+
+    deleteDue(row.kind as DueKind, row.moment_id);
+  }
+
+  console.log(`[moment-react] recover done jobs=${rows.length} armed=${armed}`);
+}

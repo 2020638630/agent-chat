@@ -16,6 +16,7 @@ import { momentRoutes } from './routes/moments.js';
 import { profileRoutes } from './routes/profile.js';
 import { proactiveRoutes } from './routes/proactive.js';
 import { runProactiveTick } from './services/proactive.js';
+import { recoverMomentReactionJobs } from './services/momentReactions.js';
 import { getUploadsDir } from './db/index.js';
 import { env, envInt } from './config/env.js';
 
@@ -62,6 +63,13 @@ await app.register(proactiveRoutes);
 try {
   await app.listen({ port, host });
   console.log(`[agent-chat] server http://${host}:${port}`);
+
+  // D-15: re-arm unfinished space settle / author-reply timers from SQLite
+  try {
+    recoverMomentReactionJobs();
+  } catch (err) {
+    app.log.error(err, 'moment reaction recover');
+  }
 
   const proactiveMs = envInt('PROACTIVE_INTERVAL_MS', 60_000);
   if (Number.isFinite(proactiveMs) && proactiveMs >= 5_000) {

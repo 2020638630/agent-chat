@@ -462,6 +462,7 @@ export function ensureUtcIsoTimestamps(db: Database.Database) {
     { name: 'proactive_state', cols: ['last_user_at', 'last_proactive_at', 'updated_at'] },
     { name: 'memories', cols: ['created_at', 'updated_at'] },
     { name: 'memory_notices', cols: ['created_at', 'read_at'] },
+    { name: 'moment_reaction_due', cols: ['due_at', 'created_at'] },
   ];
 
   const needsRebuild = rebuildTargets.some(
@@ -557,6 +558,24 @@ export function ensureUtcIsoTimestamps(db: Database.Database) {
   });
   run();
   db.pragma('foreign_keys = ON');
+}
+
+
+export function ensureMomentReactionDueTable(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS moment_reaction_due (
+      kind TEXT NOT NULL,
+      moment_id TEXT NOT NULL,
+      due_at TEXT NOT NULL,
+      payload TEXT,
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      PRIMARY KEY (kind, moment_id),
+      FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
+    );
+  `);
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_moment_reaction_due_at ON moment_reaction_due(due_at);`,
+  );
 }
 
 export function migrate(db: Database.Database) {
@@ -658,5 +677,6 @@ export function migrate(db: Database.Database) {
   ensureMemoryNoticesTable(db);
   ensureMessageReactionsTable(db);
   mergeDuplicatePrivateConversations(db);
+  ensureMomentReactionDueTable(db);
   ensureUtcIsoTimestamps(db);
 }
