@@ -257,6 +257,7 @@
 - **建议动作**：轻量表记录 due_at + 启动时回收；或接受并文档化。
 - **建议阶段**：ARCH-3
 - **补注（2026-10-15）**：W-03/W-04 跨重启依赖此债先收（不新造「内存定时器」D-xx；建议阶段仍 ARCH-3）。
+- **状态（2026-10-15）**：**已处理**（BF tip `c41441e`）：表 `moment_reaction_due`（kind/moment_id/due_at/payload）；`schedule*` 写库+设 timer；启动 `recoverMomentReactionJobs` 过期立即跑、未到点重设；完成/取消清行。proactive 采样/日 cap/静默语义未改。
 
 ### D-16 `better-sqlite3` 声明与 lock/allowScripts 版本表述不一
 - **位置**：根 `package.json` `allowScripts.better-sqlite3@12.11.1`；`apps/server/package.json` `^12.10.0`；lock 解析为 12.11.1
