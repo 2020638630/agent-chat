@@ -12,6 +12,11 @@ import { shouldAssistantUseVoice } from '../utils/voiceRequest.js';
 import { chatCompletion } from '../services/llm.js';
 import { wantsImageGeneration, buildImagePrompt, generateChatImage, formatImageGenUserError } from '../services/imageGen.js';
 import { appendMemoryBlock, memoryStickyReminder, resolvePendingMemoryConfirm, scheduleMemoryExtractAfterTurn } from '../services/memory.js';
+import {
+  historyMessageCap,
+  historyTokenBudget,
+  takeRecentWithinTokenBudget,
+} from './promptInject.js';
 import { onPrivateUserMessage } from '../services/proactive.js';
 import { nowIso } from '../utils/time.js';
 
@@ -274,16 +279,18 @@ export async function handleUserMessage(
   }
   }
 
-  const history = (
+  const historyRaw = (
     db
       .prepare(
         `SELECT role, character_id, content FROM messages
        WHERE conversation_id = ?
        ORDER BY created_at DESC, rowid DESC
-       LIMIT 40`
+       LIMIT ?`
       )
-      .all(conversationId) as MessageRow[]
+      .all(conversationId, historyMessageCap()) as MessageRow[]
   ).reverse();
+  // D-25: count cap (default 40) + token budget (default 3072); under budget → identical window
+  const history = takeRecentWithinTokenBudget(historyRaw, historyTokenBudget());
 
   const nameById = new Map(members.map((m) => [m.id, m.name] as const));
   const otherNames = members.filter((m) => m.id !== character.id).map((m) => m.name);

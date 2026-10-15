@@ -10,6 +10,10 @@ import { buildSystemPrompt } from '../utils/characterCard.js';
 import { emojiConstraintForPrompt, hasEmojiToken, sanitizeAssistantEmoji, EMOJI_WHITELIST_SET } from '../constants/emojiWhitelist.js';
 import { chatCompletion, resolveVisionModel } from '../services/llm.js';
 import { appendMemoryBlock, memoryStickyReminder, scheduleMemoryExtractAfterTurn } from '../services/memory.js';
+import {
+  historyTokenBudget,
+  takeRecentWithinTokenBudget,
+} from '../services/promptInject.js';
 import { onPrivateUserMessage } from '../services/proactive.js';
 import {
   isTtsCacheFileForMessage,
@@ -509,7 +513,7 @@ export async function conversationRoutes(app: FastifyInstance) {
     };
     const llmMessages: LlmMsg[] = [{ role: 'system', content: system }];
 
-    const history = (
+    const historyRaw = (
       db
         .prepare(
           `SELECT role, content, image_path FROM messages
@@ -519,6 +523,8 @@ export async function conversationRoutes(app: FastifyInstance) {
         )
         .all(conversationId) as Array<{ role: string; content: string; image_path: string | null }>
     ).reverse();
+    // D-25: vision keeps count cap 24; token budget trims only when over
+    const history = takeRecentWithinTokenBudget(historyRaw, historyTokenBudget());
 
     function isNoticeBubble(text: string): boolean {
       return (

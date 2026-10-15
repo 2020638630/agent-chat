@@ -4,6 +4,12 @@ import { chatCompletion } from './llm.js';
 import { gateExtractOps } from './memoryGate.js';
 import { env, envInt } from '../config/env.js';
 import { nowIso } from '../utils/time.js';
+import {
+  estimateTokens,
+  injectTokenBudget,
+  packWithinTokenBudget,
+  type InjectItem,
+} from './promptInject.js';
 
 export type MemoryType = 'fact' | 'preference' | 'promise' | 'habit';
 export type MemoryStatus = 'active' | 'pending' | 'superseded' | 'user_hidden';
@@ -174,28 +180,55 @@ export function listMemoriesForApi(characterId: string, status: MemoryStatus | '
     .all(characterId, status) as MemoryRow[];
 }
 
-/** Append memory block for private-chat system prompts. No-op when empty. */
 export function appendMemoryBlock(system: string, characterId: string): string {
+  // Fetch a wider pool; token budget + INJECT_MAX gate what actually enters the prompt.
   const rows = listActiveMemories(characterId, {
     minConfidence: INJECT_MIN_CONF,
-    limit: INJECT_MAX,
+    limit: MAX_ACTIVE,
   });
   if (!rows.length) return system;
-  const lines = rows.map((r) => {
-    let text = r.content;
-    if (r.type === 'preference') text = normalizeDrinkContent(text);
-    if (looksLikeAddressPreference(text)) {
-      const m = text.match(/被叫([^，。；\s]+)|叫我([^，。；\s]+)|称呼我为([^，。；\s]+)|称呼我([^，。；\s]+)/);
-      const name = (m && (m[1] || m[2] || m[3] || m[4])) || '';
-      if (name && !/公子|深/.test(name)) {
-        text = `对用户的称呼是「${name}」`;
-      }
-    }
-    return `- (${r.type}) ${text}`;
-  });
+
   const honor =
     '下面这些是你已经记住的事，当作背景，不要每轮念一遍。用户这轮明确问到其中一件（喝什么、怎么称呼、记不记得某约定、记忆里有什么）时，先用一句短讯答那一件，再写其他。用户提到口渴、想喝、要水时：用记忆里的饮品（如温水）自然回应，不要另编山泉、茶等顶替。若用户只发短讯、数字、表情，或说走／好／嗯等未点名记忆的话：禁止提起称呼或饮品清单，禁止用「唤君××。饮温水。风动竹摇。」排比起句，可写风景或简短回应。称呼可以在句子里自然带过（如「小林」），但不要为了证明自己记得而单列饮品或约定。被问「叫我什么」时必须答记忆里的称呼，禁止说未记／不知／你自己定，也不要用公子顶替。不要用日头、竹影代替被问到的那一件。';
-  return `${system}\n\n【你记得的事】\n${honor}\n${lines.join('\n')}`;
+
+  const items: InjectItem[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    let body = r.content;
+    if (r.type === 'preference') body = normalizeDrinkContent(body);
+    if (looksLikeAddressPreference(body)) {
+      const m = body.match(/被叫([^，。；\s]+)|叫我([^，。；\s]+)|称呼我为([^，。；\s]+)|称呼我([^，。；\s]+)/);
+      const name = (m && (m[1] || m[2] || m[3] || m[4])) || '';
+      if (name && !/公子|深/.test(name)) {
+        body = `对用户的称呼是「${name}」`;
+      }
+    }
+    const typePri =
+      r.type === 'promise'
+        ? 0
+        : r.type === 'preference'
+          ? 1
+          : r.type === 'fact'
+            ? 2
+            : r.type === 'habit'
+              ? 3
+              : 9;
+    // Preserve SQL order within the same type via `i`.
+    items.push({
+      kind: 'memory',
+      priority: typePri * 1000 + i,
+      text: `- (${r.type}) ${body}`,
+      id: r.id,
+    });
+  }
+
+  const header = '【你记得的事】';
+  const overhead = estimateTokens(`${header}\n${honor}\n`);
+  const lineBudget = Math.max(0, injectTokenBudget() - overhead);
+  let packed = packWithinTokenBudget(items, lineBudget);
+  if (packed.length > INJECT_MAX) packed = packed.slice(0, INJECT_MAX);
+  if (!packed.length) return system;
+  return `${system}\n\n${header}\n${honor}\n${packed.map((p) => p.text).join('\n')}`;
 }
 
 
