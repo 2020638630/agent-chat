@@ -24,6 +24,7 @@ import { readImageFromRequest, saveImageBuffer, unlinkUploadPublicPath } from '.
 import { handleUserMessage } from '../services/chatTurn.js';
 import fs from 'node:fs';
 import path from 'node:path';
+import { nowIso } from '../utils/time.js';
 
 type CharacterRow = {
   id: string;
@@ -95,7 +96,7 @@ function markConversationRead(conversationId: string) {
        LIMIT 1`
     )
     .get(conversationId) as { created_at: string } | undefined;
-  const at = last?.created_at || new Date().toISOString();
+  const at = last?.created_at || nowIso();
   db.prepare(`UPDATE conversations SET last_read_at = ? WHERE id = ?`).run(at, conversationId);
 }
 
@@ -222,7 +223,7 @@ export async function conversationRoutes(app: FastifyInstance) {
     }
 
     const id = uuid();
-    const now = new Date().toISOString();
+    const now = nowIso();
     db.prepare(
       `INSERT INTO conversations (id, title, type, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
     ).run(id, title, type, now, now);
@@ -258,7 +259,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: '仅群聊可改名' });
     }
 
-    const now = new Date().toISOString();
+    const now = nowIso();
     db.prepare(`UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?`).run(
       title,
       now,
@@ -322,7 +323,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       deleteMediaForMessages([req.params.messageId]);
       db.prepare(`DELETE FROM messages WHERE id = ?`).run(req.params.messageId);
       db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(
-        new Date().toISOString(),
+        nowIso(),
         req.params.id
       );
       return { ok: true };
@@ -359,7 +360,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       } else {
         db.prepare(
           `INSERT INTO message_reactions (message_id, emoji, user_key, created_at) VALUES (?, ?, 'me', ?)`
-        ).run(req.params.messageId, emoji, new Date().toISOString());
+        ).run(req.params.messageId, emoji, nowIso());
       }
 
       const reactions = reactionsForMessages([req.params.messageId]).get(req.params.messageId) ?? [];
@@ -380,7 +381,7 @@ export async function conversationRoutes(app: FastifyInstance) {
     deleteMediaForMessages(msgIds);
     db.prepare(`DELETE FROM messages WHERE conversation_id = ?`).run(req.params.id);
     db.prepare(`UPDATE conversations SET updated_at = ? WHERE id = ?`).run(
-      new Date().toISOString(),
+      nowIso(),
       req.params.id
     );
     return { ok: true };
@@ -466,7 +467,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       return reply.code(status >= 400 && status < 600 ? status : 500).send({ error: msg });
     }
 
-    const now = new Date().toISOString();
+    const now = nowIso();
     const userMsgId = uuid();
     db.prepare(
       `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at, source, image_path)
@@ -594,7 +595,7 @@ export async function conversationRoutes(app: FastifyInstance) {
     replyText = sanitizeAssistantEmoji(replyText, { recentAssistantHadEmoji });
 
     const aid = uuid();
-    const at = new Date().toISOString();
+    const at = nowIso();
     db.prepare(
       `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at, source)
        VALUES (?, ?, 'assistant', ?, ?, ?, ?)`

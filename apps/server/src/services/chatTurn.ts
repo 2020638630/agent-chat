@@ -13,6 +13,7 @@ import { chatCompletion } from '../services/llm.js';
 import { wantsImageGeneration, buildImagePrompt, generateChatImage, formatImageGenUserError } from '../services/imageGen.js';
 import { appendMemoryBlock, memoryStickyReminder, resolvePendingMemoryConfirm, scheduleMemoryExtractAfterTurn } from '../services/memory.js';
 import { onPrivateUserMessage } from '../services/proactive.js';
+import { nowIso } from '../utils/time.js';
 
 type CharacterRow = {
   id: string;
@@ -141,7 +142,7 @@ function markConversationRead(conversationId: string) {
        LIMIT 1`
     )
     .get(conversationId) as { created_at: string } | undefined;
-  const at = last?.created_at || new Date().toISOString();
+  const at = last?.created_at || nowIso();
   db.prepare(`UPDATE conversations SET last_read_at = ? WHERE id = ?`).run(at, conversationId);
 }
 
@@ -189,7 +190,7 @@ export async function handleUserMessage(
     }
   }
 
-  const now = new Date().toISOString();
+  const now = nowIso();
   const userMsgId = uuid();
   db.prepare(
     `INSERT INTO messages (id, conversation_id, role, character_id, content, created_at, source)
@@ -232,7 +233,7 @@ export async function handleUserMessage(
   // B-04B: private chat explicit image request -> one generated image bubble
   if (conv.type === 'private' && character?.id && source === 'text' && wantsImageGeneration(trimmed)) {
     const aid = uuid();
-    const at = new Date().toISOString();
+    const at = nowIso();
     let replyText = '';
     let imagePath: string | null = null;
     const prompt = buildImagePrompt(trimmed, character.name);
@@ -375,7 +376,7 @@ export async function handleUserMessage(
   }
 
   const aid = uuid();
-  const at = new Date().toISOString();
+  const at = nowIso();
   // B-07: voice bubble when user spoke, or text asks to sing/speak aloud
   const llmFailed =
     replyText.includes('LLM 暂时不可用') || replyText.startsWith('（LLM');

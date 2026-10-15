@@ -7,6 +7,7 @@ import { scheduleMomentReactions, scheduleAuthorReplyToUserComment } from '../se
 import { saveImageBuffer, unlinkUploadPublicPath } from '../services/uploadImage.js';
 import { generateChatImage } from '../services/imageGen.js';
 import { getProactiveSettings } from '../services/proactive.js';
+import { nowIso } from '../utils/time.js';
 
 const MOMENT_SELECT = `
   SELECT m.*,
@@ -166,7 +167,7 @@ export async function momentRoutes(app: FastifyInstance) {
     }
 
     const id = uuid();
-    const created_at = new Date().toISOString();
+    const created_at = nowIso();
     db.prepare(
       `INSERT INTO moments (id, character_id, author_kind, content, image_path, created_at)
        VALUES (?, NULL, 'user', ?, ?, ?)`
@@ -232,7 +233,7 @@ export async function momentRoutes(app: FastifyInstance) {
     }
 
     const id = uuid();
-    const created_at = new Date().toISOString();
+    const created_at = nowIso();
     db.prepare(
       `INSERT INTO moments (id, character_id, author_kind, content, image_path, created_at)
        VALUES (?, ?, 'character', ?, ?, ?)`
@@ -275,7 +276,7 @@ export async function momentRoutes(app: FastifyInstance) {
     } else {
       db.prepare(
         `INSERT INTO moment_likes (moment_id, user_key, created_at) VALUES (?, 'me', ?)`
-      ).run(req.params.id, new Date().toISOString());
+      ).run(req.params.id, nowIso());
     }
 
     return { moment: enrichMoment(getMomentRow(req.params.id)) };
@@ -290,7 +291,7 @@ export async function momentRoutes(app: FastifyInstance) {
     if (!content) return reply.code(400).send({ error: '评论不能为空' });
 
     const id = uuid();
-    const created_at = new Date().toISOString();
+    const created_at = nowIso();
     db.prepare(
       `INSERT INTO moment_comments (id, moment_id, author, content, created_at)
        VALUES (?, ?, '我', ?, ?)`

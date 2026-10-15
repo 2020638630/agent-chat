@@ -3,6 +3,7 @@
  * Called once from db/index.ts on process start.
  */
 import type Database from 'better-sqlite3';
+import { isUtcIsoZ, nowIso, toUtcIso } from '../utils/time.js';
 
 
 
@@ -41,7 +42,7 @@ export function ensureMomentAuthorColumns(db: Database.Database) {
       author_kind TEXT NOT NULL DEFAULT 'character',
       content TEXT NOT NULL,
       image_path TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
     );
   `);
@@ -94,7 +95,7 @@ export function ensureCharacterRefImagesTable(db: Database.Database) {
       character_id TEXT NOT NULL,
       path TEXT NOT NULL,
       sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
     );
     CREATE INDEX IF NOT EXISTS idx_char_ref_images_char
@@ -178,7 +179,7 @@ export function ensureMessageReactionsTable(db: Database.Database) {
       message_id TEXT NOT NULL,
       emoji TEXT NOT NULL,
       user_key TEXT NOT NULL DEFAULT 'me',
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
       PRIMARY KEY (message_id, emoji, user_key),
       FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
     );
@@ -297,6 +298,267 @@ export function ensureMemoriesTable(db: Database.Database) {
   `);
 }
 
+
+/** SQLite DEFAULT that matches JS `toISOString()` (UTC, millis, Z). */
+const UTC_ISO_DEFAULT_SQL = `(strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))`;
+
+function tableSqlHasDatetimeNow(db: Database.Database, table: string): boolean {
+  const row = db.prepare(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`).get(table) as
+    | { sql: string | null }
+    | undefined;
+  return Boolean(row?.sql && row.sql.includes("datetime('now')"));
+}
+
+function columnHasNonIso(db: Database.Database, table: string, column: string): boolean {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === column)) return false;
+  const rows = db.prepare(`SELECT ${column} AS v FROM ${table} WHERE ${column} IS NOT NULL`).all() as Array<{
+    v: string;
+  }>;
+  return rows.some((r) => !isUtcIsoZ(r.v));
+}
+
+/**
+ * D-26: normalize all timestamp columns to UTC ISO and rebuild tables still on
+ * DEFAULT datetime('now') (moments__m06 style: temp table → backfill → DROP → RENAME).
+ */
+export function ensureUtcIsoTimestamps(db: Database.Database) {
+  const rebuildTargets: Array<{
+    name: string;
+    createSql: string;
+    copySql: string;
+    tsCols: string[];
+  }> = [
+    {
+      name: 'characters',
+      tsCols: ['created_at'],
+      createSql: `
+    CREATE TABLE characters__d26 (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      personality TEXT DEFAULT '',
+      scenario TEXT DEFAULT '',
+      first_mes TEXT DEFAULT '',
+      mes_example TEXT DEFAULT '',
+      system_prompt TEXT DEFAULT '',
+      post_history_instructions TEXT DEFAULT '',
+      avatar_path TEXT,
+      raw_json TEXT,
+      created_at TEXT NOT NULL DEFAULT ${UTC_ISO_DEFAULT_SQL},
+      bg_path TEXT,
+      initiative_tier TEXT NOT NULL DEFAULT 'calm'
+    );`,
+      copySql: `SELECT id, name, description, personality, scenario, first_mes, mes_example,
+        system_prompt, post_history_instructions, avatar_path, raw_json, created_at,
+        bg_path, COALESCE(initiative_tier, 'calm') FROM characters`,
+    },
+    {
+      name: 'conversations',
+      tsCols: ['created_at', 'updated_at', 'last_read_at'],
+      createSql: `
+    CREATE TABLE conversations__d26 (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'private',
+      created_at TEXT NOT NULL DEFAULT ${UTC_ISO_DEFAULT_SQL},
+      updated_at TEXT NOT NULL DEFAULT ${UTC_ISO_DEFAULT_SQL},
+      last_read_at TEXT
+    );`,
+      copySql: `SELECT id, title, type, created_at, updated_at, last_read_at FROM conversations`,
+    },
+    {
+      name: 'messages',
+      tsCols: ['created_at'],
+      createSql: `
+    CREATE TABLE messages__d26 (
+      id TEXT PRIMARY KEY,
+      conversation_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      character_id TEXT,
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT ${UTC_ISO_DEFAULT_SQL},
+      source TEXT NOT NULL DEFAULT 'text',
+      image_path TEXT,
+      FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+    );`,
+      copySql: `SELECT id, conversation_id, role, character_id, content, created_at,
+        COALESCE(source, 'text'), image_path FROM messages`,
+    },
+    {
+      name: 'moments',
+      tsCols: ['created_at'],
+      createSql: `
+    CREATE TABLE moments__d26 (
+      id TEXT PRIMARY KEY,
+      character_id TEXT,
+      author_kind TEXT NOT NULL DEFAULT 'character',
+      content TEXT NOT NULL,
+      image_path TEXT,
+      created_at TEXT NOT NULL DEFAULT ${UTC_ISO_DEFAULT_SQL},
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+    );`,
+      copySql: `SELECT id, character_id, COALESCE(author_kind, 'character'), content, image_path, created_at FROM moments`,
+    },
+    {
+      name: 'moment_likes',
+      tsCols: ['created_at'],
+      createSql: `
+    CREATE TABLE moment_likes__d26 (
+      moment_id TEXT NOT NULL,
+      user_key TEXT NOT NULL DEFAULT 'me',
+      created_at TEXT NOT NULL DEFAULT ${UTC_ISO_DEFAULT_SQL},
+      PRIMARY KEY (moment_id, user_key),
+      FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
+    );`,
+      copySql: `SELECT moment_id, user_key, created_at FROM moment_likes`,
+    },
+    {
+      name: 'moment_comments',
+      tsCols: ['created_at'],
+      createSql: `
+    CREATE TABLE moment_comments__d26 (
+      id TEXT PRIMARY KEY,
+      moment_id TEXT NOT NULL,
+      author TEXT NOT NULL DEFAULT '我',
+      content TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT ${UTC_ISO_DEFAULT_SQL},
+      FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
+    );`,
+      copySql: `SELECT id, moment_id, author, content, created_at FROM moment_comments`,
+    },
+    {
+      name: 'message_reactions',
+      tsCols: ['created_at'],
+      createSql: `
+    CREATE TABLE message_reactions__d26 (
+      message_id TEXT NOT NULL,
+      emoji TEXT NOT NULL,
+      user_key TEXT NOT NULL DEFAULT 'me',
+      created_at TEXT NOT NULL DEFAULT ${UTC_ISO_DEFAULT_SQL},
+      PRIMARY KEY (message_id, emoji, user_key),
+      FOREIGN KEY (message_id) REFERENCES messages(id) ON DELETE CASCADE
+    );`,
+      copySql: `SELECT message_id, emoji, user_key, created_at FROM message_reactions`,
+    },
+    {
+      name: 'character_ref_images',
+      tsCols: ['created_at'],
+      createSql: `
+    CREATE TABLE character_ref_images__d26 (
+      id TEXT PRIMARY KEY,
+      character_id TEXT NOT NULL,
+      path TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT ${UTC_ISO_DEFAULT_SQL},
+      FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
+    );`,
+      copySql: `SELECT id, character_id, path, sort_order, created_at FROM character_ref_images`,
+    },
+  ];
+
+  const inPlaceTables: Array<{ name: string; cols: string[] }> = [
+    { name: 'user_profile', cols: ['updated_at'] },
+    { name: 'proactive_state', cols: ['last_user_at', 'last_proactive_at', 'updated_at'] },
+    { name: 'memories', cols: ['created_at', 'updated_at'] },
+    { name: 'memory_notices', cols: ['created_at', 'read_at'] },
+  ];
+
+  const needsRebuild = rebuildTargets.some(
+    (t) =>
+      tableSqlHasDatetimeNow(db, t.name) ||
+      t.tsCols.some((c) => columnHasNonIso(db, t.name, c)),
+  );
+  const needsInPlace = inPlaceTables.some((t) => t.cols.some((c) => columnHasNonIso(db, t.name, c)));
+  if (!needsRebuild && !needsInPlace) return;
+
+  db.pragma('foreign_keys = OFF');
+  const run = db.transaction(() => {
+    for (const t of rebuildTargets) {
+      const exists = db
+        .prepare(`SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?`)
+        .get(t.name) as { ok: number } | undefined;
+      if (!exists) continue;
+      const must =
+        tableSqlHasDatetimeNow(db, t.name) || t.tsCols.some((c) => columnHasNonIso(db, t.name, c));
+      if (!must) continue;
+
+      db.exec(`DROP TABLE IF EXISTS ${t.name}__d26`);
+      db.exec(t.createSql);
+
+      const newCols = (
+        db.prepare(`PRAGMA table_info(${t.name}__d26)`).all() as Array<{ name: string }>
+      ).map((c) => c.name);
+      const placeholders = newCols.map(() => '?').join(', ');
+      const insert = db.prepare(
+        `INSERT INTO ${t.name}__d26 (${newCols.join(', ')}) VALUES (${placeholders})`,
+      );
+      const selectCols = newCols.join(', ');
+      const rows = db.prepare(`SELECT ${selectCols} FROM ${t.name}`).all() as Array<
+        Record<string, unknown>
+      >;
+      const tsSet = new Set(t.tsCols);
+      for (const row of rows) {
+        const vals = newCols.map((col) => {
+          let v = row[col];
+          if (col === 'initiative_tier' && (v == null || v === '')) v = 'calm';
+          if (col === 'source' && (v == null || v === '')) v = 'text';
+          if (col === 'author_kind' && (v == null || v === '')) v = 'character';
+          if (!tsSet.has(col)) return v;
+          if (v == null || v === '') {
+            if (col === 'last_read_at' || col === 'read_at') return null;
+            return toUtcIso(null);
+          }
+          return toUtcIso(String(v));
+        });
+        insert.run(...vals);
+      }
+
+      db.exec(`DROP TABLE ${t.name}`);
+      db.exec(`ALTER TABLE ${t.name}__d26 RENAME TO ${t.name}`);
+    }
+
+    for (const t of inPlaceTables) {
+      const exists = db
+        .prepare(`SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = ?`)
+        .get(t.name) as { ok: number } | undefined;
+      if (!exists) continue;
+      for (const col of t.cols) {
+        const cols = db.prepare(`PRAGMA table_info(${t.name})`).all() as Array<{ name: string }>;
+        if (!cols.some((c) => c.name === col)) continue;
+        const rows = db.prepare(`SELECT rowid AS rid, ${col} AS v FROM ${t.name} WHERE ${col} IS NOT NULL`).all() as Array<{
+          rid: number;
+          v: string;
+        }>;
+        const upd = db.prepare(`UPDATE ${t.name} SET ${col} = ? WHERE rowid = ?`);
+        for (const r of rows) {
+          if (isUtcIsoZ(r.v)) {
+            // still canonicalize millis via Date
+            const canon = toUtcIso(r.v);
+            if (canon !== r.v) upd.run(canon, r.rid);
+            continue;
+          }
+          upd.run(toUtcIso(r.v), r.rid);
+        }
+      }
+    }
+
+    // recreate indexes dropped with tables
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_char_ref_images_char
+        ON character_ref_images(character_id, sort_order, created_at);
+      CREATE INDEX IF NOT EXISTS idx_memories_character_status
+        ON memories(character_id, status);
+      CREATE INDEX IF NOT EXISTS idx_memory_notices_unread
+        ON memory_notices(character_id, read_at, created_at);
+      CREATE INDEX IF NOT EXISTS idx_memory_notices_conv
+        ON memory_notices(conversation_id, read_at);
+    `);
+  });
+  run();
+  db.pragma('foreign_keys = ON');
+}
+
 export function migrate(db: Database.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS characters (
@@ -311,15 +573,15 @@ export function migrate(db: Database.Database) {
       post_history_instructions TEXT DEFAULT '',
       avatar_path TEXT,
       raw_json TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS conversations (
       id TEXT PRIMARY KEY,
       title TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'private',
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
     );
 
     CREATE TABLE IF NOT EXISTS conversation_members (
@@ -336,7 +598,7 @@ export function migrate(db: Database.Database) {
       role TEXT NOT NULL,
       character_id TEXT,
       content TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
       FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     );
 
@@ -344,14 +606,14 @@ export function migrate(db: Database.Database) {
       id TEXT PRIMARY KEY,
       character_id TEXT NOT NULL,
       content TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
       FOREIGN KEY (character_id) REFERENCES characters(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS moment_likes (
       moment_id TEXT NOT NULL,
       user_key TEXT NOT NULL DEFAULT 'me',
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
       PRIMARY KEY (moment_id, user_key),
       FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
     );
@@ -361,7 +623,7 @@ export function migrate(db: Database.Database) {
       moment_id TEXT NOT NULL,
       author TEXT NOT NULL DEFAULT '我',
       content TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
       FOREIGN KEY (moment_id) REFERENCES moments(id) ON DELETE CASCADE
     );
 
@@ -381,7 +643,7 @@ export function migrate(db: Database.Database) {
     db.prepare(
       `INSERT INTO user_profile (id, name, mood, bio, avatar_path, updated_at)
        VALUES ('me', '旅人', '', '', NULL, ?)`
-    ).run(new Date().toISOString());
+    ).run(nowIso());
   }
 
   ensureConversationReadColumns(db);
@@ -396,4 +658,5 @@ export function migrate(db: Database.Database) {
   ensureMemoryNoticesTable(db);
   ensureMessageReactionsTable(db);
   mergeDuplicatePrivateConversations(db);
+  ensureUtcIsoTimestamps(db);
 }

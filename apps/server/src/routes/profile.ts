@@ -11,6 +11,7 @@ import {
   unlinkUploadPublicPath,
   saveCharacterRefImage,
 } from '../services/uploadImage.js';
+import { nowIso } from '../utils/time.js';
 
 type UserProfileRow = {
   id: string;
@@ -67,7 +68,7 @@ function ensureMeProfile(): UserProfileRow {
     | UserProfileRow
     | undefined;
   if (!row) {
-    const updated_at = new Date().toISOString();
+    const updated_at = nowIso();
     db.prepare(
       `INSERT INTO user_profile (id, name, mood, bio, avatar_path, updated_at)
        VALUES ('me', '旅人', '', '', NULL, ?)`
@@ -233,7 +234,7 @@ export async function profileRoutes(app: FastifyInstance) {
       body.space_bg_opacity !== undefined
         ? normalizeOpacity(body.space_bg_opacity, 0.5)
         : normalizeOpacity(current.space_bg_opacity, 0.5);
-    const updated_at = new Date().toISOString();
+    const updated_at = nowIso();
     db.prepare(
       `UPDATE user_profile SET name = ?, mood = ?, bio = ?, theme = ?, bg_opacity = ?, space_bg_opacity = ?, updated_at = ? WHERE id = 'me'`
     ).run(name, mood, bio, theme, bg_opacity, space_bg_opacity, updated_at);
@@ -260,7 +261,7 @@ export async function profileRoutes(app: FastifyInstance) {
       unlinkUploadPublicPath(me.avatar_path);
       db.prepare(
         `UPDATE user_profile SET avatar_path = ?, updated_at = ? WHERE id = 'me'`
-      ).run(saved.publicPath, new Date().toISOString());
+      ).run(saved.publicPath, nowIso());
       return { profile: userProfileDto(ensureMeProfile()) };
     } catch (e) {
       return httpError(e, reply);
@@ -272,7 +273,7 @@ export async function profileRoutes(app: FastifyInstance) {
     unlinkUploadPublicPath(me.avatar_path);
     db.prepare(
       `UPDATE user_profile SET avatar_path = NULL, updated_at = ? WHERE id = 'me'`
-    ).run(new Date().toISOString());
+    ).run(nowIso());
     return { profile: userProfileDto(ensureMeProfile()) };
   });
 
@@ -285,7 +286,7 @@ export async function profileRoutes(app: FastifyInstance) {
       unlinkUploadPublicPath(me.bg_path);
       db.prepare(
         `UPDATE user_profile SET bg_path = ?, updated_at = ? WHERE id = 'me'`
-      ).run(saved.publicPath, new Date().toISOString());
+      ).run(saved.publicPath, nowIso());
       return { profile: userProfileDto(ensureMeProfile()) };
     } catch (e) {
       return httpError(e, reply);
@@ -297,7 +298,7 @@ export async function profileRoutes(app: FastifyInstance) {
     unlinkUploadPublicPath(me.bg_path);
     db.prepare(
       `UPDATE user_profile SET bg_path = NULL, updated_at = ? WHERE id = 'me'`
-    ).run(new Date().toISOString());
+    ).run(nowIso());
     return { profile: userProfileDto(ensureMeProfile()) };
   });
 
@@ -310,7 +311,7 @@ export async function profileRoutes(app: FastifyInstance) {
       unlinkUploadPublicPath(me.space_bg_path);
       db.prepare(
         `UPDATE user_profile SET space_bg_path = ?, updated_at = ? WHERE id = 'me'`
-      ).run(saved.publicPath, new Date().toISOString());
+      ).run(saved.publicPath, nowIso());
       return { profile: userProfileDto(ensureMeProfile()) };
     } catch (e) {
       return httpError(e, reply);
@@ -322,7 +323,7 @@ export async function profileRoutes(app: FastifyInstance) {
     unlinkUploadPublicPath(me.space_bg_path);
     db.prepare(
       `UPDATE user_profile SET space_bg_path = NULL, updated_at = ? WHERE id = 'me'`
-    ).run(new Date().toISOString());
+    ).run(nowIso());
     return { profile: userProfileDto(ensureMeProfile()) };
   });
 
@@ -438,7 +439,7 @@ export async function profileRoutes(app: FastifyInstance) {
         .get(character.id) as { m: number };
       const sort_order = Number(maxSort?.m ?? -1) + 1;
       const id = randomUUID();
-      const created_at = new Date().toISOString();
+      const created_at = nowIso();
       db.prepare(
         `INSERT INTO character_ref_images (id, character_id, path, sort_order, created_at)
          VALUES (?, ?, ?, ?, ?)`

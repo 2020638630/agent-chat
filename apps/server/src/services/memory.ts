@@ -3,6 +3,7 @@ import { db } from '../db/index.js';
 import { chatCompletion } from './llm.js';
 import { gateExtractOps } from './memoryGate.js';
 import { env, envInt } from '../config/env.js';
+import { nowIso } from '../utils/time.js';
 
 export type MemoryType = 'fact' | 'preference' | 'promise' | 'habit';
 export type MemoryStatus = 'active' | 'pending' | 'superseded' | 'user_hidden';
@@ -132,9 +133,6 @@ function insertExtractDebugHint(conversationId: string, characterId: string, sta
 }
 
 
-function nowIso() {
-  return new Date().toISOString();
-}
 
 function isMemoryType(v: unknown): v is MemoryType {
   return typeof v === 'string' && (MEMORY_TYPES as string[]).includes(v);
@@ -763,7 +761,7 @@ export function logMemoryExtract(payload: {
   const row: Record<string, unknown> = {
     event: 'memory.extract',
     status: payload.status,
-    ts: new Date().toISOString(),
+    ts: nowIso(),
     metric: 'memory_extract',
   };
   if (payload.conversationId) row.conversationId = payload.conversationId;

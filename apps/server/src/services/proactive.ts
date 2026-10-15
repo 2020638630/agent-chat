@@ -4,6 +4,7 @@ import { buildSystemPrompt } from '../utils/characterCard.js';
 import { appendMemoryBlock } from './memory.js';
 import { defaultInitiativeTier } from '../db/schema.js';
 import { randomUUID } from 'node:crypto';
+import { nowIso } from '../utils/time.js';
 
 export type InitiativeTier = 'restrained' | 'calm' | 'outgoing';
 
@@ -17,9 +18,6 @@ const TIER: Record<InitiativeTier, TierCfg> = {
 
 const URGE_IDLE_MS = 15 * 60 * 1000;
 
-function nowIso() {
-  return new Date().toISOString();
-}
 
 function parseHm(s: string): { h: number; m: number } {
   const m = String(s || '').trim().match(/^(\d{1,2}):(\d{2})$/);

@@ -3,6 +3,7 @@ import { db } from '../db/index.js';
 import { chatCompletion } from './llm.js';
 import { getProactiveSettings, inQuietHours } from './proactive.js';
 import { buildSystemPrompt } from '../utils/characterCard.js';
+import { nowIso } from '../utils/time.js';
 
 const DELAY_MS = 45_000;
 const pendingTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -12,9 +13,6 @@ export function hasPendingMomentReactions(): boolean {
   return pendingTimers.size > 0;
 }
 
-function nowIso() {
-  return new Date().toISOString();
-}
 
 function charLikeKey(characterId: string) {
   return `char:${characterId}`;

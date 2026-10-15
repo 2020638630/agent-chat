@@ -13,6 +13,7 @@ import {
   markAllMemoryNoticesRead,
   markMemoryNoticesRead,
 } from '../services/memory.js';
+import { nowIso } from '../utils/time.js';
 
 function normalizeName(name: string) {
   return (name || '').trim().toLowerCase();
@@ -282,11 +283,12 @@ app.post('/api/characters/import', async (req, reply) => {
     }
 
     const id = uuid();
+    const created_at = nowIso();
     db.prepare(
       `INSERT INTO characters
        (id, name, description, personality, scenario, first_mes, mes_example,
-        system_prompt, post_history_instructions, avatar_path, raw_json, initiative_tier)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        system_prompt, post_history_instructions, avatar_path, raw_json, initiative_tier, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       id,
       card.name.trim() || card.name,
@@ -299,7 +301,8 @@ app.post('/api/characters/import', async (req, reply) => {
       card.post_history_instructions ?? '',
       parsedAvatar,
       JSON.stringify(card.raw),
-      defaultInitiativeTier(card.name.trim() || card.name)
+      defaultInitiativeTier(card.name.trim() || card.name),
+      created_at,
     );
 
     const row = db.prepare('SELECT * FROM characters WHERE id = ?').get(id);
