@@ -687,4 +687,5 @@ export function migrate(db: Database.Database) {
   mergeDuplicatePrivateConversations(db);
   ensureMomentReactionDueTable(db);
   ensureUtcIsoTimestamps(db);
+  ensureUserLocationColumn(db);
 }

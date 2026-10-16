@@ -333,10 +333,17 @@ export async function handleUserMessage(
 
   // W-01: now-context line (UTC ISO → Asia/Shanghai) + optional user location; pinned, not trimmed.
   {
-    const prof = db.prepare(`SELECT location FROM user_profile WHERE id = 'me'`).get() as
-      | { location: string | null }
-      | undefined;
-    system = injectNowContext(system, nowIso(), prof?.location ?? null);
+    // W-01 hotfix: never 500 on a DB missing the column — fall back to empty location.
+    let location: string | null = null;
+    try {
+      const prof = db.prepare(`SELECT location FROM user_profile WHERE id = 'me'`).get() as
+        | { location: string | null }
+        | undefined;
+      location = prof?.location ?? null;
+    } catch (err) {
+      console.warn('[W-01] read user_profile.location failed, using empty location:', (err as Error)?.message);
+    }
+    system = injectNowContext(system, nowIso(), location);
     if (!w01PromptLogged || process.env.PROMPT_DEBUG === '1') {
       w01PromptLogged = true;
       console.log(`[W-01] assembled system prompt (conv=${conv.type}):\n${system}`);
