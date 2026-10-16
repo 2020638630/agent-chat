@@ -12,13 +12,13 @@ import {
   resolveCharacterVoiceKind,
   synthesizeSpeech,
   ttsFilename,
-  transcribeAudio,
   voiceForKind,
 } from '../services/audio.js';
 import { getUploadsDir } from '../db/index.js';
 import { readImageFromRequest, saveImageBuffer, unlinkUploadPublicPath } from '../services/uploadImage.js';
 import { handleUserMessage } from '../services/chatTurn.js';
 import { handleImageMessage } from '../services/chatVisionTurn.js';
+import { handleVoiceMessage } from '../services/voiceTurn.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { nowIso } from '../utils/time.js';
@@ -431,16 +431,7 @@ export async function conversationRoutes(app: FastifyInstance) {
       return reply.code(400).send({ error: '录音为空，请按住说话后再试' });
     }
 
-    let text: string;
-    try {
-      text = await transcribeAudio(audioBuf, filename, mime);
-    } catch (e) {
-      // STT failure must NOT enter LLM history
-      const msg = e instanceof Error ? e.message : String(e);
-      return reply.code(502).send({ error: msg });
-    }
-
-    return handleUserMessage(reply, conversationId, text, mentionCharacterId, 'voice');
+    return handleVoiceMessage(reply, conversationId, audioBuf, filename, mime, mentionCharacterId);
   });
 
   
