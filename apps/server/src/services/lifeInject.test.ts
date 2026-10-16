@@ -23,7 +23,7 @@ test('events present → line listed; no events → null', () => {
   const db = mkdb();
   assert.equal(buildLifeLine(db, 'yj', bj(16, 8)), null);
   advanceLifeEvents(db, bj(16, 7));
-  assert.equal(buildLifeLine(db, 'yj', bj(16, 12)), '你今天早些时候：今天 早上 在厨房做早饭');
+  assert.equal(buildLifeLine(db, 'yj', bj(16, 12)), '你最近：今天 早上 在厨房做早饭');
 });
 
 test('current slot of today is excluded', () => {
@@ -35,13 +35,13 @@ test('current slot of today is excluded', () => {
 test('at most 3, newest kept, chronological in line', () => {
   const db = mkdb();
   for (const [d, h] of [[15, 7], [15, 12], [15, 19], [15, 23], [16, 1], [16, 7]] as const) advanceLifeEvents(db, bj(d, h));
-  assert.equal(buildLifeLine(db, 'yj', bj(16, 12)), '你今天早些时候：昨天 夜里 在卧室看书；今天 深夜 在卧室睡觉；今天 早上 在厨房做早饭');
+  assert.equal(buildLifeLine(db, 'yj', bj(16, 12)), '你最近：昨天 夜里 在卧室看书；今天 深夜 在卧室睡觉；今天 早上 在厨房做早饭');
 });
 
 test('cross-midnight: yesterday night listed this morning as 昨天 夜里', () => {
   const db = mkdb();
   advanceLifeEvents(db, bj(15, 23));
-  assert.equal(buildLifeLine(db, 'yj', bj(16, 7)), '你今天早些时候：昨天 夜里 在卧室看书');
+  assert.equal(buildLifeLine(db, 'yj', bj(16, 7)), '你最近：昨天 夜里 在卧室看书');
 });
 
 test('older than 24h not listed', () => {
@@ -57,7 +57,7 @@ test('inject order now → presence → life; tight budget drops whole life line
   const at = bj(16, 12).toISOString();
   const nowLine = buildNowContextLine(at, '上海');
   const pres = '你此刻：在工作室，画稿（白天）';
-  const life = '你今天早些时候：今天 早上 在厨房做早饭';
+  const life = '你最近：今天 早上 在厨房做早饭';
   const out = injectNowContext('SYS', at, '上海', pres, undefined, life).split('\n');
   assert.deepEqual(out.slice(0, 5), [nowLine, pres, life, '', 'SYS']);
   const tight = estimateTokens(nowLine) + estimateTokens(pres) + estimateTokens(life) - 1;

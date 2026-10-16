@@ -94,7 +94,7 @@ export function selectRecentLifeEvents(events: LifeEventRow[], now: Date, max = 
     .reverse();
 }
 
-/** Pure: `你今天早些时候：昨天 夜里 在卧室看书；今天 早上 在厨房做早饭`, or null when empty. */
+/** Pure: `你最近：昨天 夜里 在卧室看书；今天 早上 在厨房做早饭`, or null when empty. */
 export function formatLifeLine(events: LifeEventRow[], now: Date): string | null {
   if (!events.length) return null;
   const today = shanghaiDate(now);
@@ -105,7 +105,7 @@ export function formatLifeLine(events: LifeEventRow[], now: Date): string | null
     const what = `${e.place ? `在${e.place}` : ''}${e.activity || ''}`;
     return `${day} ${label} ${what}`.trim();
   });
-  return `你今天早些时候：${parts.join('；')}`;
+  return `你最近：${parts.join('；')}`;
 }
 
 /** DB read + pure select/format. Caller wraps in try/catch. */
