@@ -103,6 +103,14 @@ export function ensureCharacterRefImagesTable(db: Database.Database) {
   `);
 }
 
+/** W-01: nullable user location for now-context inject (idempotent; existing rows untouched). */
+export function ensureUserLocationColumn(db: Database.Database) {
+  const userCols = db.prepare(`PRAGMA table_info(user_profile)`).all() as Array<{ name: string }>;
+  if (!userCols.some((c) => c.name === 'location')) {
+    db.exec(`ALTER TABLE user_profile ADD COLUMN location TEXT`);
+  }
+}
+
 export function ensureProactiveColumns(db: Database.Database) {
   const userCols = db.prepare(`PRAGMA table_info(user_profile)`).all() as Array<{ name: string }>;
   if (!userCols.some((c) => c.name === 'proactive_enabled')) {

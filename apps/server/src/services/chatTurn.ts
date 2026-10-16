@@ -15,10 +15,14 @@ import { appendMemoryBlock, memoryStickyReminder, resolvePendingMemoryConfirm, s
 import {
   historyMessageCap,
   historyTokenBudget,
+  injectNowContext,
   takeRecentWithinTokenBudget,
 } from './promptInject.js';
 import { onPrivateUserMessage } from '../services/proactive.js';
 import { nowIso } from '../utils/time.js';
+
+/** W-01: log the assembled system prompt once per process (or every turn with PROMPT_DEBUG=1). */
+let w01PromptLogged = false;
 
 type CharacterRow = {
   id: string;
@@ -324,6 +328,18 @@ export async function handleUserMessage(
 5. 不必复读 @。`;
     } else if (!mentioned) {
       system += `\n\n【轮询发言】你是${character.name}，这次轮到你简短发言。优先回应用户最后一句，而不是角色互聊；不要替别人说话。`;
+    }
+  }
+
+  // W-01: now-context line (UTC ISO → Asia/Shanghai) + optional user location; pinned, not trimmed.
+  {
+    const prof = db.prepare(`SELECT location FROM user_profile WHERE id = 'me'`).get() as
+      | { location: string | null }
+      | undefined;
+    system = injectNowContext(system, nowIso(), prof?.location ?? null);
+    if (!w01PromptLogged || process.env.PROMPT_DEBUG === '1') {
+      w01PromptLogged = true;
+      console.log(`[W-01] assembled system prompt (conv=${conv.type}):\n${system}`);
     }
   }
 
