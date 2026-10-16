@@ -87,7 +87,6 @@ export async function generateChatImage(prompt: string): Promise<GeneratedImage>
       model: cfg.model,
       prompt,
       image_size: '1024x1024',
-      batch_size: 1,
     }),
     signal: AbortSignal.timeout(180_000),
   });
