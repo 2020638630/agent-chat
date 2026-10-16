@@ -22,3 +22,8 @@ scripts/smoke/_out/
 __pycache__/
 *.py[cod]
 
+
+# local env backups (may contain keys) / build info
+.env.*
+!.env.example
+*.tsbuildinfo
