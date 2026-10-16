@@ -9,16 +9,13 @@ import { db } from '../db/index.js';
 import { EMOJI_WHITELIST_SET } from '../constants/emojiWhitelist.js';
 import {
   isTtsCacheFileForMessage,
-  resolveCharacterVoiceKind,
-  synthesizeSpeech,
-  ttsFilename,
-  voiceForKind,
 } from '../services/audio.js';
 import { getUploadsDir } from '../db/index.js';
 import { readImageFromRequest, saveImageBuffer, unlinkUploadPublicPath } from '../services/uploadImage.js';
 import { handleUserMessage } from '../services/chatTurn.js';
 import { handleImageMessage } from '../services/chatVisionTurn.js';
 import { handleVoiceMessage } from '../services/voiceTurn.js';
+import { ensureTtsCacheFile } from '../services/ttsCache.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { nowIso } from '../utils/time.js';
@@ -465,32 +462,15 @@ app.get<{ Params: { id: string } }>('/api/messages/:id/tts', async (req, reply) 
       | undefined;
     if (!msg) return reply.code(404).send({ error: '消息不存在' });
 
-    let voice: string;
-    if (msg.role === 'user') {
-      voice = voiceForKind('user');
-    } else if (msg.character_id) {
-      const ch = db
-        .prepare('SELECT name, raw_json FROM characters WHERE id = ?')
-        .get(msg.character_id) as { name: string; raw_json: string | null } | undefined;
-      const kind = resolveCharacterVoiceKind(ch?.name || '', ch?.raw_json);
-      voice = voiceForKind(kind);
-    } else {
-      voice = voiceForKind('female');
-    }
-
-    const uploads = getUploadsDir();
-    const name = ttsFilename(msg.id, voice);
-    const filePath = path.join(uploads, name);
-
-    if (!fs.existsSync(filePath)) {
-      try {
-        const audio = await synthesizeSpeech(msg.content, voice);
-        fs.writeFileSync(filePath, audio);
-      } catch (e) {
-        const errMsg = e instanceof Error ? e.message : String(e);
-        return reply.code(502).send({ error: errMsg });
-      }
-    }
+    const ch =
+      msg.role !== 'user' && msg.character_id
+        ? (db
+            .prepare('SELECT name, raw_json FROM characters WHERE id = ?')
+            .get(msg.character_id) as { name: string; raw_json: string | null } | undefined)
+        : undefined;
+    const tts = await ensureTtsCacheFile(msg, ch);
+    if ('error' in tts) return reply.code(502).send({ error: tts.error });
+    const filePath = tts.filePath;
 
     reply.header('Content-Type', 'audio/mpeg');
     reply.header('Cache-Control', 'public, max-age=86400');
