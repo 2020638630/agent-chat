@@ -126,6 +126,7 @@
 - 溪语 / Pulse / Yuralume：冲动或三闸 + 日限额 + 默认沉默
 - AIRI Heartbeat 讨论：多数心跳零动作
 - nyairo（Apache-2.0）：开源 "digital life" 框架，2026-10-15 评估。当参考，不当基线；不因此换栈。
+- Grok Bot（SpaceXAI，2026-08，https://docs.x.ai/grok-bot/overview）/ DeepSeek Bot（开源平替，2026-10，https://github.com/Fei2411/DeepSeek-Bot）：多 Bot 职能协作，其中「Bot 互发消息」对应本项目 M-02，前置 W 系列。只当参考，不当基线，不换栈。检索 2026-10-16，摘要级（仅公开检索，未深读源码）。
 
 ---
 

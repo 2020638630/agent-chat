@@ -119,6 +119,23 @@ W-01～W-03 做完即可验收最小闭环；**W-04** 属打磨（跨重启流�
 
 ---
 
+## 6.5 与记忆 / 压缩的边界（2026-10-16）
+
+| 层 | 内容 | 现网实现 | 碰不碰 LLM 上下文 |
+| -- | ---- | -------- | ----------------- |
+| **L1 近窗** | 私聊最近 N 条消息 | `LIMIT ?` = `historyMessageCap()`（默认 40，`PROMPT_HISTORY_MESSAGE_CAP`）+ D-25 `takeRecentWithinTokenBudget`（默认 3072 token）装配 | 是（对话历史） |
+| **L2 记忆行** | `memories` 结构化行 + `supersede` | 候选 ≤40（`MAX_ACTIVE`）→ D-25 注入预算（默认 512 token）装配 → 注入 ≤8 条（`INJECT_MAX`） | 是（经统一注入出口） |
+| **L3 世界状态** | W-02 `presence` 惰性求值 + W-03 `life_events` 流水 | 纯计算 / 落表；W-01 此刻行为 pinned 注入项（不裁剪） | 状态推进不碰；只以短行经注入出口进入 |
+
+**结论：W 系列不依赖长记忆和压缩；注入统一出口（记忆合同第 5 条）是唯一扩展插槽。**
+
+### 后续依赖
+
+- 交叉引用 **R-08**（中时段记忆，见《记忆设计备忘》）。触发：W-03 落地后，真实使用中出现「角色记不住昨天」。
+- **W-01-r2**（近窗历史把时段带偏）属 **L1 装配问题**；**R-08**（记不住昨天）属中时段记忆。两者**不合并**，**不得用 R-08 修 r2**。
+
+---
+
 ## 7. 参考：nyairo 评估结论
 
 触发：评估外部项目 [nyairo](https://github.com/L1AN929/nyairo)（Apache-2.0，v0.2.0-rc3），2026-10-15。
@@ -131,3 +148,19 @@ W-01～W-03 做完即可验收最小闭环；**W-04** 属打磨（跨重启流�
 | 删除 = 停召回但保留原始证据（我们已有 supersede） | Python + 插件体系 + `vendor/hermes` 内置运行时 |
 
 **结论：语言与栈不变。** 继续 Vite + Vue3 + Fastify + SQLite；nyairo 是 Python 单体重框架，代码一行都搬不了，能搬的是设计手法。当参考，不当基线；不因此换栈。
+
+### 参考登记（检索日期 2026-10-16）
+
+| 参考 | 来源链接 | 检索日期 | 评估状态 |
+| ---- | -------- | -------- | -------- |
+| nyairo | https://github.com/L1AN929/nyairo | 2026-10-15 | 见上表（原样保留） |
+| Grok Bot（SpaceXAI） | https://docs.x.ai/grok-bot/overview | 2026-10-16 | 摘要级（仅公开检索，未深读源码） |
+| DeepSeek Bot | https://github.com/Fei2411/DeepSeek-Bot | 2026-10-16 | 摘要级（仅公开检索，未深读源码）；社区项目，非 DeepSeek 官方产品 |
+| Microverse | https://github.com/KsanaDock/Microverse | 2026-10-16 | 摘要级（仅公开检索，未深读源码） |
+| AIRI | https://github.com/moeru-ai/airi | 2026-10-16 | 摘要级（仅公开检索，未深读源码） |
+| Memobase | https://github.com/memodb-io/memobase | 2026-10-16 | 摘要级（仅公开检索，未深读源码） |
+| Letta | https://github.com/letta-ai/letta | 2026-10-16 | 摘要级（仅公开检索，未深读源码） |
+| Zep | https://github.com/getzep/zep | 2026-10-16 | 摘要级（仅公开检索，未深读源码） |
+| MemTether | https://github.com/MemTether/MemTether | 2026-10-16 | 摘要级（仅公开检索，未深读源码） |
+
+均只当参考，不当基线；不引入依赖、不 vendor 外部代码或文档。
