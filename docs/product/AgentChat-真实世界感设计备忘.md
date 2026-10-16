@@ -52,12 +52,14 @@
 - 在统一注入出口（见记忆合同第 5 条）装配一行短上下文：本地日期时间、可选场景/地点标签。
 - 不读长历史、不另打模型；失败则静默跳过该行。
 - **阻断**：须先有 token 预算（D-25），否则硬截会挤掉记忆/honor。
+- **默认地点（2026-10-16 用户拍定）**：`user_profile.location` 为空时回落 `上海`，env `DEFAULT_USER_LOCATION` 可覆盖（W-02 同刀落地）。
 
 ### W-02 `presence` 惰性求值（P1，依赖 W-01）
 
 - 表或字段保存：当前节点、状态（idle / traveling / busy 等）、`since`、可选 `eta`。
 - **谁问谁算**：`resolvePresence(now)`；未到 ETA 不改变结果。
 - 不引入独立 Life Runtime；不在每分钟用 LLM「演一天」。
+- **已落地（2026-10-16，feat 85d1392）**：最小版为 `characters.presence` 可空 JSON，5 个固定北京时段（深夜 0–6 / 早上 6–9 / 白天 9–18 / 傍晚 18–22 / 夜里 22–24，左闭右开），每段可填 `{place, activity}`；纯函数 `resolvePresence(character, now)`，无 LLM、无定时器、无写库、无随机。注入 `kind:'presence'` 一行（如「你此刻：在书房，看书（傍晚）」）紧跟 W-01 时间行，非 pinned，预算不足整行裁掉。无配置/该段空不注入。状态机 idle/traveling/ETA 留待 W-03 需要时再扩。
 
 ### W-03 `life_events` 流水（P2，依赖 W-02）
 
@@ -133,6 +135,7 @@ W-01～W-03 做完即可验收最小闭环；**W-04** 属打磨（跨重启流�
 
 - 交叉引用 **R-08**（中时段记忆，见《记忆设计备忘》）。触发：W-03 落地后，真实使用中出现「角色记不住昨天」。
 - **W-01-r2**（近窗历史把时段带偏）属 **L1 装配问题**；**R-08**（记不住昨天）属中时段记忆。两者**不合并**，**不得用 R-08 修 r2**。
+- **W-01-r2 评估（2026-10-16，W-02 刀）**：单次小样本（BF 本机 qwen2.5:7b；生产默认 qwen3.5:9b-nothink 本机未装），fixture=昨晚 21:30 火锅对话、now=15:00、问「现在该吃点啥？」：①历史行附相对时间 +24 tok，过 3072 闸，回复「热乎的粥还是炒点小菜」，不延续火锅也不提下午；②锚定句 +34 tok，过闸，回复仍建议火锅或汤面/粥，未体现下午；③两者 +58 tok，过闸，回复「清淡/重口/汤品」，未体现下午。三者均未出现「夜里」偏航，也都未明确对上下午；②不算通过，①③只是中性。结论：本刀不落地，另拆小刀用生产模型（qwen3.5:9b-nothink 或云端）复测后再定；①只动装配层（不动历史存储）。
 
 ---
 
@@ -155,7 +158,8 @@ W-01～W-03 做完即可验收最小闭环；**W-04** 属打磨（跨重启流�
 | ---- | -------- | -------- | -------- |
 | nyairo | https://github.com/L1AN929/nyairo | 2026-10-15 | 见上表（原样保留） |
 | Grok Bot（SpaceXAI） | https://docs.x.ai/grok-bot/overview | 2026-10-16 | 摘要级（仅公开检索，未深读源码） |
-| DeepSeek Bot | https://github.com/Fei2411/DeepSeek-Bot | 2026-10-16 | 摘要级（仅公开检索，未深读源码）；社区项目，非 DeepSeek 官方产品 |
+| DS Bot | https://github.com/Fei2411/DeepSeek-Bot（Apache-2.0） | 2026-10-16 | 摘要级（仅公开检索，未深读源码）；社区项目，非 DeepSeek 官方；与 DSB 互相独立。bot-to-bot + 群 admin 制接近 M-02 |
+| DeepSeekBot / DSB | https://deepseekbot.app（BotHarness，MIT） | 2026-10-16 | 摘要级（仅公开检索，未深读源码）；非 DeepSeek 官方；与 DS Bot 互相独立。PersonaBots（身份、人格、Git 记忆）接近我们的角色卡 |
 | Microverse | https://github.com/KsanaDock/Microverse | 2026-10-16 | 摘要级（仅公开检索，未深读源码） |
 | AIRI | https://github.com/moeru-ai/airi | 2026-10-16 | 摘要级（仅公开检索，未深读源码） |
 | Memobase | https://github.com/memodb-io/memobase | 2026-10-16 | 摘要级（仅公开检索，未深读源码） |

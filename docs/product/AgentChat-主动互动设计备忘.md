@@ -126,7 +126,10 @@
 - 溪语 / Pulse / Yuralume：冲动或三闸 + 日限额 + 默认沉默
 - AIRI Heartbeat 讨论：多数心跳零动作
 - nyairo（Apache-2.0）：开源 "digital life" 框架，2026-10-15 评估。当参考，不当基线；不因此换栈。
-- Grok Bot（SpaceXAI，2026-08，https://docs.x.ai/grok-bot/overview）/ DeepSeek Bot（开源平替，2026-10，https://github.com/Fei2411/DeepSeek-Bot）：多 Bot 职能协作，其中「Bot 互发消息」对应本项目 M-02，前置 W 系列。只当参考，不当基线，不换栈。检索 2026-10-16，摘要级（仅公开检索，未深读源码）。
+- Grok Bot（SpaceXAI，2026-08，https://docs.x.ai/grok-bot/overview）：多 Bot 职能协作，「Bot 互发消息」对应本项目 M-02，前置 W 系列。只当参考，不当基线，不换栈。检索 2026-10-16，摘要级（仅公开检索，未深读源码）。
+- DS Bot（https://github.com/Fei2411/DeepSeek-Bot，Apache-2.0）：基于 DeepSeek Harness 的社区项目，主 Bot + bot-to-bot 消息 + 群聊，群管理员默认统筹回复；bot-to-bot 与群 admin 制接近 M-02。致谢清单中「群聊轮次与 @ 转发」可对照我们的群聊轮询/被点名逻辑；「长对话压缩时机」可对照压缩 YAGNI 触发条件。以上摘要级，待深读（致谢清单条目未逐条核对源码）。
+- DeepSeekBot / DSB（https://deepseekbot.app，BotHarness 开发，MIT）：DSH 插件，PersonaBots 各有身份、人格（SOUL.md）与 Git 记忆（MEMORY.md），接近我们的角色卡；另有 Group 协作与按成员提醒档位。摘要级，待深读。
+- DS Bot 与 DSB 互相独立，都不是 DeepSeek 官方产品（DSB 官网 FAQ 自述；许可证经 GitHub API / 官网核对，检索 2026-10-16）。
 
 ---
 
