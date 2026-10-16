@@ -18,7 +18,7 @@ import {
 import { getUploadsDir } from '../db/index.js';
 import { readImageFromRequest, saveImageBuffer, unlinkUploadPublicPath } from '../services/uploadImage.js';
 import { handleUserMessage } from '../services/chatTurn.js';
-import { handleImageMessage } from '../services/chatImageTurn.js';
+import { handleImageMessage } from '../services/chatVisionTurn.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { nowIso } from '../utils/time.js';
