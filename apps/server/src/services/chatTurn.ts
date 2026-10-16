@@ -24,6 +24,7 @@ import { onPrivateUserMessage } from '../services/proactive.js';
 import { nowIso } from '../utils/time.js';
 import { formatPresenceLine, resolvePresence } from './presence.js';
 import { historyBreakAnchors } from './historyAnchors.js';
+import { buildLifeLine } from './lifeEvents.js';
 
 /** W-01: log the assembled system prompt once per process (or every turn with PROMPT_DEBUG=1). */
 let w01PromptLogged = false;
@@ -364,7 +365,14 @@ export async function handleUserMessage(
     } catch (err) {
       console.warn('[W-02] read characters.presence failed, skip presence:', (err as Error)?.message);
     }
-    system = injectNowContext(system, at, resolveUserLocation(location), presenceLine);
+    // W-03: recent life_events line (24h, excl. current slot, ≤3). Read failure → not injected.
+    let lifeLine: string | null = null;
+    try {
+      lifeLine = buildLifeLine(db, character.id, new Date(at));
+    } catch (err) {
+      console.warn('[W-03] read life_events failed, skip life line:', (err as Error)?.message);
+    }
+    system = injectNowContext(system, at, resolveUserLocation(location), presenceLine, undefined, lifeLine);
     if (!w01PromptLogged || process.env.PROMPT_DEBUG === '1') {
       w01PromptLogged = true;
       console.log(`[W-01] assembled system prompt (conv=${conv.type}):\n${system}`);

@@ -119,6 +119,24 @@ export function ensureCharacterPresenceColumn(db: Database.Database) {
   }
 }
 
+/** W-03: life_events journal (one row per character / Beijing date / presence slot). Idempotent. */
+export function ensureLifeEventsTable(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS life_events (
+      id TEXT PRIMARY KEY,
+      character_id TEXT NOT NULL,
+      slot TEXT NOT NULL,
+      place TEXT NOT NULL DEFAULT '',
+      activity TEXT NOT NULL DEFAULT '',
+      local_date TEXT NOT NULL,
+      occurred_at TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS ux_life_events_char_date_slot ON life_events(character_id, local_date, slot);
+    CREATE INDEX IF NOT EXISTS ix_life_events_char_occurred ON life_events(character_id, occurred_at);
+  `);
+}
+
 export function ensureProactiveColumns(db: Database.Database) {
   const userCols = db.prepare(`PRAGMA table_info(user_profile)`).all() as Array<{ name: string }>;
   if (!userCols.some((c) => c.name === 'proactive_enabled')) {
@@ -697,4 +715,5 @@ export function migrate(db: Database.Database) {
   ensureUtcIsoTimestamps(db);
   ensureUserLocationColumn(db);
   ensureCharacterPresenceColumn(db);
+  ensureLifeEventsTable(db);
 }

@@ -28,7 +28,7 @@ export function estimateTokens(text: string): number {
   return Math.max(1, Math.ceil(tokens));
 }
 
-export type InjectKind = 'memory' | 'presence' | 'life_event' | 'context' | 'now' | 'other';
+export type InjectKind = 'memory' | 'presence' | 'life' | 'life_event' | 'context' | 'now' | 'other';
 
 export type InjectItem = {
   kind: InjectKind;
@@ -149,6 +149,7 @@ export function resolveUserLocation(raw?: string | null): string {
  * W-01: assemble the pinned now-context through the inject packer (highest priority, never trimmed).
  * W-02: optional presence line (kind 'presence') placed right after the now line. It is NOT pinned:
  * it must fit the inject budget left after the now line, otherwise the whole line is dropped (never cut).
+ * W-03: optional life line (kind 'life') after presence, same rule (lower priority than presence).
  * Existing 3-arg callers are unchanged (memory contract §5).
  */
 export function injectNowContext(
@@ -157,14 +158,17 @@ export function injectNowContext(
   location?: string | null,
   presenceLine?: string | null,
   budgetTokens: number = injectTokenBudget(),
+  lifeLine?: string | null,
 ): string {
   const nowLine = buildNowContextLine(utcIso, location);
   const items: InjectItem[] = [{ kind: 'now', priority: -1000, pinned: true, id: 'now', text: nowLine }];
   const pres = typeof presenceLine === 'string' ? presenceLine.trim() : '';
   if (pres) items.push({ kind: 'presence', priority: -900, id: 'presence', text: pres });
+  const life = typeof lifeLine === 'string' ? lifeLine.trim() : '';
+  if (life) items.push({ kind: 'life', priority: -800, id: 'life', text: life });
   const packed = packWithinTokenBudget(items, Math.max(0, budgetTokens - estimateTokens(nowLine)));
   if (!packed.length) return system;
-  const order = (k: InjectKind) => (k === 'now' ? 0 : 1);
+  const order = (k: InjectKind) => (k === 'now' ? 0 : k === 'presence' ? 1 : 2);
   packed.sort((a, b) => order(a.kind) - order(b.kind));
   return `${packed.map((i) => i.text).join('\n')}\n\n${system}`;
 }

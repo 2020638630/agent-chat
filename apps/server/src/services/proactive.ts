@@ -5,6 +5,7 @@ import { appendMemoryBlock } from './memory.js';
 import { defaultInitiativeTier } from '../db/schema.js';
 import { randomUUID } from 'node:crypto';
 import { nowIso } from '../utils/time.js';
+import { advanceLifeEvents } from './lifeEvents.js';
 
 export type InitiativeTier = 'restrained' | 'calm' | 'outgoing';
 
@@ -313,6 +314,12 @@ export type TickResult = {
 };
 
 export async function runProactiveTick(): Promise<TickResult> {
+  // W-03: life_events advance — independent of proactive switch / quiet hours / daily_cap; never breaks the tick.
+  try {
+    advanceLifeEvents(db, new Date());
+  } catch (err) {
+    console.warn('[W-03] life_events advance failed:', (err as Error)?.message);
+  }
   const settings = getProactiveSettings();
   if (!settings.enabled) return { ran: true, sent: false, reason: 'disabled' };
   if (inQuietHours(new Date(), settings.quiet_start, settings.quiet_end)) {
