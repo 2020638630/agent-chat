@@ -1,4 +1,5 @@
 import { env, envInt } from '../config/env.js';
+import { PRESENCE_TIMEZONE, presenceSlotForHour } from './presence.js';
 
 /**
  * D-25: lightweight token estimate + budgeted prompt injection.
@@ -107,23 +108,17 @@ export function takeRecentWithinTokenBudget<T extends { content: string }>(
   return kept.reverse();
 }
 
-/** W-01: fixed timezone for now-context (constant this knife; no user field yet). */
-export const NOW_CONTEXT_TIMEZONE = 'Asia/Shanghai';
+/** W-01: fixed timezone — W-02-r2: single source shared with presence. */
+export const NOW_CONTEXT_TIMEZONE = PRESENCE_TIMEZONE;
 
+/** W-02-r2: day period = presence 5 slots (深夜/早上/白天/傍晚/夜里); no second boundary set. */
 function dayPeriod(hour: number): string {
-  if (hour < 5) return '凌晨';
-  if (hour < 8) return '早上';
-  if (hour < 11) return '上午';
-  if (hour < 13) return '中午';
-  if (hour < 17) return '下午';
-  if (hour < 19) return '傍晚';
-  if (hour < 23) return '晚上';
-  return '深夜';
+  return presenceSlotForHour(hour).label;
 }
 
 /**
  * W-01: one-line "now" context from a UTC ISO instant (D-26 nowIso).
- * e.g. 当前时间：2026-10-16 15:04（周五 下午，北京时间）；用户所在地：上海
+ * e.g. 当前时间：2026-10-16 15:04（周五 白天，北京时间）；用户所在地：上海
  * Empty location → the whole 「；用户所在地：…」 segment is omitted.
  */
 export function buildNowContextLine(utcIso: string, location?: string | null): string {

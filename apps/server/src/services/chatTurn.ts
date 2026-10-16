@@ -15,6 +15,7 @@ import { appendMemoryBlock, memoryStickyReminder, resolvePendingMemoryConfirm, s
 import {
   historyMessageCap,
   historyTokenBudget,
+  estimateTokens,
   injectNowContext,
   resolveUserLocation,
   takeRecentWithinTokenBudget,
@@ -22,6 +23,7 @@ import {
 import { onPrivateUserMessage } from '../services/proactive.js';
 import { nowIso } from '../utils/time.js';
 import { formatPresenceLine, resolvePresence } from './presence.js';
+import { historyBreakAnchors } from './historyAnchors.js';
 
 /** W-01: log the assembled system prompt once per process (or every turn with PROMPT_DEBUG=1). */
 let w01PromptLogged = false;
@@ -288,7 +290,7 @@ export async function handleUserMessage(
   const historyRaw = (
     db
       .prepare(
-        `SELECT role, character_id, content FROM messages
+        `SELECT role, character_id, content, created_at FROM messages
        WHERE conversation_id = ?
        ORDER BY created_at DESC, rowid DESC
        LIMIT ?`
@@ -297,6 +299,12 @@ export async function handleUserMessage(
   ).reverse();
   // D-25: count cap (default 40) + token budget (default 3072); under budget → identical window
   const history = takeRecentWithinTokenBudget(historyRaw, historyTokenBudget());
+  // W-01-r2: breakpoint time anchors (assembly only). Dropped entirely if they would exceed the history budget.
+  let anchors = historyBreakAnchors(history, nowIso());
+  {
+    const labeled = history.reduce((n, m, i) => n + estimateTokens((anchors[i] || '') + (m.content || '')), 0);
+    if (labeled > historyTokenBudget()) anchors = history.map(() => '');
+  }
 
   const nameById = new Map(members.map((m) => [m.id, m.name] as const));
   const otherNames = members.filter((m) => m.id !== character.id).map((m) => m.name);
@@ -366,11 +374,11 @@ export async function handleUserMessage(
   type LlmMsg = { role: 'system' | 'user' | 'assistant'; content: string };
   const llmMessages: LlmMsg[] = [{ role: 'system', content: system }];
 
-  for (const m of history) {
+  for (const [idx, m] of history.entries()) {
     if (isNoticeBubble(m.content)) continue;
 
     if (m.role === 'user') {
-      llmMessages.push({ role: 'user', content: m.content });
+      llmMessages.push({ role: 'user', content: `${anchors[idx] || ''}${m.content}` });
       continue;
     }
 

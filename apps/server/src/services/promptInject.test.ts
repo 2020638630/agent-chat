@@ -43,3 +43,10 @@ test('default location fallback 上海, env override, explicit wins', () => {
   assert.equal(resolveUserLocation(''), '北京');
   if (prev === undefined) delete process.env.DEFAULT_USER_LOCATION; else process.env.DEFAULT_USER_LOCATION = prev;
 });
+
+test('W-02-r2: 17:31 now line and presence share the 白天 slot', () => {
+  const t = '2026-10-16T09:31:00.000Z'; // 17:31 北京
+  assert.match(buildNowContextLine(t, '上海'), /（周五 白天，北京时间）/);
+  assert.equal(resolvePresence({ presence: { daytime: { place: '工作室', activity: '画稿' } } }, t)?.label, '白天');
+  assert.ok(!buildNowContextLine(t).includes('下午'));
+});
