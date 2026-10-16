@@ -66,6 +66,7 @@
 - 在主动 tick 的**世界状态推进**分支：纯计算或落一条流水（地点变化、小事件文案）。
 - **硬约束（与主动备忘一致）：状态推进分支不得调用 LLM。**
 - 事件可被后续注入/召回；不是「到点必做」任务队列。
+- **已落地最小版（2026-10-16，feat 259af7b）**：表 `life_events`（id = 角色:北京日期:slot、character_id、slot=presence 5 段键、place、activity、local_date 北京日期、occurred_at UTC、created_at），唯一键 (character_id, local_date, slot)，索引 (character_id, occurred_at)，幂等迁移。推进 `advanceLifeEvents` 挂在 `runProactiveTick` 入口、总开关/静默时段/daily_cap 判断**之前**独立运行（总开关关也照跑，不占额度），只处理配了 presence 的角色，当前时段有档且今天该段未记则 INSERT OR IGNORE；纯计算无 LLM 无随机；错过的时段不补记；同分支清 7 天前流水；异常 try/catch 不影响原 tick。注入 `kind:'life'` 一行，紧跟 presence 行，非 pinned、预算不足整行裁；取最近 24h、排除今天当前时段、最多 3 条（取最近 3 条、行内正序），格式「你今天早些时候：昨天 夜里 在卧室看书；今天 早上 在厨房做早饭」；无事件不注入。**W-02 状态机推进已在本刀收**（presence → 流水）。
 
 W-01～W-03 做完即可验收最小闭环；**W-04** 属打磨（跨重启流逝补偿），不进最小闭环。
 
