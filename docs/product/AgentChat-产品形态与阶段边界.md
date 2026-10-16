@@ -129,6 +129,8 @@ Agent Chat 是一个**多角色 AI 社交客户端**：用户导入角色卡后�
 
 维护约定：切换实测后更新本节「当前本机 / 线上」与问题表 N-02 备注；未达标则保留现网或回退。
 
+**Gemini TTS 试跑补注（2026-10-16，B-04e）：** 官方试跑未通（地域限制，云侧郑州出口 FAILED_PRECONDITION: User location is not supported for the API use.）；免费层 10RPD 不达日常；相对现网 CosyVoice2 **无法对比音质**（无 gemini wav）；**不**列付费候选。现网语音合成仍以硅基 CosyVoice2 为准。
+
 ## 六、当前暂缓项归属
 
 | ID | 标题 | 表状态 | 阶段归属 | 触发条件 / 处理 |
