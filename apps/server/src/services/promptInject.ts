@@ -1,4 +1,4 @@
-import { envInt } from '../config/env.js';
+import { env, envInt } from '../config/env.js';
 
 /**
  * D-25: lightweight token estimate + budgeted prompt injection.
@@ -143,12 +143,33 @@ export function buildNowContextLine(utcIso: string, location?: string | null): s
   return line;
 }
 
-/** W-01: assemble the pinned now-context through the inject packer (highest priority, never trimmed). */
-export function injectNowContext(system: string, utcIso: string, location?: string | null): string {
-  const packed = packWithinTokenBudget(
-    [{ kind: 'now', priority: -1000, pinned: true, id: 'now', text: buildNowContextLine(utcIso, location) }],
-    injectTokenBudget(),
-  );
+/** W-02: user location fallback when user_profile.location is empty (env DEFAULT_USER_LOCATION, default 上海). */
+export const DEFAULT_USER_LOCATION_FALLBACK = '上海';
+export function resolveUserLocation(raw?: string | null): string {
+  const loc = typeof raw === 'string' ? raw.trim() : '';
+  return loc || env('DEFAULT_USER_LOCATION', DEFAULT_USER_LOCATION_FALLBACK);
+}
+
+/**
+ * W-01: assemble the pinned now-context through the inject packer (highest priority, never trimmed).
+ * W-02: optional presence line (kind 'presence') placed right after the now line. It is NOT pinned:
+ * it must fit the inject budget left after the now line, otherwise the whole line is dropped (never cut).
+ * Existing 3-arg callers are unchanged (memory contract §5).
+ */
+export function injectNowContext(
+  system: string,
+  utcIso: string,
+  location?: string | null,
+  presenceLine?: string | null,
+  budgetTokens: number = injectTokenBudget(),
+): string {
+  const nowLine = buildNowContextLine(utcIso, location);
+  const items: InjectItem[] = [{ kind: 'now', priority: -1000, pinned: true, id: 'now', text: nowLine }];
+  const pres = typeof presenceLine === 'string' ? presenceLine.trim() : '';
+  if (pres) items.push({ kind: 'presence', priority: -900, id: 'presence', text: pres });
+  const packed = packWithinTokenBudget(items, Math.max(0, budgetTokens - estimateTokens(nowLine)));
   if (!packed.length) return system;
+  const order = (k: InjectKind) => (k === 'now' ? 0 : 1);
+  packed.sort((a, b) => order(a.kind) - order(b.kind));
   return `${packed.map((i) => i.text).join('\n')}\n\n${system}`;
 }

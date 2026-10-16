@@ -111,6 +111,14 @@ export function ensureUserLocationColumn(db: Database.Database) {
   }
 }
 
+/** W-02: nullable per-character presence JSON (5 fixed slots; idempotent; existing rows untouched). */
+export function ensureCharacterPresenceColumn(db: Database.Database) {
+  const cols = db.prepare(`PRAGMA table_info(characters)`).all() as Array<{ name: string }>;
+  if (!cols.some((c) => c.name === 'presence')) {
+    db.exec(`ALTER TABLE characters ADD COLUMN presence TEXT`);
+  }
+}
+
 export function ensureProactiveColumns(db: Database.Database) {
   const userCols = db.prepare(`PRAGMA table_info(user_profile)`).all() as Array<{ name: string }>;
   if (!userCols.some((c) => c.name === 'proactive_enabled')) {
@@ -688,4 +696,5 @@ export function migrate(db: Database.Database) {
   ensureMomentReactionDueTable(db);
   ensureUtcIsoTimestamps(db);
   ensureUserLocationColumn(db);
+  ensureCharacterPresenceColumn(db);
 }

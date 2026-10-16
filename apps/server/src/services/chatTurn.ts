@@ -16,10 +16,12 @@ import {
   historyMessageCap,
   historyTokenBudget,
   injectNowContext,
+  resolveUserLocation,
   takeRecentWithinTokenBudget,
 } from './promptInject.js';
 import { onPrivateUserMessage } from '../services/proactive.js';
 import { nowIso } from '../utils/time.js';
+import { formatPresenceLine, resolvePresence } from './presence.js';
 
 /** W-01: log the assembled system prompt once per process (or every turn with PROMPT_DEBUG=1). */
 let w01PromptLogged = false;
@@ -343,7 +345,18 @@ export async function handleUserMessage(
     } catch (err) {
       console.warn('[W-01] read user_profile.location failed, using empty location:', (err as Error)?.message);
     }
-    system = injectNowContext(system, nowIso(), location);
+    // W-02: character presence line (pure, slot-based). Read failure / no config → not injected.
+    const at = nowIso();
+    let presenceLine: string | null = null;
+    try {
+      const row = db.prepare(`SELECT presence FROM characters WHERE id = ?`).get(character.id) as
+        | { presence: string | null }
+        | undefined;
+      presenceLine = formatPresenceLine(resolvePresence(row, at));
+    } catch (err) {
+      console.warn('[W-02] read characters.presence failed, skip presence:', (err as Error)?.message);
+    }
+    system = injectNowContext(system, at, resolveUserLocation(location), presenceLine);
     if (!w01PromptLogged || process.env.PROMPT_DEBUG === '1') {
       w01PromptLogged = true;
       console.log(`[W-01] assembled system prompt (conv=${conv.type}):\n${system}`);
