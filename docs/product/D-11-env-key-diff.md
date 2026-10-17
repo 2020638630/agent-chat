@@ -107,3 +107,16 @@
 
 - BF 节：此前 tip `bccadb9`
 - HY 节：本 commit 补全后 **D-11 全关**
+
+## .env.bak-20261010-135801 键名清单（10-17 删前留档，仅键名，不含值）
+
+共 6 个键：
+
+- `PORT`
+- `HOST`
+- `LLM_PROVIDER`
+- `LLM_BASE_URL`
+- `LLM_API_KEY`
+- `LLM_MODEL`
+
+与当前 .env 对比：备份独有 0 个, 当前独有 15 个：`LLM_VISION_MODEL`、`STT_BASE_URL`、`STT_API_KEY`、`STT_MODEL`、`TTS_BASE_URL`、`TTS_API_KEY`、`TTS_MODEL`、`TTS_VOICE`、`TTS_VOICE_MALE`、`TTS_VOICE_FEMALE`、`TTS_VOICE_USER`、`IMAGE_GEN_BASE_URL`、`IMAGE_GEN_API_KEY`、`IMAGE_GEN_MODEL`、`MEMORY_GATE_BACKEND`。
