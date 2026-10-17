@@ -823,7 +823,7 @@ onUnmounted(() => {
               </div>
             </div>
 
-v-if="profileView.kind === 'user'" class="wx-appearance">
+            <div v-if="profileView.kind === 'user'" class="wx-appearance">
               <div class="wx-appearance-title">外观</div>
               <div class="wx-theme-grid">
                 <button
