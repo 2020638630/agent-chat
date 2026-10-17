@@ -39,9 +39,10 @@ $baseUrl = "$($envMap['LLM_BASE_URL'])"
 if ($provider -eq 'ollama' -or $baseUrl -match ':11434') {
   $origin = 'http://127.0.0.1:11434'
   if ($baseUrl -match '^(https?://[^/]+)') { $origin = $Matches[1] }
+  $origin = $origin -replace '://localhost(?=[:/]|$)', '://127.0.0.1'   # Windows localhost may resolve to ::1
   Say "检查 Ollama（$origin）..."
   $ollamaOk = $true
-  try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "$origin/api/tags" | Out-Null }
+  try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 "$origin/api/tags" | Out-Null }
   catch { $ollamaOk = $false }
   if ($ollamaOk) { Say 'Ollama 在线。' 'Green' }
   else {
